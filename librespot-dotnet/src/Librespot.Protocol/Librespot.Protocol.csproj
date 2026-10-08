@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Librespot.Protocol</RootNamespace>
+    <Description>Port of librespot-protocol: the protobuf definitions used to talk to Spotify servers, compiled with protoc at build time.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Exactly the file set compiled by protocol/build.rs upstream (46 files). Files not in this list
+    (the other ~350 under protocol/proto) are intentionally not copied.
+    ProtoRoot = proto/ so that `import "spotify/login5/v3/..."` and `import "player.proto"` resolve.
+    google/protobuf/any.proto and duration.proto come from Grpc.Tools' bundled include directory.
+  -->
+  <ItemGroup>
+    <Protobuf Include="proto\**\*.proto" ProtoRoot="proto" GrpcServices="None" Access="Public" />
+  </ItemGroup>
+
+</Project>

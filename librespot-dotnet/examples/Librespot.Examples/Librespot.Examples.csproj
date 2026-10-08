@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Librespot.Examples</RootNamespace>
+    <Description>Ports of the upstream examples/ (and oauth/examples, discovery/examples) as sub-commands of one console app.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Librespot.Core\Librespot.Core.csproj" />
+    <ProjectReference Include="..\..\src\Librespot.OAuth\Librespot.OAuth.csproj" />
+    <ProjectReference Include="..\..\src\Librespot.Metadata\Librespot.Metadata.csproj" />
+    <ProjectReference Include="..\..\src\Librespot.Playback\Librespot.Playback.csproj" />
+    <ProjectReference Include="..\..\src\Librespot.Connect\Librespot.Connect.csproj" />
+    <ProjectReference Include="..\..\src\Librespot.Discovery\Librespot.Discovery.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+</Project>

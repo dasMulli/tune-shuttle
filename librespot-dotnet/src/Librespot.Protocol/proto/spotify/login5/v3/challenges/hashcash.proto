@@ -1,0 +1,26 @@
+// Extracted from: Spotify 1.1.33.569 (Windows)
+
+syntax = "proto3";
+
+package spotify.login5.v3.challenges;
+
+// librespot-dotnet patch: the default C# namespace Spotify.Login5.V3.Challenges collides with the
+// `Challenges` message in login5.proto (CS0101), so the challenge types live one namespace over.
+option csharp_namespace = "Spotify.Login5.V3.ChallengeTypes";
+
+import "google/protobuf/duration.proto";
+
+option objc_class_prefix = "SPTLogin5";
+option java_multiple_files = true;
+option optimize_for = CODE_SIZE;
+option java_package = "com.spotify.login5.v3.challenges.proto";
+
+message HashcashChallenge {
+    bytes prefix = 1;
+    int32 length = 2;
+}
+
+message HashcashSolution {
+    bytes suffix = 1;
+    google.protobuf.Duration duration = 2;
+}

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Librespot.Metadata</RootNamespace>
+    <Description>Port of librespot-metadata: typed track/album/artist/episode/show/playlist metadata on top of spclient and mercury.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Librespot.Core\Librespot.Core.csproj" />
+    <ProjectReference Include="..\Librespot.Protocol\Librespot.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Librespot.Tests" />
+  </ItemGroup>
+
+</Project>

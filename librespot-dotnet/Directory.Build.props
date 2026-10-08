@@ -1,0 +1,38 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: missing XML doc on public member. Porters add docs as they go; do not fail on it. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <Authors>librespot-org contributors; librespot-dotnet contributors</Authors>
+    <Product>librespot-dotnet</Product>
+    <Version>0.8.0</Version>
+    <!-- Mirrors VERGEN_GIT_SHA / VERGEN_GIT_COMMIT_DATE from core/build.rs; read by Librespot.Core.LibrespotVersion via AssemblyMetadata. -->
+    <LibrespotUpstreamCommit>e023adbbf017ae1fc10d01531dbe50c409786f2d</LibrespotUpstreamCommit>
+    <LibrespotUpstreamCommitDate>2026-10-05</LibrespotUpstreamCommitDate>
+    <!-- Deterministic by default (reproducible builds); override with -p:LibrespotBuildDate=yyyy-MM-dd if wanted. -->
+    <LibrespotBuildDate Condition="'$(LibrespotBuildDate)' == ''">$(LibrespotUpstreamCommitDate)</LibrespotBuildDate>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Librespot.Core.HttpClient mirrors core/src/http_client.rs. Keeping the upstream name means it would be
+      ambiguous with System.Net.Http.HttpClient wherever both are imported, so the implicit using is removed
+      solution-wide; files that need the BCL client reference it as System.Net.Http.HttpClient.
+    -->
+    <Using Remove="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="UpstreamCommit" Value="$(LibrespotUpstreamCommit)" />
+    <AssemblyMetadata Include="UpstreamCommitDate" Value="$(LibrespotUpstreamCommitDate)" />
+    <AssemblyMetadata Include="BuildDate" Value="$(LibrespotBuildDate)" />
+  </ItemGroup>
+</Project>

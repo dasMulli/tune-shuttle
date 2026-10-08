@@ -1,0 +1,11 @@
+syntax = "proto2";
+
+// librespot-dotnet patch: the upstream file has no `package`, which would put the generated C# types in the global namespace.
+option csharp_namespace = "Librespot.Protocol.Pubsub";
+
+message Subscription {
+    optional string uri = 0x1;
+    optional int32 expiry = 0x2;
+    optional int32 status_code = 0x3;
+}
+

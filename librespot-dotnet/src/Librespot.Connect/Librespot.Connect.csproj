@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Librespot.Connect</RootNamespace>
+    <Description>Port of librespot-connect: Spotify Connect (spirc) remote control on top of the dealer and the player.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Librespot.Core\Librespot.Core.csproj" />
+    <ProjectReference Include="..\Librespot.Playback\Librespot.Playback.csproj" />
+    <ProjectReference Include="..\Librespot.Protocol\Librespot.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Librespot.Tests" />
+  </ItemGroup>
+
+</Project>

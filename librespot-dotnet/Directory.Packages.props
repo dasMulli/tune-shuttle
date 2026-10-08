@@ -1,0 +1,25 @@
+<Project>
+  <!-- Central package management: every PackageReference in the solution takes its version from here. -->
+  <ItemGroup>
+    <!-- Protobuf: Google.Protobuf runtime + Grpc.Tools (bundles protoc, generates C# at build time). -->
+    <PackageVersion Include="Google.Protobuf" Version="3.36.2" />
+    <PackageVersion Include="Grpc.Tools" Version="2.84.0" />
+
+    <!-- Logging: librespot's `log` crate maps to Microsoft.Extensions.Logging via Librespot.Core.Logging.LibrespotLog. -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
+
+    <!-- Audio decoding (symphonia replacement): NVorbis for Ogg Vorbis, NLayer for MP3 (podcasts). -->
+    <PackageVersion Include="NVorbis" Version="0.10.5" />
+    <PackageVersion Include="NLayer" Version="3.0.0" />
+
+    <!-- Audio output (rodio/cpal replacement on Windows): NAudio WASAPI / WaveOut. -->
+    <PackageVersion Include="NAudio" Version="3.1.0" />
+
+    <!-- Tests -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+</Project>

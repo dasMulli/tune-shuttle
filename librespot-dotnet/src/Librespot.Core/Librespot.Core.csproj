@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Librespot.Core</RootNamespace>
+    <Description>Port of librespot-core: session, connection (Shannon-encrypted AP transport), mercury, dealer, spclient, auth, cache, ids.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Librespot.Protocol\Librespot.Protocol.csproj" />
+    <ProjectReference Include="..\Librespot.OAuth\Librespot.OAuth.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Librespot.Tests" />
+  </ItemGroup>
+
+</Project>
