@@ -16,6 +16,7 @@
     <PackageReference Include="NVorbis" />
     <PackageReference Include="NLayer" />
     <PackageReference Include="NAudio" />
+    <PackageReference Include="NAudio.Wasapi" />
   </ItemGroup>
 
   <ItemGroup>

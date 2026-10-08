@@ -16,6 +16,9 @@
 
     <!-- Audio output (rodio/cpal replacement on Windows): NAudio WASAPI / WaveOut. -->
     <PackageVersion Include="NAudio" Version="3.1.0" />
+    <!-- The NAudio meta-package only pulls in WASAPI on a Windows TFM; the solution targets plain net10.0, so the
+         WASAPI backend (Windows-only at runtime, net9.0 at compile time) is referenced explicitly by Librespot.Playback. -->
+    <PackageVersion Include="NAudio.Wasapi" Version="3.1.0" />
 
     <!-- Tests -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
