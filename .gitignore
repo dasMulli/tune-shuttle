@@ -1,0 +1,19 @@
+# Reference sources (cloned, not part of this repo)
+reference/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+artifacts/
+
+# Rust
+target/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
