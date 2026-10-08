@@ -17,3 +17,6 @@ target/
 .DS_Store
 Thumbs.db
 .idea/
+
+# Local secrets / dev credentials (never commit)
+.local/
