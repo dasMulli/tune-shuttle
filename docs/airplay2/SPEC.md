@@ -300,7 +300,7 @@ tests together.
 | Retransmit answer | Wrapped 0xD6 on our control port | P14 | `ReceiverQuirks.RetransmitOnDataPort = false` |
 | Stream key `shk` | First 32 bytes of the pairing secret (D4; random also accepted) | P15 | `PairingSession.DefaultStreamKey` |
 | TEARDOWN | `{}` (per-stream form only with a `streamID`); at most 10 s, then the connection is closed | P5; wave 4 gate and the final M1 run (unanswered TEARDOWN) | `ReceiverSession.TeardownAsync`, `GroupPlayerOptions.TeardownTimeout` |
-| Metadata | Best effort: a DMAP `500` is logged and ignored; artwork and progress are sent | P9 | `ReceiverSession.SetMetadataAsync`; CLI `play --no-metadata` |
+| Metadata | Best effort: a DMAP `500` is logged and ignored, and after the first non-2xx answer the session sends no more DMAP text; artwork and progress are sent | P9 | `ReceiverSession.SetMetadataAsync`, `ReceiverSession.DmapRefused`; CLI `play --no-metadata` |
 | PTP peers that go silent | Kept (reported after 15 s) | P17 (nqptp) | `PtpMasterOptions.DropSilentPeers = false` |
 | Sender latency L | 77 175 frames | D1; P7 open | `RealtimeStreamConstants.DefaultLatencyFrames`, `Bridge:LatencyFrames` |
 | Per-receiver offset | 0 frames | P7/P20 open | `ReceiverQuirks.OffsetFrames`, `receivers.offset_frames` |
@@ -308,11 +308,13 @@ tests together.
 
 Two candidate quirks were **not** switched on (2026-10-09, final integration), each with its reason:
 
-- *No DMAP text for the SpeakerA.* It answers DMAP with `500`, sometimes only after ~10 s (P9 log: 10.3 s). The control
-  connection carries one request at a time, so a volume change or a FLUSH queued behind it waits that long. A
-  per-model default is the wrong tool: the in-process fake receiver serves the SpeakerA's recorded `/info`, so it
-  would stop every fake-receiver test from seeing DMAP. A follow-up for `session-streams` would be a per-session rule
-  ("after one non-2xx answer to DMAP, stop sending it on this connection").
+- *No DMAP text for the SpeakerA.* It answers DMAP with `500`, sometimes only after ~10 s (P9 log: 10.3 s; the final
+  review's tone run: 5.5 s). The control connection carries one request at a time, so a volume change or a FLUSH
+  queued behind it waits that long. A per-model default is the wrong tool: the in-process fake receiver serves the
+  SpeakerA's recorded `/info`, so it would stop every fake-receiver test from seeing DMAP. Implemented instead (final
+  review, 2026-10-09) as a per-session rule: after one non-2xx answer to DMAP, `ReceiverSession` sends no more DMAP
+  text on that session (logged once at Information; `DmapRefused`), so at most the first track's DMAP costs the wait.
+  The fake receiver reproduces the refusal with `FakeReceiverOptions.DmapStatus`.
 - *No buffered stream for the SpeakerA.* It advertises bit 40, so `ChooseTransport` would pick the buffered stream for
   it if `PreferredStream = Buffered`, and playback would then fail at `SETRATEANCHORTIME` (P16). Today the realtime
   default keeps it off. A `ReceiverQuirks` switch for this would be an additive contract change and is left for when

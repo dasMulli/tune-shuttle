@@ -222,14 +222,30 @@ public sealed class CliTests
             Assert.Equal(pcm, eventsA.OfType<FakeReceiverEvent.AudioPacket>().SelectMany(p => p.Pcm).Take(pcm.Length).ToArray());
             Assert.Equal(pcm, eventsB.OfType<FakeReceiverEvent.AudioPacket>().SelectMany(p => p.Pcm).Take(pcm.Length).ToArray());
             Assert.Equal(VolumeMapping.LevelToDb(12), eventsA.OfType<FakeReceiverEvent.Volume>().First().Db, 6);
-            await AirplaySenderTests.FirstAsync<FakeReceiverEvent.Teardown>(a);
-            await AirplaySenderTests.FirstAsync<FakeReceiverEvent.Teardown>(b);
+            // The end of the file is not turned into a pause: no FLUSH between the last packet and the TEARDOWN.
+            Assert.DoesNotContain(await UntilTeardownAsync(a), e => e is FakeReceiverEvent.Flush);
+            Assert.DoesNotContain(await UntilTeardownAsync(b), e => e is FakeReceiverEvent.Flush);
             Assert.Contains("Playing", cli.OutText);
             Assert.Contains("Done after", cli.OutText);
         }
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    private static async Task<List<FakeReceiverEvent>> UntilTeardownAsync(TestReceiver fake)
+    {
+        var seen = new List<FakeReceiverEvent>();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            var e = await fake.Events.ReadAsync(cts.Token);
+            seen.Add(e);
+            if (e is FakeReceiverEvent.Teardown)
+            {
+                return seen;
+            }
         }
     }
 

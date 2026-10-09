@@ -3,6 +3,8 @@
 # NOT reachable from the Windows host (Docker Desktop's VM network is NATed and does not carry mDNS or inbound UDP):
 # only from inside the Docker VM, i.e. from another host-networked container such as the SDK container that
 # run-live-tests-in-vm.ps1 starts (127.0.0.1:7000 there). See the document for what this can and cannot test.
+# The password-protected receiver for the PIN pairing test (profile "pin", started by run-live-tests-in-vm.ps1):
+#   docker compose -f docker/shairport-sync/compose.yaml --profile pin up -d
 services:
   shairport-sync:
     image: mikebrady/shairport-sync:latest   # 5.5.2 AirPlay 2 with nqptp, dummy/stdout/pipe backends (verified 2026-10-09)
@@ -12,6 +14,24 @@ services:
       - SYS_NICE
     command: >-
       -a SPS-Test -o dummy -vv --statistics
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "1m"
+        max-file: "5"
+
+  # Password-protected variant for the 470/PIN path (PairingLiveTests.Shairport_password_pin_pairing_then_verify).
+  # On Docker's default bridge network: its own network namespace, so its nqptp and port 7000 do not clash with sps-test.
+  # run-live-tests-in-vm.ps1 reads its address with docker inspect and passes SPS_PIN_HOST / SPS_PASSWORD.
+  shairport-sync-pin:
+    image: mikebrady/shairport-sync:latest
+    container_name: sps-pin
+    network_mode: bridge
+    profiles: ["pin"]
+    cap_add:
+      - SYS_NICE
+    command: >-
+      -a SPS-Pin -o dummy --password 1234 -vv
     restart: unless-stopped
     logging:
       options:

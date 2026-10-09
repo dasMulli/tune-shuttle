@@ -493,6 +493,27 @@ public sealed class ReceiverSessionTests
     }
 
     [Fact]
+    public async Task A_receiver_that_refuses_dmap_gets_it_once_per_session()
+    {
+        // The SpeakerA's DMAP 500 (SPEC.md P9, 4.2): one refusal, then only artwork and progress on this session.
+        await using var fake = await StartAsync(Quiet(new FakeReceiverOptions { DmapStatus = 500 }));
+        await using var session = await ConnectAndPairAsync(fake);
+        await session.SetupSessionAsync(NtpSession(), None);
+        await session.SetupStreamAsync(Stream(session), None);
+        await Harness.DrainAsync(fake, TimeSpan.FromMilliseconds(200));
+
+        await session.SetMetadataAsync(new TrackMetadata("T1", "A", "B", null), 1, None);
+        await Harness.NextAsync<FakeReceiverEvent.Metadata>(fake);
+        Assert.True(session.DmapRefused);
+
+        await session.SetMetadataAsync(new TrackMetadata("T2", "A", "B", null), 2, None);
+        await session.SetProgressAsync(new ProgressInfo(2, 3, 4), None);
+        var next = await Harness.NextAsync<FakeReceiverEvent>(fake, e => e is FakeReceiverEvent.Metadata or FakeReceiverEvent.Progress);
+        Assert.IsType<FakeReceiverEvent.Progress>(next);
+        await session.TeardownAsync(None);
+    }
+
+    [Fact]
     public async Task Stage1_info_inside_the_encrypted_channel_has_txt_airplay()
     {
         await using var fake = await StartAsync(Quiet());

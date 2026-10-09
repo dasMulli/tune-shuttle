@@ -30,7 +30,7 @@ fill the stubs; they do not change the contracts without recording the change in
 - **Tests**: xunit 2.9.3 with `Microsoft.NET.Test.Sdk`; `[Fact]`/`[Theory]`; vectors from `docs/airplay2/test-vectors`
   (linked into the test output as `TestVectors/`); loopback sockets on `127.0.0.1` with OS-chosen ports. **Live
   tests** carry `[Trait("Category", "SpeakerALive")]` or `[Trait("Category", "ShairportLive")]` **and** return early
-  (`Assert.Skip`-style: log "AIRPLAY_LIVE not set" and return) unless the environment variable `AIRPLAY_LIVE=1` is
+  (log "AIRPLAY_LIVE not set" and return; xunit 2.9 has no dynamic skip, so such a test is reported as passed) unless the environment variable `AIRPLAY_LIVE=1` is
   set; the plain `dotnet test` therefore never touches a receiver, the CI invocation additionally excludes them
   (`dotnet test --filter "Category!=SpeakerALive&Category!=ShairportLive"`), and every runner that *wants* them
   sets the variable (`docker/shairport-sync/run-live-tests-in-vm.ps1` does; a SpeakerA run is

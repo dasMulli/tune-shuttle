@@ -60,7 +60,8 @@ and `docker logs sps-test` are the record.
 
 Tests that target it read `SPS_HOST` (127.0.0.1) and `SPS_PORT` (7000), return early unless `AIRPLAY_LIVE=1` (the VM script sets it), carry `[Trait("Category", "ShairportLive")]`
 and are skipped in the normal `dotnet test` run. A password-protected variant for the 470/PIN path:
-`command: -a SPS-Test -o dummy --password 1234` in a second compose service.
+`command: -a SPS-Pin -o dummy --password 1234` in a second compose service (`shairport-sync-pin`, profile `pin`; see
+the corrections below).
 
 ## The Test Speaker ABCD and the fake receiver
 
@@ -101,7 +102,15 @@ did not check (the fake receiver and the SpeakerA, probe P14, cover it).
   `run-live-tests-in-vm.ps1 -Filter "Category=ShairportLive&FullyQualifiedName!~PtpLiveTests&FullyQualifiedName!~BufferedLiveTests"`.
 - The password variant runs as a second container on the default bridge network. That container has its own
   network namespace, so its nqptp and port 7000 do not clash with `sps-test`. The test container reaches it by its
-  bridge address. Docker 29 removed the top-level `.NetworkSettings.IPAddress`; read the address per network:
+  bridge address. Docker 29 removed the top-level `.NetworkSettings.IPAddress`; read the address per network.
+  Since the final review this is automated: compose.yaml has the service `shairport-sync-pin` (container `sps-pin`,
+  `--password 1234`, compose profile `pin`), and `run-live-tests-in-vm.ps1` starts it, reads its address with
+  `docker inspect` and passes `SPS_PIN_HOST`, `SPS_PIN_PORT` and `SPS_PASSWORD`. Without them
+  `Shairport_password_pin_pairing_then_verify` returns early, is **reported as passed** (xunit 2.9 has no dynamic
+  skip) and writes `SKIPPED (returned early ...)` to its test output; the script prints a warning when it cannot
+  resolve `sps-pin`. Count the receiver's connections in `docker logs sps-test` / `docker logs sps-pin` to see what a
+  green run really exercised. Stop both with `docker compose -f docker/shairport-sync/compose.yaml --profile pin down`.
+  The manual equivalent:
 
   ```bash
   docker run -d --name sps-pin --cap-add SYS_NICE mikebrady/shairport-sync:latest -a SPS-Pin -o dummy --password 1234

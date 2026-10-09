@@ -1,9 +1,9 @@
 # User verification checklist
 
 Status: 2026-10-09, written by `final-integration` (WORK-PLAN.md wave 8). The agents ran everything that does not need
-a person in the room: the build, the 693 offline tests, every shairport-sync live test, Sender M1 against the SpeakerA MOTIV
-HOME (a 3-second quiet tone), the bridge's connect/volume/disconnect against the SpeakerA without audio and against
-shairport-sync from the container image. The results are in `SPEC.md` section 4. This list holds what is left: steps
+a person in the room: the build, the offline tests (735 after the final review fixes: 601 sender, 134 bridge), every
+shairport-sync live test, Sender M1 against the Test Speaker ABCD (a 3-second quiet tone), the bridge's
+connect/volume/disconnect against the SpeakerA without audio and against shairport-sync from the container image. The results are in `SPEC.md` section 4. This list holds what is left: steps
 that need someone to log in to Spotify, listen, press buttons on a speaker, measure with a microphone, enter a PIN, or
 give permission for another person's device.
 

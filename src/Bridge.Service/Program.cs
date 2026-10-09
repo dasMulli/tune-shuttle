@@ -35,6 +35,16 @@ public static class Program
         builder.Configuration.AddCommandLine(args); // command line wins over the BRIDGE_ variables (install-service.ps1 passes the endpoint)
         builder.Host.UseWindowsService(o => o.ServiceName = "AirplayBridge");
         builder.Host.UseSystemd();
+
+        // The web app's files: a published layout (artifacts/bridge, the container) has them in wwwroot/. A run from the
+        // build output (dotnet run, bin/<config>/net10.0/bridge.dll) has no wwwroot/ and finds them through the
+        // bridge.staticwebassets.runtime.json manifest, which ASP.NET reads on its own only in Development; read it in
+        // every environment. Without the manifest (published layouts) this does nothing.
+        if (!builder.Environment.IsDevelopment())
+        {
+            builder.WebHost.UseStaticWebAssets();
+        }
+
         AddBridgeServices(builder.Services, builder.Configuration);
 
         var app = builder.Build();

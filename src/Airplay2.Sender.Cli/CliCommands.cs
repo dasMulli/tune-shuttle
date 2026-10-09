@@ -533,7 +533,10 @@ public sealed class CliCommands(CliServices services)
 
     private async Task<int> PlayCoreAsync(AirplaySender sender, List<DiscoveredReceiver> receivers, IPcmSource source, int level, int latency, bool sendMetadata, ILoggerFactory logging, ILogger logger, CancellationToken ct)
     {
-        var options = sender.Options.Player with { LatencyFrames = latency };
+        // No silence auto-pause: the source ends once, DrainAsync waits for the last frames, and disposing the player tears
+        // the members down. With the default 5 s timeout, waiting past the drain turned the end into a pause (FLUSH), whose
+        // answer the SpeakerA delays by 2-30 s (SPEC.md P19), before the TEARDOWN.
+        var options = sender.Options.Player with { LatencyFrames = latency, SilenceTimeout = TimeSpan.Zero };
         IGroupPlayer player;
         try
         {
@@ -594,11 +597,9 @@ public sealed class CliCommands(CliServices services)
             producer = StartProducer(player, source, producerStop.Token);
             await producer.WaitAsync(ct).ConfigureAwait(false);
             await DrainAsync(player, latency, ct).ConfigureAwait(false);
-            if (nowPlaying is not null)
-            {
-                await AwaitQuietlyAsync(nowPlaying, logger, "now-playing metadata").ConfigureAwait(false);
-            }
 
+            // The now-playing task (DMAP, artwork, progress) is awaited in finally, after the player is disposed: the
+            // SpeakerA answers DMAP with 500 only after seconds (SPEC.md P9), and the end of playback does not wait for it.
             var states = player.Members;
             var lost = joined.Where(r => !states.TryGetValue(r.Id, out var s) || s == GroupMemberState.Lost).Select(r => r.Name).ToList();
             await Out.WriteLineAsync(Statistics(player, watch.Elapsed)).ConfigureAwait(false);

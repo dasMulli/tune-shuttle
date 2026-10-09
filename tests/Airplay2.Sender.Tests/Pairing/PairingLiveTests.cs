@@ -53,7 +53,8 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
     /// only transient pair-setup M4 activates it [sps:rtsp.c:1810-1833]); observed 2026-10-09: an encrypted request after
     /// verify is answered with nothing ("can't find an RTSP header"). The test therefore checks that the connection
     /// still serves plaintext after verify, which documents the receiver; Apple receivers encrypt (SPEC-control.md 3.7).
-    /// Needs <c>SPS_PIN_HOST</c>, <c>SPS_PIN_PORT</c> and <c>SPS_PASSWORD</c>; returns early without them.
+    /// Needs <c>SPS_PIN_HOST</c>, <c>SPS_PIN_PORT</c> and <c>SPS_PASSWORD</c> (set by <c>run-live-tests-in-vm.ps1</c> from the
+    /// <c>sps-pin</c> service of compose.yaml); returns early without them and says SKIPPED in its output.
     /// </summary>
     [Fact]
     [Trait("Category", "ShairportLive")]
@@ -63,7 +64,9 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
         var password = Environment.GetEnvironmentVariable("SPS_PASSWORD");
         if (!LiveEnabled || host is null || password is null)
         {
-            output.WriteLine("AIRPLAY_LIVE, SPS_PIN_HOST or SPS_PASSWORD not set");
+            // xunit 2.9 has no dynamic skip: the early return is reported as passed. run-live-tests-in-vm.ps1 starts the
+            // password receiver (compose profile "pin") and sets both variables, and warns when it cannot.
+            output.WriteLine($"SKIPPED (returned early, reported as passed): {(LiveEnabled ? "SPS_PIN_HOST or SPS_PASSWORD not set" : "AIRPLAY_LIVE not set")}");
             return;
         }
 

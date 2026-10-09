@@ -28,8 +28,9 @@ internal sealed class BridgeFactory : WebApplicationFactory<BridgeController>
 {
     private readonly bool _ownsDirectory;
 
-    public BridgeFactory(string? dataDirectory = null, StaticReceiverBrowser? browser = null, bool useMdns = false, ILoggerProvider? extraLogging = null)
+    public BridgeFactory(string? dataDirectory = null, StaticReceiverBrowser? browser = null, bool useMdns = false, ILoggerProvider? extraLogging = null, string environment = "Development")
     {
+        Environment = environment;
         UseMdns = useMdns;
         ExtraLogging = extraLogging;
         _ownsDirectory = dataDirectory is null;
@@ -47,12 +48,15 @@ internal sealed class BridgeFactory : WebApplicationFactory<BridgeController>
 
     public ILoggerProvider? ExtraLogging { get; }
 
+    /// <summary>The host environment (Development by default; Production is what a plain <c>bridge.dll</c> run gets).</summary>
+    public string Environment { get; }
+
     public T Get<T>()
         where T : notnull => Services.GetRequiredService<T>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder.UseEnvironment(Environment);
         builder.UseSetting("DataDirectory", DataDirectory);
         builder.UseSetting("Bridge:EnableSpotify", "false");
         builder.UseSetting("Bridge:BrowseReceivers", UseMdns ? "true" : "false");

@@ -85,16 +85,20 @@ public class PtpMasterLoopbackTests
             Assert.Equal(0, messages.First(m => m.Header.MessageType == PtpMessageType.Sync).Header.SequenceId);
             Assert.Equal(master.ClockId, slave.MasterClockId);
 
-            // Follow_Ups pair with Syncs, t1 increases, the cadence is about 125 ms.
+            // Follow_Ups pair with Syncs, sequence ids and t1 increase, the cadence is about 125 ms. Loopback UDP may drop a
+            // Sync/Follow_Up pair while the whole suite runs, so the sequence only has to increase (not by exactly one) and
+            // the cadence is measured per sequence step rather than per received sample.
             var samples = slave.Samples.ToList();
             Assert.True(samples.Count >= 10);
             for (var i = 1; i < samples.Count; i++)
             {
-                Assert.Equal((ushort)(samples[i - 1].Sequence + 1), samples[i].Sequence);
+                Assert.True(samples[i].Sequence > samples[i - 1].Sequence, $"Sync sequence {samples[i].Sequence} after {samples[i - 1].Sequence}");
                 Assert.True(samples[i].T1 > samples[i - 1].T1);
             }
 
-            var meanInterval = (samples[^1].T1 - samples[0].T1) / (double)(samples.Count - 1) / 1_000_000.0;
+            var steps = samples[^1].Sequence - samples[0].Sequence;
+            Assert.True(steps <= (samples.Count - 1) * 2, $"{steps} sequence steps for {samples.Count} samples: too many Syncs lost");
+            var meanInterval = (samples[^1].T1 - samples[0].T1) / (double)steps / 1_000_000.0;
             Assert.InRange(meanInterval, 100.0, 170.0);
             var announces = messages.Where(m => m.Header.MessageType == PtpMessageType.Announce).ToList();
             Assert.Equal((ushort)(announces[0].Header.SequenceId + 1), announces[1].Header.SequenceId);

@@ -426,7 +426,10 @@ public sealed partial class FakeReceiver
             return RtspServerResponse.Ok();
         }
 
-        /// <summary>SET_PARAMETER by Content-Type (SPEC-control.md 5); always 200 without body [sps:rtsp.c:3430].</summary>
+        /// <summary>
+        /// SET_PARAMETER by Content-Type (SPEC-control.md 5); 200 without body [sps:rtsp.c:3430], except DMAP text when
+        /// <see cref="FakeReceiverOptions.DmapStatus"/> says otherwise.
+        /// </summary>
         private RtspServerResponse SetParameter(RtspIncomingRequest request)
         {
             var contentType = request.ContentType ?? string.Empty;
@@ -454,6 +457,10 @@ public sealed partial class FakeReceiver
             else if (contentType.StartsWith(RtspContentTypes.DmapTagged, StringComparison.OrdinalIgnoreCase))
             {
                 owner.Write(new FakeReceiverEvent.Metadata(FakeParsing.ParseDmapListingItem(request.Body.Span), rtpTime));
+                if (owner.Options.DmapStatus != RtspStatus.Ok)
+                {
+                    return RtspServerResponse.Status(owner.Options.DmapStatus);
+                }
             }
             else if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             {

@@ -50,10 +50,43 @@ public sealed class ReceiverSessionUnitTests
         await session.SetArtworkAsync(new byte[] { 0xFF, 0xD8 }, RtspContentTypes.Jpeg, 1, None);
         await session.SetProgressAsync(new ProgressInfo(1, 2, 3), None);
         await connection.Received(3).SendAsync(Arg.Is<RtspRequest>(r => r.Method == "SET_PARAMETER"), Arg.Any<CancellationToken>());
+        Assert.True(session.DmapRefused);
 
-        // Transport failures still surface.
+        // Transport failures still surface (a fresh session: the first one no longer sends DMAP).
+        (session, connection) = Create();
         connection.SendAsync(Arg.Any<RtspRequest>(), Arg.Any<CancellationToken>()).Returns<Task<RtspResponse>>(_ => throw new IOException("closed"));
         await Assert.ThrowsAsync<IOException>(() => session.SetMetadataAsync(new TrackMetadata("T", null, null, null), 1, None));
+    }
+
+    [Fact]
+    public async Task Dmap_text_stops_after_the_first_refusal_while_artwork_and_progress_continue()
+    {
+        // SPEC.md 4.2: the SpeakerA answers DMAP 500, sometimes after ~10 s, and the control connection carries one request
+        // at a time, so the session stops sending DMAP after the first non-2xx answer.
+        var (session, connection) = Create();
+        connection.SendAsync(Arg.Is<RtspRequest>(r => r.ContentType == RtspContentTypes.DmapTagged), Arg.Any<CancellationToken>()).Returns(Answer(500));
+        connection.SendAsync(Arg.Is<RtspRequest>(r => r.ContentType != RtspContentTypes.DmapTagged), Arg.Any<CancellationToken>()).Returns(Answer(200));
+        Assert.False(session.DmapRefused);
+
+        await session.SetMetadataAsync(new TrackMetadata("T1", "A", "B", null), 1, None);
+        Assert.True(session.DmapRefused);
+        await session.SetMetadataAsync(new TrackMetadata("T2", "A", "B", null), 2, None);
+        await session.SetArtworkAsync(new byte[] { 0xFF, 0xD8 }, RtspContentTypes.Jpeg, 2, None);
+        await session.SetProgressAsync(new ProgressInfo(2, 3, 4), None);
+
+        await connection.Received(1).SendAsync(Arg.Is<RtspRequest>(r => r.ContentType == RtspContentTypes.DmapTagged), Arg.Any<CancellationToken>());
+        await connection.Received(2).SendAsync(Arg.Is<RtspRequest>(r => r.ContentType != RtspContentTypes.DmapTagged), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Dmap_text_keeps_flowing_while_the_receiver_accepts_it()
+    {
+        var (session, connection) = Create();
+        connection.SendAsync(Arg.Any<RtspRequest>(), Arg.Any<CancellationToken>()).Returns(Answer(200));
+        await session.SetMetadataAsync(new TrackMetadata("T1", "A", "B", null), 1, None);
+        await session.SetMetadataAsync(new TrackMetadata("T2", "A", "B", null), 2, None);
+        await connection.Received(2).SendAsync(Arg.Is<RtspRequest>(r => r.ContentType == RtspContentTypes.DmapTagged), Arg.Any<CancellationToken>());
+        Assert.False(session.DmapRefused);
     }
 
     [Theory]

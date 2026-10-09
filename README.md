@@ -47,7 +47,8 @@ dotnet test AirplayBridge.sln --filter "Category!=SpeakerALive&Category!=Shairpo
 
 Warnings are errors in this solution. The test filter shown above leaves out the live tests. Even when they are
 selected, live tests return early unless `AIRPLAY_LIVE=1` is set, so a plain `dotnet test` never contacts a receiver.
-The 30-second pacer accuracy test is tagged `Category=Timing`; add `&Category!=Timing` on a loaded machine.
+The 30-second pacer accuracy test is tagged `Category=Timing`; add `&Category!=Timing` on a loaded machine. A live
+test that returns early is reported as passed (xunit 2.9 has no dynamic skip); its output says why.
 
 The CI script does the whole sequence:
 
@@ -102,6 +103,11 @@ TEARDOWN for up to 60 s).
 dotnet run --project src/Bridge.Service                                  # http://localhost:8080
 dotnet run --project src/Bridge.Service -- --Bridge:FakeReceivers=2      # two in-process fake receivers instead of the LAN
 ```
+
+`dotnet run` uses `src/Bridge.Service/Properties/launchSettings.json`, which sets `ASPNETCORE_ENVIRONMENT=Development`
+(OpenAPI document at `/openapi/v1.json`). The build output has no `wwwroot/`; the bridge finds the web app through the
+static web assets manifest next to `bridge.dll` in every environment, so `dotnet bin/Debug/net10.0/bridge.dll` (which
+runs as Production) serves it too. Published folders and the container carry the web app in `wwwroot/`.
 
 `--Bridge:FakeReceivers=N` only works in Debug builds made from the full repository. It starts N fake receivers on
 loopback, which is enough to try every page of the web app without a speaker.

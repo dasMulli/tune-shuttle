@@ -52,6 +52,31 @@ public sealed class DeploymentTests
         Assert.DoesNotContain("Environment=ASPNETCORE_URLS", unit, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A run from the build output (no wwwroot/, the static web assets manifest next to bridge.dll) is Production unless
+    /// launchSettings.json says otherwise, and must still serve the web app (final review: GET / was 404 there).
+    /// </summary>
+    [Fact]
+    public async Task The_build_output_serves_the_web_app_outside_Development()
+    {
+        await using var factory = new BridgeFactory(environment: "Production");
+        using var client = factory.CreateClient();
+
+        using var index = await client.GetAsync(new Uri("/", UriKind.Relative));
+        Assert.Equal(System.Net.HttpStatusCode.OK, index.StatusCode);
+        Assert.Equal("text/html", index.Content.Headers.ContentType?.MediaType);
+
+        using var framework = await client.GetAsync(new Uri("/_framework/blazor.webassembly.js", UriKind.Relative));
+        Assert.Equal(System.Net.HttpStatusCode.OK, framework.StatusCode);
+    }
+
+    [Fact]
+    public void Dotnet_run_uses_the_Development_environment()
+    {
+        var settings = File.ReadAllText(Path.Combine(RepositoryRoot(), "src", "Bridge.Service", "Properties", "launchSettings.json"));
+        Assert.Contains("\"ASPNETCORE_ENVIRONMENT\": \"Development\"", settings, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task File_logger_writes_a_daily_file()
     {

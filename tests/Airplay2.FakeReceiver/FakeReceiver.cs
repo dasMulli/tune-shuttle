@@ -121,6 +121,12 @@ public sealed record FakeReceiverOptions
     /// </summary>
     public bool SendTimingRequests { get; init; } = true;
 
+    /// <summary>
+    /// The status of the answer to <c>SET_PARAMETER</c> with DMAP text (200 by default; the Test Speaker ABCD answers 500,
+    /// SPEC.md P9). The item is still recorded as a <see cref="FakeReceiverEvent.Metadata"/> event.
+    /// </summary>
+    public int DmapStatus { get; init; } = 200;
+
     /// <summary>Close the event channel when a request is not answered within this time.</summary>
     public TimeSpan EventAnswerTimeout { get; init; } = TimeSpan.FromSeconds(30);
 

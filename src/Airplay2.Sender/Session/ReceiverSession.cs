@@ -62,6 +62,7 @@ public sealed class ReceiverSession : IReceiverSession
     // Only touched on the request path, which one caller drives at a time (requests are serialised anyway).
     private bool _authSetupSent;
     private int _feedbackFailures;
+    private int _dmapRefused;
     private int _disposed;
 
     /// <summary>Creates a session over an existing connection.</summary>
@@ -421,15 +422,34 @@ public sealed class ReceiverSession : IReceiverSession
     /// <inheritdoc />
     /// <remarks>
     /// Metadata is best effort (SPEC-control.md 5: a receiver that does not want an item drops it): a non-2xx answer is
-    /// logged at Warning and not thrown. The Test Speaker ABCD answers DMAP with 500 in a session without audio (probe P9,
-    /// 2026-10-09). Transport failures still throw.
+    /// logged at Warning and not thrown. The Test Speaker ABCD answers DMAP with 500, with and without audio and sometimes
+    /// only after ~10 s (probe P9, 2026-10-09; SPEC.md 4.2). Since the control connection carries one request at a time, a
+    /// volume change or FLUSH queued behind such a request waits that long, so after the first non-2xx answer to DMAP this
+    /// session sends no more DMAP text (logged once; <see cref="DmapRefused"/>). Artwork and progress continue. Transport
+    /// failures still throw.
     /// </remarks>
     public async Task SetMetadataAsync(TrackMetadata metadata, uint startFrame, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(metadata);
+        if (DmapRefused)
+        {
+            Logger.LogDebug("SET_PARAMETER DMAP to {Receiver} skipped: refused earlier in this session", Receiver.Name);
+            return;
+        }
+
         Logger.LogDebug("SET_PARAMETER DMAP to {Receiver}: '{Title}' / '{Artist}' / '{Album}' at rtptime {Start}", Receiver.Name, metadata.Title, metadata.Artist, metadata.Album, startFrame);
-        await SendMetadataItemAsync(SessionRequests.Metadata(Uri, metadata, startFrame), "DMAP", cancellationToken).ConfigureAwait(false);
+        var response = await SendMetadataItemAsync(SessionRequests.Metadata(Uri, metadata, startFrame), "DMAP", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccess && Interlocked.Exchange(ref _dmapRefused, 1) == 0)
+        {
+            Logger.LogInformation("{Receiver} refused DMAP text ({Status}); no more DMAP on this session, artwork and progress continue", Receiver.Name, response.StatusCode);
+        }
     }
+
+    /// <summary>
+    /// True after the receiver answered DMAP text with a non-2xx status on this session; <see cref="SetMetadataAsync"/>
+    /// then sends nothing (SPEC.md 4.2, the SpeakerA's DMAP 500).
+    /// </summary>
+    public bool DmapRefused => Volatile.Read(ref _dmapRefused) != 0;
 
     /// <inheritdoc />
     /// <remarks>
