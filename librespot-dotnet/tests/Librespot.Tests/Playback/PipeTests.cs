@@ -130,7 +130,7 @@ public sealed class PipeTests : IDisposable
         Assert.NotNull(AudioBackends.Find("pipe"));
         Assert.NotNull(AudioBackends.Find("subprocess"));
         Assert.Null(AudioBackends.Find("alsa"));
-        Assert.Null(AudioBackends.Find("rodio"));
+        Assert.Same(AudioBackends.Find("naudio"), AudioBackends.Find("rodio")); // upstream name, alias of naudio
 
         using var sink = AudioBackends.Find("pipe")!(Path.Combine(_dir, "registry.pcm"), AudioFormat.S16);
         Assert.IsType<StdoutSink>(sink);

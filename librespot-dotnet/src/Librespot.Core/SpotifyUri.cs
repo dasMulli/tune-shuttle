@@ -206,6 +206,6 @@ public abstract record SpotifyUri
     /// <summary>Note: this is the unique revision of a playlist, not the id of that playlist.</summary>
     public static SpotifyUri From(SelectedListContent playlist) => new Unknown("SelectedListContent", SpotifyId.FromRaw(playlist.Revision.Span).ToBase62());
 
-    /// <summary>TODO upstream: check meaning and format of this field in the wild; it might be a FileId.</summary>
+    /// <summary>Upstream TODO (kept as is): check meaning and format of this field in the wild; it might be a FileId.</summary>
     public static SpotifyUri From(TranscodedPicture picture) => new Unknown("TranscodedPicture", picture.Uri);
 }

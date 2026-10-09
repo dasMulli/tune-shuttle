@@ -35,7 +35,7 @@ public enum PacketType : byte
     Unknown0x10 = 0x10,
     Unknown0x4f = 0x4f,
 
-    // TODO - occurs when subscribing with an empty URI. Maybe a MercuryError?
+    // Upstream TODO (kept as is): occurs when subscribing with an empty URI. Maybe a MercuryError?
     // Payload: b"\0\x08\0\0\0\0\0\0\0\0\x01\0\x01\0\x03 \xb0\x06"
     Unknown0xb6 = 0xb6,
 }

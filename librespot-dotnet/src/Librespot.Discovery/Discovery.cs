@@ -9,7 +9,7 @@
 // of Spotify clients.
 //
 // Backends: "libmdns" is the built-in responder in Mdns/ (it replaces the libmdns crate). "avahi" (`avahi_task`,
-// `launch_avahi`, Avahi.cs) is Linux-only and not ported; "dns-sd" (`launch_dns_sd`, Bonjour's dns_sd library) is not
+// `launch_avahi`, avahi.rs) is Linux-only and not ported (see DnsSdBackends.All); "dns-sd" (`launch_dns_sd`, Bonjour's dns_sd library) is not
 // ported either. Both stay in the registry as known-but-not-compiled entries, as upstream does without their features.
 using System.Net;
 using System.Runtime.CompilerServices;
@@ -175,6 +175,11 @@ public static class DnsSdBackends
     /// <summary>(name, builder-or-null-if-known-but-not-compiled); the first entry with a builder is the default.</summary>
     public static IReadOnlyList<(string Name, DnsSdServiceBuilder? Builder)> All { get; } =
     [
+        // discovery/src/avahi.rs is not ported (Linux-only, like the playback backends listed in AudioBackend.cs): it
+        // holds the zbus D-Bus proxies (`ServerProxy`, `EntryGroupProxy`, `EntryGroupState`) that `avahi_task` /
+        // `launch_avahi` use to publish the service through avahi-daemon, which only exists on Linux; the built-in
+        // responder covers every platform. As in an upstream build without `with-avahi`, the entry stays null and
+        // Find("avahi") reports "librespot built without 'avahi' support" (Unavailable).
         ("avahi", null),
         ("dns-sd", null),
         (BuiltInName, LaunchLibmdns),

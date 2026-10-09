@@ -1,4 +1,4 @@
-// Tests for src/Librespot.Discovery/Discovery.cs (port of discovery/src/lib.rs; upstream has no #[cfg(test)]). Avahi.cs
+// Tests for src/Librespot.Discovery/Discovery.cs (port of discovery/src/lib.rs; upstream has no #[cfg(test)]). avahi.rs
 // (not ported) is covered by Find_backends_like_upstream ("avahi" is Unavailable).
 using System.Net;
 using System.Net.Http;

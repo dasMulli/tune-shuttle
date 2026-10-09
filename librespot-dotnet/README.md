@@ -9,16 +9,33 @@ Like upstream, this only works with Spotify Premium accounts.
 
 ## Status
 
-**Skeleton stage.** The solution compiles and the tests pass, but most of the logic still has to be
-ported. What exists today:
+**Port complete.** Every upstream crate is ported file for file: each of the 134 `.rs` files in the reference
+has a C# counterpart or a documented platform skip, and no `TODO(port: ...)` markers are left.
 
 | Area | State |
 |------|-------|
 | `Librespot.Protocol` | All 46 upstream `.proto` files compiled with protoc at build time; `impl_trait` conversions ported. |
-| `Librespot.Core` | Error hierarchy, `SessionConfig`/`DeviceType`, version constants, `SpotifyId`, `SpotifyUri`, `FileId`, `Date`, `PacketType`, Diffie-Hellman, **Shannon cipher + AP framing codec** (test vectors from the Rust crate), `Credentials` (JSON-compatible with upstream caches), the `Session` facade with all data accessors. Everything network-facing is a stub marked `TODO(port: <package>)`. |
-| `Librespot.Playback` | Config enums, `ISink`/`ISinkAsBytes`, `IMixer`/`IVolumeGetter`, volume mappings + `SoftMixer`, `AudioPacket`, `PlayerEvent`/`PlayerCommand`, `Player` facade. Decoders, converter, player loop, sinks are stubs. |
-| `Librespot.Audio`, `Librespot.Metadata`, `Librespot.Connect`, `Librespot.Discovery`, `Librespot.OAuth` | Public contracts only. |
-| `Librespot.Cli`, `examples/` | Entry points only (`librespot --version` works). |
+| `Librespot.OAuth` | Authorization-code + PKCE flow with the local redirect server, device-code flow, sync and async variants, token refresh. |
+| `Librespot.Core` | AP resolve, handshake, Shannon codec, connection/authentication, Mercury, channels, audio keys, dealer (websocket), spclient, login5, token provider, client token, HTTP client with proxy support, `Session`, credentials cache. |
+| `Librespot.Audio` | CDN URL resolution, range-based streaming fetch with read-ahead and throughput/ping tracking, AES decryption. |
+| `Librespot.Metadata` | All metadata types (album, artist, track, episode, show, playlist, lyrics, ...) and their protobuf/JSON mappings. |
+| `Librespot.Playback` | Decoders (Vorbis, MP3, passthrough), converter with dithering, normaliser, player loop, mixers (softvol), local files, and the `naudio`, `pipe` and `subprocess` sinks. |
+| `Librespot.Connect` | Spirc / Connect state machine, context resolution, shuffle/repeat, volume and transfer handling. |
+| `Librespot.Discovery` | Zeroconf HTTP server (getInfo/addUser with the upstream DH + AES/HMAC blob) and a built-in mDNS responder. |
+| `Librespot.Cli` | The `librespot` binary with all 53 upstream options (same names, order, defaults and help texts), `--version`, `--backend ?`, `--device ?`. |
+| `examples/` | The upstream examples as 10 sub-commands: `get-creds`, `get-token`, `play`, `play-connect`, `playlist-tracks`, `discovery`, `discovery-group`, `device-auth`, `oauth-async`, `oauth-sync`. |
+
+Not ported, by design:
+
+* the Linux/native-only audio backends `alsa`, `pulseaudio`, `jackaudio`, `gstreamer`, `portaudio`, `sdl`, the
+  `rodiojack` variant and the `alsamixer` mixer (they stay unknown names, as in an upstream build without those features);
+* the `avahi` and `dns-sd` discovery backends (their registry entries stay known-but-unavailable);
+* FLAC decoding, which upstream only uses for local files;
+* `util.rs`' `keep_flushing`, which is not needed with `ClientWebSocket`.
+
+Tests: `dotnet test Librespot.sln` runs 819 tests, 809 pass and 10 are skipped (tests that need the network or an
+audio device). Set `LIBRESPOT_LIVE_TESTS=1` (plus `LIBRESPOT_ACCESS_TOKEN` for the Spotify ones) to run the live tests.
+The build treats warnings as errors.
 
 The complete work breakdown, conventions and per-package contracts are in [docs/PORT-PLAN.md](docs/PORT-PLAN.md).
 
@@ -58,6 +75,7 @@ dotnet run --project src/Librespot.Cli -- --version
 
 * Audio output is NAudio (WASAPI) on Windows, plus `pipe` and `subprocess` backends everywhere. The
   Linux-only upstream backends (alsa, pulseaudio, jack, gstreamer, portaudio, sdl, alsamixer) are not ported.
+  The default backend is called `naudio` (upstream: `rodio`); `--backend rodio` is accepted as an alias.
 * mDNS/DNS-SD discovery uses a small built-in responder (upstream `libmdns`); avahi and dns-sd are not ported.
 * Ogg Vorbis is decoded with NVorbis, MP3 with NLayer. FLAC (used by upstream only for local files) is out of scope for now.
 

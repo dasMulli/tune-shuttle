@@ -5,7 +5,7 @@
 // (see docs/PORT-PLAN.md package `playback-backends`): alsa.rs ("alsa"), portaudio.rs ("portaudio"),
 // pulseaudio.rs ("pulseaudio"), jackaudio.rs ("jackaudio"), gstreamer.rs ("gstreamer"), sdl.rs ("sdl"), the
 // "rodiojack" variant of rodio.rs, and mixer/alsamixer.rs. Like upstream builds without those cargo features,
-// `AudioBackends.Find` returns null for their names.
+// `AudioBackends.Find` returns null for their names. "rodio" is accepted by `Find` as an alias of "naudio".
 using System.Runtime.InteropServices;
 using Librespot.Core;
 using Librespot.Playback.Decoder;
@@ -147,12 +147,23 @@ public static class AudioBackends
             ? NAudioSink.Open(device, format)
             : throw new SinkException(SinkException.Reason.InvalidParams, "<NAudioSink> WASAPI output is only available on Windows");
 
+    /// <summary>
+    /// Upstream name of the backend that "naudio" replaces (<c>RodioSink::NAME</c>). <see cref="Find"/> accepts it as an
+    /// alias so command lines written for upstream (<c>--backend rodio</c>) keep working; it is not listed separately.
+    /// </summary>
+    public const string RodioAlias = "rodio";
+
     /// <summary>Finds a backend by name, or the default when <paramref name="name"/> is null; null when unknown.</summary>
     public static SinkBuilder? Find(string? name)
     {
         if (name is null)
         {
             return Backends.Count > 0 ? Backends[0].Builder : null;
+        }
+
+        if (name == RodioAlias)
+        {
+            name = "naudio"; // NAudioSink.Name
         }
 
         foreach (var (n, b) in Backends)

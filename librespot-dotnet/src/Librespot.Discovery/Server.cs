@@ -138,7 +138,7 @@ internal sealed class RequestHandler
             w.WriteNumber("spotifyError", 0);
             w.WriteNumber("status", 101);
             w.WriteString("statusString", "OK");
-            // TODO: bitmask but what are the flags?  (upstream comment)
+            // Upstream TODO (kept as is): bitmask but what are the flags?
             w.WriteNumber("supported_capabilities", 1);
             w.WriteStartArray("supported_drm_media_formats");
             w.WriteEndArray();
