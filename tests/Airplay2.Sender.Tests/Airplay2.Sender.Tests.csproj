@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Airplay2.Sender\Airplay2.Sender.csproj" />
     <ProjectReference Include="..\Airplay2.FakeReceiver\Airplay2.FakeReceiver.csproj" />
+    <ProjectReference Include="..\..\src\Airplay2.Sender.Cli\Airplay2.Sender.Cli.csproj" />
   </ItemGroup>
 
 </Project>

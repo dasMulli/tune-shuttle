@@ -997,6 +997,13 @@ zero nonce "worked with Apple but other vendors might care" [airplayv2.py:195-19
 TEARDOWN is sent. Both `shk` = `SS[0..31]` and 32 random bytes are accepted (probe P15, control part). The SpeakerA's
 0xD2 timing requests start while the stream SETUP is being answered.
 
+**Note (2026-10-09, `sender-api-cli`, live against the Test Speaker ABCD):** the SpeakerA **holds the stream SETUP answer
+until its NTP timing exchange works**: in a normal run three 0xD2 requests to our `timingPort` are answered and the stream
+SETUP answer follows ~150 ms after the request. When no timing reply can reach it (our timing port blocked by an
+inbound Windows Firewall rule for `airplay2.exe`), the stream SETUP is answered **`400 Bad Request` after ~32 s** (longer
+than a 30 s request timeout); TEARDOWN `{}` is still answered 200. A sender must have its timing responder reachable
+before the stream SETUP; the CLI reports this case (`TimingHint`). Log: `artifacts/live/2026-10-09-sender-M1-play.log`.
+
 ### 4.5 `RECORD`
 
 `RECORD rtsp://…/… RTSP/1.0` with the standard headers and **no body**. pyatv sends none [pyatv:rtsp.py:178-184;
@@ -1044,6 +1051,12 @@ Response 200, no body. For realtime (96) streams the equivalent information trav
 instead (data-plane spec; owntone's PTP sync packet carries `rtptime`, 64-bit nanoseconds and the clock id
 [owntone:rtp_common.c:258-291], its NTP sync packet carries `rtptime - latency`, NTP seconds/fraction and `rtptime`
 [rtp_common.c:308-344]).
+
+**Note (2026-10-09, `buffered-stream`, live).** When they are sent: `BufferedStreamTransport` sends rate 1 for a receiver
+with the first packet after it was added, flushed, paused or resynced (`rtpTime` = that packet, network time = its due
+instant + L + offset), but only once audio has been written to its data connection; a pause or the group player's FLUSH
+becomes rate 0 + immediate `FLUSHBUFFERED` (SPEC-audio.md 4.5). shairport-sync answers all of them 200 at once. The
+Test Speaker ABCD answers rate 1 with `400` whenever its type-103 data connection is open (SPEC-audio.md 4.3 note, P16).
 
 ### 4.8 `FLUSH` and `FLUSHBUFFERED`
 

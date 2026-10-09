@@ -190,6 +190,44 @@ are the working assumptions and the code keeps both branches where the parts nam
   Delay_Req kept coming at the same rate, TEARDOWN 200. PTP ShairportLive tests (bridge-network script
   `docker/shairport-sync/run-ptp-live-tests-in-vm.ps1`): 2/2 passed, nqptp took our clock as master.
 
+- **Sender M1 through the CLI** Result (2026-10-09, `sender-api-cli`, SpeakerA, 3 s tone at -24 dBFS, level 15):
+  `airplay2 play tone:3 --to "Test Speaker ABCD" --level 15 --i-know` (run as the SpeakerALive test `CliLiveTests.SpeakerA_sender_M1_play_tone_3s`,
+  which calls the CLI's `Program.RunAsync` with real mDNS) found the SpeakerA, paired transiently, ran D5 through the
+  `AirplaySender` facade (realtime stream, NTP by the P1 quirk) and played the tone: stream SETUP answered 150 ms after 3
+  timing replies, 659 packets (284 of them silence while draining L), 5 retransmit requests answered wrapped, DMAP 500,
+  TEARDOWN 200, exit 0. The first attempt from the `airplay2.exe` binary failed: an inbound Windows Firewall **block**
+  rule for the new executable kept the SpeakerA's 0xD2 requests out, and the SpeakerA answered the stream SETUP with **400
+  after ~32 s** (no audio was sent; SPEC-control.md 4.4 note). Running `airplay2.exe` against NTP receivers therefore
+  needs an inbound UDP allow rule for it (the install script's job for the service). Log: `-sender-M1-play.log`.
+- **P2** Result (2026-10-09, `airplay2 probe P2`, SpeakerA): transient M1-M4 (`/pair-pin-start` HKP 4, Flags 0x10, PIN 3939)
+  is accepted with flags bit 10 set and `acl=0`; the encrypted `GET /info` answers 200 (525 bytes, the same 19 keys as
+  unencrypted). Transient stays the SpeakerA's default pairing. Log: `-P2.log`.
+- **P11** Result (2026-10-09, `airplay2 probe P11`, SpeakerA): `/pair-pin-start` and transient M1 **without `X-Apple-HKP`**
+  are answered **`403 Forbidden`** (no TLV body): the header is required; the library sends it on every pairing POST (D2).
+  Log: `-P11.log`.
+- **P6** Result (2026-10-09, `airplay2 probe P6`, SpeakerA; no `/pair-pin-start`, no PIN entry): M1 with method 0
+  (`PairSetup`) and with method 1 (`PairSetupWithAuth`) on two connections **5 s apart** both get `200` with
+  `State=2, Salt(16), PublicKey(384)`: the bit-51-clear SpeakerA does not reject method 1. With the second M1 only ~50 ms
+  after the first connection closed, it answered `Error=BackOff` with a `RetryDelay` item instead (the abandoned SRP
+  session was still open), so the probe now waits 5 s between them. The TV case stays deferred. Log: `-P6.log`.
+- CLI probe dispatch (`sender-api-cli`): `airplay2 probe <P1..P21> <name>` runs the methods of `SessionProbes` (P1 control
+  part, P3, P4, P5, P8, P9, P10, P13, P15 control part, P21) and `PlaybackProbes` (P1 audio part, P7, P12, P14, P15 audio
+  part, P18, P19), and implements P2, P6, P11 and P17 itself. P7, P12, P14, P18 and P19 exit with code 2 without
+  `--i-know`; P1 and P15 then run only their control part. The CLI's audio probes run under NTP only. P16 (buffered
+  stream) and P20 (mixed group, microphone) exit with code 3. Each run appends its Debug log to
+  `artifacts/live/<date>-<id>.log`.
+
+- **P16** Result (2026-10-09, `buffered-stream`, SpeakerA, two 3 s tone runs at level 15 plus three probes without audio):
+  the SpeakerA accepts the type-103 stream SETUP (`dataPort` TCP, `controlPort`, `audioBufferSize 8388608`, no `streamID`)
+  and the TCP data connection, but answers `SETRATEANCHORTIME rate 1` with **400** whenever the data connection is open:
+  empty, or after 3 s of **ALAC 44.1/16 with SSRC `0x0000FACE`** or **ALAC 48/24 (uncompressed) with `0x15000000`**; rate 0
+  is answered 200, and without a data connection every anchor body variant is answered 200 (SPEC-audio.md 4.3 note). So
+  neither ALAC form plays buffered on the SpeakerA; AAC-LC (`0x16000000`) needs an encoder and is untested. The buffered
+  stream works end to end on shairport-sync 5.5.2 (run-ahead push with an explicit anchor, and the group player's pacer
+  path with pause/resume: rate 0 + FLUSHBUFFERED + rate 1). The realtime stream stays the default (D1). Logs:
+  `artifacts/live/2026-10-09-P16-buffered-alac44-face.log`, `-P16-buffered-alac48-24.log`, `-P16-anchor-body.log`,
+  `-buffered-shairport.log`.
+
 ## 5. Glossary of the names used in code
 
 | Spec term | Code |

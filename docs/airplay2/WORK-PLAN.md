@@ -413,6 +413,26 @@ Verify: packet-layout unit tests against SPEC-audio 4.2; fake-receiver buffered 
 Docker VM: buffered stream plays into the dummy backend (the receiver's logs show the frames); live on the SpeakerA per
 section 4 rules (P16).
 
+Contract changes (recorded 2026-10-09 at the wave 5 checkpoint; all additive unless marked):
+- buffered-stream: `BufferedStreamTransport` moved to its own file; besides the 3-argument constructor it has
+  `(clock, ptp, control, BufferedStreamOptions?, ILogger?)`, `WrapSessionFactory`, `CreateGroupPlayer(factory,
+  options, logger)` (wraps the factory and aligns `GroupPlayerOptions.LatencyFrames` with the transport's L),
+  `AttachSession`/`DetachSession`, `AnchorAsync`, `PauseAsync`, `FlushAsync`/`FlushReceiverAsync`/`FlushRangeAsync`,
+  `WaitForWindowAsync`, events and counters; new types `BufferedStreamOptions`, `BufferedReceiverSession` (the
+  `IReceiverSession` decorator: PTP forced, peer add/remove, type-103 SETUP, FLUSH mapped to rate 0 + FLUSHBUFFERED),
+  `BufferedAudioFormat`, `BufferedAudioPacket`, `AlacEscapeFrame`, `NetworkTime`, `BufferedStreamConstants`.
+  New `IStreamLatency { LatencyFrames }`, implemented by both transports; `GroupPlayer` reads L through it.
+- sender-api-cli: `AirplaySenderOptions` gains `DefaultTimingProtocol`, `Connection`, `Session`, `Ptp`, `LocalAddress`,
+  `ConnectAttempts`, `ConnectRetryDelay`, `MaxRetryDelay`, `PinPairingTimeout`. `AirplaySender` gains `StartAsync`,
+  `Timing`, `Control`, `Ptp`, `EnsurePtpMasterAsync`, `PendingPinPairings`, `QuirksFor`/static `ResolveQuirks`,
+  `TimingProtocolFor`, `ChooseTransport`, static `DeriveIdentity`, static `InfoRequest`, and
+  `CreateGroupPlayerAsync(receivers, options, ct)` (realtime/buffered and NTP/PTP from the members; a buffered player
+  is built with `BufferedStreamTransport.CreateGroupPlayer`); the browser is created lazily. CLI: `Program.RunAsync`,
+  `BuildRootCommand`, `CreateInvocationConfiguration` (`TeardownGrace` 60 s for Ctrl+C), `CliServices`,
+  `IReceiverDirectory`, `IPcmSource`/`WavReader`; recursive `--verbose`/`--log-file`, `info --qualifier`,
+  `pair --pin/--forget`, `play --no-metadata`, probe `--seconds/--level/--latency/--sync-flags/--withhold`; exit codes
+  3 (probe unavailable: P16, P20) and 130 (interrupted). `tests/Airplay2.Sender.Tests` references the CLI project.
+
 ### `bridge-service` (wave 6) — depends on: sender-api-cli, bridge-store, fake-receiver — size: ~3,200
 
 Delivers `SpotifyHost` (librespot `Session`/`Spirc`/`Player` with `AirplaySink`, Zeroconf discovery with the stored

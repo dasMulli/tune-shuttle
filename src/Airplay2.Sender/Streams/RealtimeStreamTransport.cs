@@ -43,7 +43,7 @@ namespace Airplay2.Sender.Streams;
 /// per-receiver builders and their control-port registrations.
 /// </para>
 /// </remarks>
-public sealed partial class RealtimeStreamTransport : IStreamTransport
+public sealed partial class RealtimeStreamTransport : IStreamTransport, IStreamLatency
 {
     private readonly Lock _gate = new();
     private readonly ILogger _logger;

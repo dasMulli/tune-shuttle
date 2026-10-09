@@ -255,7 +255,7 @@ public sealed partial class GroupPlayer : IGroupPlayer
         _logger = logger;
 
         // The syncs carry the transport's L; the player's view of "frame at the speaker" must use the same value.
-        var latency = transport is RealtimeStreamTransport realtime ? realtime.LatencyFrames : options.LatencyFrames;
+        var latency = transport is IStreamLatency streamLatency ? streamLatency.LatencyFrames : options.LatencyFrames;
         if (latency != options.LatencyFrames)
         {
             LogLatencyMismatch(options.LatencyFrames, latency);

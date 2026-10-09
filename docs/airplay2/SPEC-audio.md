@@ -617,6 +617,16 @@ time has passed are not even decrypted (`:521, 660-665`), blocks older than the 
 (`:617-648`). A sender can therefore push the whole `audioBufferSize` worth of packets immediately and then top
 up as the socket accepts writes.
 
+**Note (2026-10-09, `buffered-stream`, live; logs `artifacts/live/2026-10-09-buffered-shairport.log`,
+`-P16-*.log`).** `BufferedStreamTransport` sends exactly this layout. shairport-sync 5.5.2 (Docker VM, PTP from our
+grandmaster) accepts SSRC `0x0000FACE` with ALAC 44.1/16 frames (`incoming audio encoding is "ALAC/44100/S16_LE/2"`,
+"AirPlay 2 Buffered playback") and answers the stream SETUP with `audioBufferSize 8388608`. The Test Speaker ABCD
+answers the type-103 stream SETUP with `{type, dataPort (TCP), controlPort, audioBufferSize: 8388608}` (no `streamID`) and
+accepts the data connection, but rejects playback in both ALAC forms we can produce (see the 4.3 note): **probe P16:
+neither `0x0000FACE` + ALAC 44.1/16 nor `0x15000000` + ALAC 48/24 (uncompressed escape frames, `audioFormat` 0x200000)
+plays on the SpeakerA**; AAC-LC (`0x16000000`) is untested for lack of an encoder. The buffered stream is therefore not
+usable on the SpeakerA with this sender; the realtime stream stays (SPEC.md D1).
+
 ### 4.3 SETRATEANCHORTIME and FLUSHBUFFERED
 
 `SETRATEANCHORTIME` (binary plist body, `[sps] rtsp.c:1410-1500`, `[ap2r] ap2-receiver.py:734-763`,
@@ -627,7 +637,7 @@ up as the socket accepts writes.
 | `networkTimeSecs` | uint | whole seconds of the anchor time on the PTP timeline |
 | `networkTimeFrac` | uint64 | fraction where the MSB is 1/2 ("Units are (1/2^64)", `session_properties.py:97`; `[sps] rtsp.c:1437-1442` converts via `(frac >> 32) * 1e9 >> 32`) |
 | `networkTimeTimelineID` | uint64 | the PTP clock identity of the timeline; must equal the receiver's current master clock or it waits (`[sps] rtsp.c:1420-1428, rtp.c:1396-1434`) |
-| `networkTimeFlags` | uint | no reference implementation reads it; Apple senders include it. Send 0. |
+| `networkTimeFlags` | uint | no reference implementation reads it; Apple senders include it (as 0). This sender omits it (`SessionRequests.SetRateAnchorTime`): no receiver is known to read it, and the Test Speaker ABCD answered identically with and without `networkTimeFlags: 0` (note below). Add it as 0 if a receiver is found that needs it. |
 | `rtpTime` | uint32 | the RTP timestamp that plays at the anchor time (`[sps] rtp.c:1456-1457, 1510-1526`: frame `x` plays at `anchor_time + (x - rtpTime)/rate`) |
 | `rate` | uint | 1 = play, 0 = pause (`[sps] rtsp.c:1460-1492`: 0 resets the anchor and sends "P" to nqptp; `[ap2r] ap2-receiver.py:745-752`) |
 
@@ -644,6 +654,17 @@ then a new anchor with the new `rtpTime`/time pair; pause: `rate 0`; resume: `ra
 | `flushFromSeq`, `flushFromTS`, `flushUntilSeq`, `flushUntilTS` | deferred flush: when block `flushFromSeq` arrives, discard blocks up to but excluding `flushUntilSeq` without stopping playback (`:407-460`); used by Apple senders to splice tracks |
 
 `flushUntilTS` is the timestamp of the first block to keep; `[sps]` stores it but decides by sequence number.
+
+**Note (2026-10-09, `buffered-stream`, live).** shairport-sync accepts `SETRATEANCHORTIME` before or after the first
+audio and plays from it (rate 1, rate 0 + `FLUSHBUFFERED` + rate 1 all answered 200 within milliseconds). The SpeakerA MOTIV
+HOME answers **rate 1 with `400 Bad Request`** (after 0.2-16 s) in every case tried with its data connection open: empty
+connection; anchor time now-1 s, now-0.2 s, now, now+0.5 s, now+2 s; fraction and timeline id as signed 8-byte or
+unsigned 16-byte bplist integers; with and without `networkTimeFlags: 0`; and after 3 s of ALAC audio had been written
+(both formats of the 4.2 note). Rate 0 is answered 200, and **without** a data connection every rate-1 body variant is
+answered 200, so the body format is not the cause. `BufferedStreamTransport` sends a rate-1 anchor only after audio
+has been written to the receiver (`BufferedStreamOptions.AnchorAfterAudio`, waiting at most `AnchorAudioWait`): the
+order Apple's receivers need for the anchor to refer to buffered audio, harmless on shairport-sync, but not enough for the
+SpeakerA with ALAC. Most likely the SpeakerA needs AAC-LC in buffered mode (A-Q7).
 
 ### 4.4 PTP: what the sender must provide as grandmaster
 
@@ -734,6 +755,15 @@ unchanged and accepted by both):
   `SETRATEANCHORTIME rate 1` with the new pair; the deferred form (`flushFrom*`) lets a track change be spliced
   without a gap when the next track's packets are already queued.
 - Stop: `TEARDOWN` with `streams`, then `TEARDOWN` with an empty plist (`[ot] airplay.c:2419-2421`).
+
+**Note (2026-10-09, `buffered-stream`, live against shairport-sync 5.5.2).** Pause/seek as above work through
+`BufferedStreamTransport.FlushReceiverAsync` (rate 0, then the immediate `FLUSHBUFFERED {flushUntilSeq: next,
+flushUntilTS: next}`, then rate 1 with the next packet's timestamp; the group player's FLUSH maps to it through
+`BufferedReceiverSession`). shairport-sync **drops the first block after an immediate flush**: its reader is blocked
+reading while play is disabled, completes the flush on the block with `flushUntilSeq`, and on the following "Play started"
+discards the block it holds (`[sps] ap2_buffered_audio_processor.c:220-224, 343-367`; log: "immediate flush completed at
+seq_no N" then "first block N+1"). Sending the audio only after the rate-1 answer does not change this (tried); the loss
+is one packet (8 ms) per flush. No retransmission exists on TCP, so the control port only has to be announced.
 
 ## 5. ALAC
 
