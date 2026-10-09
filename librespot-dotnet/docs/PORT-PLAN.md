@@ -444,6 +444,8 @@ Design: `Spirc.CreateAsync` = upstream `Spirc::new`: connect the session if not 
 
 Contract (exists): `Spirc` methods, `LoadRequest`/`LoadRequestOptions`/`PlayingTrack`, `SpircException`, `ConnectConfig`.
 
+Signature addition: `Spirc.CreateAsync(config, session, credentials, player, mixer, cancellationToken = default, loopCancellation = default)`; `loopCancellation` (passed to `SpircTask.RunAsync(cancellationToken)`) ends the event loop like a dropped upstream future, also before the connect connection is established when the `Shutdown` command is not yet polled; the post-loop cleanup (disconnect, connect state deletion, dealer close) still runs. `cancellationToken` only covers the setup.
+
 Verify: no upstream unit tests. Test the pure pieces: volume step math, `LoadRequest` → initial `PlayOrigin`/context conversion, command routing with a fake dealer `RequestReply` channel and a fake `Player` (the facade sends commands on a channel – read them back). Smoke: `librespot --name test` shows up in the Spotify app, transfer playback to it, next/prev/volume work.
 
 ### 5.15 `cli` (wave 5) — `src/Librespot.Cli/`
