@@ -477,6 +477,20 @@ container), the `docs/airplay2/TEST-RECEIVER.md` update with what shairport-sync
 (`build.ps1`: build, test excluding live categories, publish win-x64 and the container), and a review of every
 remaining `TODO(impl:` marker (there must be none).
 
+Delivered (2026-10-09, without the user present): `build.ps1` at the root (Release build, `dotnet test` with
+`Category!=SpeakerALive&Category!=ShairportLive` and `AIRPLAY_LIVE` cleared, win-x64 publish of the bridge to
+`artifacts/bridge` and of the CLI to `artifacts/airplay2`, `docker build -f docker/Dockerfile`); `README.md`;
+`SPEC.md` section 4 with the final runs, the probe status table (4.1) and the resulting defaults (4.2); the
+`TEST-RECEIVER.md` record of what shairport-sync exercised; `docs/airplay2/USER-VERIFICATION.md`, the checklist for
+everything that needs the user (Spotify login, listening tests, a second real receiver, PIN pairing, P20). Tests:
+`tests/Airplay2.Sender.Tests/Integration/FinalIntegrationTests.cs` (no stub marker, no `NotImplementedException` in
+`src/`, every live test gated by `AIRPLAY_LIVE`, the build script's filter, README links, and the quirk/wire defaults
+of SPEC.md 4.2) and `tests/Bridge.Tests/Integration/ReleaseConsistencyTests.cs` (`appsettings.json` equals the
+`BridgeOptions` defaults; publish folder and web port agree between `build.ps1`, the install script and the
+Dockerfile). No contract changed. Live: Sender M1 once (passed, TEARDOWN unanswered within 10 s), all ShairportLive
+tests, the bridge's container image against shairport-sync. The end-to-end runs with the user (Sender M1 by ear,
+M2/M3, Bridge M1 with Spotify, Web M1) are the items of USER-VERIFICATION.md.
+
 ## 7. Bridge API surface
 
 REST (JSON, `Bridge.Contracts`), all under `/api`:

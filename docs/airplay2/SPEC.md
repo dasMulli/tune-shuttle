@@ -228,6 +228,96 @@ are the working assumptions and the code keeps both branches where the parts nam
   `artifacts/live/2026-10-09-P16-buffered-alac44-face.log`, `-P16-buffered-alac48-24.log`, `-P16-anchor-body.log`,
   `-buffered-shairport.log`.
 
+- **Bridge M1, control part** Result (2026-10-09, `bridge-service`, SpeakerA, no audio; `BridgeLiveTests`): the bridge
+  found the SpeakerA by mDNS. Through the REST API it set level 15, connected it as the single output (transient
+  pairing, NTP session, event channel, RECORD without `Audio-Latency`, stream SETUP without `streamID`, volume
+  `-25.5`), changed the level (`GET_PARAMETER` read back `-26.4`), and disconnected it (`TEARDOWN {}` answered 200).
+  The pacer never started. The Spotify handoff and audio through the bridge need the user (USER-VERIFICATION.md
+  section 1). Log: `-bridge-connect.log`.
+- **Final integration** Result (2026-10-09, `final-integration`):
+  - Sender M1 confirmation (SpeakerA, the one allowed run: `CliLiveTests.SpeakerA_sender_M1_play_tone_3s`, 3 s tone at
+    -24 dBFS, level 15): passed. 659 packets (284 silence while draining L), 3 retransmit requests answered wrapped,
+    DMAP `500`, exit 0. The SpeakerA was slow that day: connect, `GET /info` and transient pairing took 14 s, session
+    SETUP to event channel 7 s, stream SETUP 3 s. **The `TEARDOWN {}` was sent but not answered within `GroupPlayerOptions.TeardownTimeout`
+    (10 s)**, so the event channel and connection were closed, as in the wave 4 gate re-run. An unauthenticated
+    `GET /info` straight afterwards answered 200, so the SpeakerA had released the session. The log is appended to
+    `-sender-M1-play.log` (15:33-15:34).
+  - shairport-sync 5.5.2, all ShairportLive tests (8/8, each class in its own run) plus the bridge's container image
+    against it through the REST API (connect under PTP with our grandmaster, volume, disconnect): all passed.
+    Details: TEST-RECEIVER.md, "What shairport-sync actually exercised". Logs: `-final-shairport-*.log`,
+    `-final-bridge-container-shairport.log`.
+  - Offline: `build.ps1` (Release build, tests without the live categories, win-x64 publish of the bridge and the CLI,
+    container image) passes. No `TODO(impl:` marker remains in `src/`, `tests/`, `docker/`, `install/` or `build.ps1`
+    (`RepositoryHygieneTests` keeps it that way).
+
+### 4.1 Probe status after wave 8
+
+"Settled" means that the default below follows from the probe. "Open" items need the user; each is a step in
+[`USER-VERIFICATION.md`](USER-VERIFICATION.md) (section in brackets).
+
+| P | Status | Outcome in one line | Left for the user |
+|---|---|---|---|
+| P1 | Settled | SpeakerA: NTP accepted, timing requests arrive, audio streams under NTP | audibility (2.1) |
+| P2 | Settled | Transient pairing works with flags bit 10 and `acl=0` | none |
+| P3 | Settled | Both orders accepted; a volume sent before the stream SETUP is not applied (D5 confirmed) | none |
+| P4 | Open | No event-channel message and no change in 10 s without button presses | button presses during a 60 s probe (2.6) |
+| P5 | Settled | No `streamID`; `TEARDOWN {}` answered 200 without `Connection: close`; next session fine | none |
+| P6 | Settled for the SpeakerA | Methods 0 and 1 both accepted (5 s apart; `BackOff` if immediate) | TV with PIN (5.3), your call |
+| P7 | Partly | No latency published (`Audio-Latency` absent, no `audioLatencies`) | microphone measurement of L (3) |
+| P8 | Partly | `/feedback` always answered `{streams:[{type:96, sr:44100}]}` | idle-drop timing, 10 min (1.9) |
+| P9 | Partly | DMAP text `500` with and without audio; artwork and progress 200 | companion app display (2.7) |
+| P10 | Settled | No `initialVolume` in the paired `/info`; `GET_PARAMETER volume` gives the level | none |
+| P11 | Settled | `X-Apple-HKP` required (403 without) | none |
+| P12 | Partly | A single SpeakerA keeps its own `gid`, `gcgl=0` | a two-receiver group (4.5) |
+| P13 | Settled | The SpeakerA sends no event-channel requests | none |
+| P14 | Settled | Every withheld packet re-requested once with an 8-byte 0xD5; the wrapped 0xD6 answer is taken | none |
+| P15 | Partly | Random `shk` and `SS[0..31]` both accepted on the wire | audibility with a random key (2.3) |
+| P16 | Settled (negative) | Buffered ALAC 44.1/16 (`0xFACE`) and 48/24 (`0x15000000`): rate-1 anchor answered 400; AAC untested | none (needs an AAC encoder) |
+| P17 | Settled | SpeakerA: Signaling + Delay_Req ~8/s, answered; nqptp: two Announces, then silent | none |
+| P18 | Partly | A 2 s sync gap had no effect on the wire | 3/6/10 s gaps need the probes' 3 s cap lifted (2.5) |
+| P19 | Partly | FLUSH + `0x90` + marker resumes without RECORD; FLUSH answers took from 2 s to more than 30 s | stale audio by ear (1.6, 2.4) |
+| P20 | Open | Not run (Apple receiver only with its owner's permission) | (4.6) |
+| P21 | Settled | A 2048-byte frame makes the SpeakerA close the connection; its own frames are at most 1024 bytes | none |
+
+### 4.2 Resulting defaults
+
+What the code does by default because of the probes. `QuirkDefaultsTests` (tests/Airplay2.Sender.Tests/Integration)
+and `ReleaseConsistencyTests` (tests/Bridge.Tests/Integration) pin these values; change the table, the code and the
+tests together.
+
+| Default | Value | From | Where in code |
+|---|---|---|---|
+| Timing protocol, Test Speaker ABCD | NTP | P1 | `KnownReceiverQuirks` (model `Test Speaker ABCD`) |
+| Timing protocol, shairport-sync | PTP | NTP session refused with 200 and an empty body (SPEC-control.md 4.2 note) | `KnownReceiverQuirks` (model `ShairportSync`) |
+| Timing protocol, any other receiver | NTP (D1); a group with any PTP member runs entirely under PTP | D1, D3 | `AirplaySenderOptions.DefaultTimingProtocol`, `AirplaySender.ChooseTransport` |
+| Stream type | Realtime (type 96) | D1; P16 (buffered does not play on the SpeakerA) | `AirplaySenderOptions.PreferredStream`, `Bridge:PreferredStream` |
+| Pairing | Transient where advertised, otherwise PIN; `X-Apple-HKP` on every pairing POST | P2, P11 | `HapPairingClient`, `ReceiverSession.PairAsync` |
+| PIN M1 method byte | 0 (`PairSetup`) | P6 (the SpeakerA takes both) | `ReceiverSessionOptions.PinPairingMethod` |
+| RTSP request timeout | 30 s in the facade and the probes (D6's 10 s stays the bare `RtspConnectionOptions` default) | SpeakerA answers up to ~10 s ("Timeouts" above) | `AirplaySenderOptions.Connection` |
+| Encrypted frame size we send | 1024 bytes of plaintext, a `const` | P21 | `HapFrameCipher.MaxSendFramePlaintext` |
+| Volume ordering | After the stream SETUP, on every change, coalesced | P3 | D5 order in `GroupPlayer`, `ReceiverQuirks.VolumeAfterStreamSetup` |
+| Device-side volume read-back | `GET_PARAMETER volume` poll every 3 s while playing, plus any event-channel level | P4 (open), P10, P13 | `GroupPlayerOptions.VolumePollInterval`, `Bridge:PollReceiverVolumeSeconds` |
+| Retransmit answer | Wrapped 0xD6 on our control port | P14 | `ReceiverQuirks.RetransmitOnDataPort = false` |
+| Stream key `shk` | First 32 bytes of the pairing secret (D4; random also accepted) | P15 | `PairingSession.DefaultStreamKey` |
+| TEARDOWN | `{}` (per-stream form only with a `streamID`); at most 10 s, then the connection is closed | P5; wave 4 gate and the final M1 run (unanswered TEARDOWN) | `ReceiverSession.TeardownAsync`, `GroupPlayerOptions.TeardownTimeout` |
+| Metadata | Best effort: a DMAP `500` is logged and ignored; artwork and progress are sent | P9 | `ReceiverSession.SetMetadataAsync`; CLI `play --no-metadata` |
+| PTP peers that go silent | Kept (reported after 15 s) | P17 (nqptp) | `PtpMasterOptions.DropSilentPeers = false` |
+| Sender latency L | 77 175 frames | D1; P7 open | `RealtimeStreamConstants.DefaultLatencyFrames`, `Bridge:LatencyFrames` |
+| Per-receiver offset | 0 frames | P7/P20 open | `ReceiverQuirks.OffsetFrames`, `receivers.offset_frames` |
+| `/auth-setup` | Off | D17 | `ReceiverQuirks.SendAuthSetup` |
+
+Two candidate quirks were **not** switched on (2026-10-09, final integration), each with its reason:
+
+- *No DMAP text for the SpeakerA.* It answers DMAP with `500`, sometimes only after ~10 s (P9 log: 10.3 s). The control
+  connection carries one request at a time, so a volume change or a FLUSH queued behind it waits that long. A
+  per-model default is the wrong tool: the in-process fake receiver serves the SpeakerA's recorded `/info`, so it
+  would stop every fake-receiver test from seeing DMAP. A follow-up for `session-streams` would be a per-session rule
+  ("after one non-2xx answer to DMAP, stop sending it on this connection").
+- *No buffered stream for the SpeakerA.* It advertises bit 40, so `ChooseTransport` would pick the buffered stream for
+  it if `PreferredStream = Buffered`, and playback would then fail at `SETRATEANCHORTIME` (P16). Today the realtime
+  default keeps it off. A `ReceiverQuirks` switch for this would be an additive contract change and is left for when
+  AAC-LC is added.
+
 ## 5. Glossary of the names used in code
 
 | Spec term | Code |

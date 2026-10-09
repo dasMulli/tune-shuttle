@@ -42,7 +42,10 @@ docker logs -f sps-test
 docker compose -f docker/shairport-sync/compose.yaml down
 
 # run the sender's live tests against it from inside the VM (mounts the repo into a host-networked SDK container)
-./docker/shairport-sync/run-live-tests-in-vm.ps1            # Category=ShairportLive
+# the script's default filter (Category=ShairportLive) also selects PtpLiveTests and BufferedLiveTests, which fail on the
+# host network (nqptp owns UDP 319/320, see the corrections below); exclude them here and run them with
+# run-ptp-live-tests-in-vm.ps1
+./docker/shairport-sync/run-live-tests-in-vm.ps1 -Filter "Category=ShairportLive&FullyQualifiedName!~PtpLiveTests&FullyQualifiedName!~BufferedLiveTests"
 ./docker/shairport-sync/run-live-tests-in-vm.ps1 -Filter "FullyQualifiedName~Pairing"
 ```
 
@@ -67,3 +70,49 @@ and are skipped in the normal `dotnet test` run. A password-protected variant fo
 - `tests/Airplay2.FakeReceiver`: the in-process receiver every test project uses (WORK-PLAN package `fake-receiver`);
   it implements both NTP and the 501 refusal, both TEARDOWN forms, optional `streamID`, `updateInfo` timing, packet
   loss and retransmit requests, so each open question's branches can be exercised deterministically.
+
+## What shairport-sync actually exercised (2026-10-09, final integration)
+
+By the end of wave 8, every ShairportLive test had run against shairport-sync 5.5.2 in the Docker VM, and the final
+integration ran all of them again. The table gives the complete list. Logs:
+`artifacts/live/2026-10-09-final-shairport-*.log`, `-final-bridge-container-shairport.log` (git-ignored, local only).
+
+| What | Test / run | How it was run | Result |
+|---|---|---|---|
+| `GET /info` bare and with the stage-1 qualifier | `RtspLiveTests.Shairport_GET_info_bare_and_with_qualifier` | `run-live-tests-in-vm.ps1` (host network) | 200; a 1235-byte bplist with `initialVolume`, `supportedFormats` and `pk` |
+| Transient pair-setup M1-M4, encrypted `GET /info` | `PairingLiveTests.Shairport_transient_pairing_then_encrypted_get_info` | host network | Pairing completes; the encrypted `GET /info` answers 200 |
+| PIN pair-setup M1-M6 with `--password`, pair-verify on the same and on a new connection | `PairingLiveTests.Shairport_password_pin_pairing_then_verify` | Second, password-protected container on the default bridge network (see below) | Transient is refused (TLV `Authentication`); PIN M1-M6 succeeds and the M6 signature verifies; pair-verify succeeds twice. The connection stays plaintext after verify, which is a shairport-sync gap (SPEC-control.md 3.7 note), not ours. |
+| PTP session start-up: session SETUP with `timingPeerInfo`, event channel (`updateInfo` on connect), RECORD, SETPEERS, stream SETUP without `streamID`, `GET_PARAMETER` with the leading blank line, `TEARDOWN {}` with `Connection: close` | `SessionLiveTests.Shairport_ptp_session_startup` | host network | Passes |
+| NTP session refusal | (session-streams, wave 3) | host network | `200` with an empty body, not `501` (SPEC-control.md 4.2 note). The sender treats it as a refusal, and `KnownReceiverQuirks` puts shairport-sync on PTP. |
+| Our PTP grandmaster as nqptp's master; 0xD7-synced realtime stream (silence into the dummy backend) | `PtpLiveTests.Shairport_follows_our_clock_and_plays_ptp_synced_silence`, `.Shairport_plays_silence_through_the_realtime_transport_under_ptp` | `run-ptp-live-tests-in-vm.ps1` (bridge network) | Pass. nqptp sends two Announces and then nothing (P17); `PtpMaster` keeps the silent peer. |
+| Buffered stream (type 103): run-ahead push, flush and re-anchor; through the group player with pause/resume | `BufferedLiveTests.Shairport_plays_a_run_ahead_buffered_stream_with_flush_and_reanchor`, `.Shairport_plays_the_buffered_stream_through_the_group_player` | `run-ptp-live-tests-in-vm.ps1 -Filter "FullyQualifiedName~BufferedLiveTests&Category=ShairportLive"` | Pass. shairport-sync drops one block after each immediate flush (SPEC-audio.md 4.5 note). |
+| **The bridge from its container image**: mDNS discovery of shairport-sync, then through the REST API: connect (transient pairing, PTP session with our grandmaster, event channel, RECORD, stream SETUP), receiver volume 20 → 35, disconnect (`TEARDOWN` 200 with `Connection: close`) | Manual, `docker run airplay2-bridge:dev` on the default bridge network with `BRIDGE_Bridge__EnableSpotify=false`, then `curl` against `/api/receivers/{id}/connect`, `/volume`, `/disconnect` | Default bridge network | All steps 200; state *Connected*, then *Available*. Both the image's own mDNS browser and shairport-sync's Avahi are on the bridge network, so discovery works there. |
+
+**Not exercised by shairport-sync:** the realtime stream under NTP (shairport-sync refuses it; the SpeakerA and the
+fake receiver cover it); audible output and latency (dummy backend); and retransmit-request handling, which these runs
+did not check (the fake receiver and the SpeakerA, probe P14, cover it).
+
+**Running the tests: corrections to the sections above.**
+
+- `PtpLiveTests` and `BufferedLiveTests` must run in **separate** `dotnet test` invocations. xunit runs test classes
+  in parallel, and both start a `PtpMaster` on UDP 319/320 in the same process; a combined filter fails with
+  `PtpMasterException: ... UDP 319 ... in use`. The host-network script must exclude both classes, because there
+  nqptp owns 319/320:
+  `run-live-tests-in-vm.ps1 -Filter "Category=ShairportLive&FullyQualifiedName!~PtpLiveTests&FullyQualifiedName!~BufferedLiveTests"`.
+- The password variant runs as a second container on the default bridge network. That container has its own
+  network namespace, so its nqptp and port 7000 do not clash with `sps-test`. The test container reaches it by its
+  bridge address. Docker 29 removed the top-level `.NetworkSettings.IPAddress`; read the address per network:
+
+  ```bash
+  docker run -d --name sps-pin --cap-add SYS_NICE mikebrady/shairport-sync:latest -a SPS-Pin -o dummy --password 1234
+  IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' sps-pin)
+  docker run --rm -v "<repo>:/repo" -v airplay2-nuget:/root/.nuget/packages -e AIRPLAY_LIVE=1 \
+    -e SPS_PIN_HOST=$IP -e SPS_PASSWORD=1234 -w /repo mcr.microsoft.com/dotnet/sdk:10.0 \
+    dotnet test tests/Airplay2.Sender.Tests/Airplay2.Sender.Tests.csproj \
+    --filter "FullyQualifiedName~Shairport_password_pin_pairing_then_verify" \
+    -p:UseArtifactsOutput=true -p:ArtifactsPath=/tmp/artifacts
+  docker stop sps-pin && docker container remove sps-pin
+  ```
+- Row "mDNS discovery from the Windows host: no" still holds for the Windows host. Containers on Docker's bridge
+  network, however, do see shairport-sync's mDNS announcement (at the gateway address `172.17.0.1`), which is how
+  the bridge image found it.
