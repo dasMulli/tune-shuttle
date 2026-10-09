@@ -1,0 +1,22 @@
+# Build context for docker/Dockerfile: sources only. Windows bin/obj trees, the reference checkouts, docs, tests and
+# artifacts are not needed inside the image build (restore regenerates obj on Linux).
+**/bin/
+**/obj/
+**/.vs/
+**/.csdevkit/
+**/TestResults/
+.git/
+.gitignore
+.local/
+artifacts/
+reference/
+docs/
+tests/
+docker/
+install/
+librespot-dotnet/target/
+librespot-dotnet/**/bin/
+librespot-dotnet/**/obj/
+librespot-dotnet/tests/
+**/*.user
+**/*.suo

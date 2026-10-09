@@ -1,0 +1,22 @@
+# systemd unit for the bridge (docs/PLAN.md "Deployment"). Install:
+#   sudo cp airplay-bridge.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now airplay-bridge
+[Unit]
+Description=Spotify Connect to AirPlay 2 bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=airplay-bridge
+WorkingDirectory=/opt/airplay-bridge
+ExecStart=/opt/airplay-bridge/bridge
+Environment=BRIDGE_DataDirectory=/var/lib/airplay-bridge
+Environment=ASPNETCORE_URLS=http://0.0.0.0:8080
+Restart=on-failure
+RestartSec=5
+# The pacer wants a real-time-ish scheduling class; allow it to raise its priority.
+LimitRTPRIO=20
+AmbientCapabilities=CAP_SYS_NICE
+
+[Install]
+WantedBy=multi-user.target

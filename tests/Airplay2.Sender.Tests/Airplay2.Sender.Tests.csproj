@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Airplay2.Sender.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="NSubstitute" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test vectors live in docs/airplay2/test-vectors so the documentation and the tests share one copy. -->
+    <None Include="..\..\docs\airplay2\test-vectors\**" LinkBase="TestVectors" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Airplay2.Sender\Airplay2.Sender.csproj" />
+    <ProjectReference Include="..\Airplay2.FakeReceiver\Airplay2.FakeReceiver.csproj" />
+  </ItemGroup>
+
+</Project>

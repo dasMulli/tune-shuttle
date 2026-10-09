@@ -1,0 +1,19 @@
+# Local AirPlay 2 test receiver (docs/airplay2/TEST-RECEIVER.md). Start with:
+#   docker compose -f docker/shairport-sync/compose.yaml up -d
+# NOT reachable from the Windows host (Docker Desktop's VM network is NATed and does not carry mDNS or inbound UDP):
+# only from inside the Docker VM, i.e. from another host-networked container such as the SDK container that
+# run-live-tests-in-vm.ps1 starts (127.0.0.1:7000 there). See the document for what this can and cannot test.
+services:
+  shairport-sync:
+    image: mikebrady/shairport-sync:latest   # 5.5.2 AirPlay 2 with nqptp, dummy/stdout/pipe backends (verified 2026-10-09)
+    container_name: sps-test
+    network_mode: host                        # required for AirPlay 2 (nqptp on UDP 319/320, event port, UDP data/control)
+    cap_add:
+      - SYS_NICE
+    command: >-
+      -a SPS-Test -o dummy -vv --statistics
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "1m"
+        max-file: "5"

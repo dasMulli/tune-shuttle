@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <RootNamespace>Bridge.Web</RootNamespace>
+    <Description>Blazor WebAssembly SPA for the bridge: discovery, connect, pairing (transient and PIN), groups, volume, status, diagnostics. Served by Bridge.Service; built by the .NET SDK alone (no node toolchain).</Description>
+    <!-- Blazor WASM apps are not documented libraries; keep the doc-file requirement off here. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Keep the defaults (no AOT, no native relinking, no SIMD override): any of those needs the wasm-tools workload. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bridge.Contracts\Bridge.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

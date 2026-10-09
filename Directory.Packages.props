@@ -1,0 +1,35 @@
+<Project>
+  <!-- Central package management for src/ and tests/. Versions verified against api.nuget.org on 2026-10-09. -->
+  <ItemGroup>
+    <!-- Crypto: .NET 10 has ChaCha20-Poly1305, HKDF, SHA-512 and BigInteger natively; X25519 and Ed25519 are not in the BCL
+         (verified: System.Security.Cryptography on 10.0.12 exports no *25519 type), so BouncyCastle supplies those two. -->
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
+
+    <!-- Hosting and logging -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
+
+    <!-- Persistence: Microsoft.Data.Sqlite + Dapper (no EF Core: five tables, hand-written SQL is smaller and visible). -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Dapper" Version="2.1.89" />
+
+    <!-- Web app: Blazor WebAssembly hosted by Bridge.Service (no node toolchain needed). -->
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+
+    <!-- CLI -->
+    <PackageVersion Include="System.CommandLine" Version="2.0.12" />
+
+    <!-- Tests (same versions as librespot-dotnet/Directory.Packages.props) -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
+  </ItemGroup>
+</Project>

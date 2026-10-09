@@ -1,0 +1,32 @@
+<Project>
+  <!--
+    Root build conventions for the AirPlay 2 bridge (src/, tests/). librespot-dotnet/ has its own Directory.Build.props;
+    MSBuild stops at the nearest file, so this one never applies to the librespot projects and theirs never applies here.
+    Keep the two in step by hand: same TFM, LangVersion, Nullable, warnings-as-errors, central package versions.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: missing XML doc on a public member. Documented members are the convention; do not fail the build on it. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <Authors>airplay2-streamer contributors</Authors>
+    <Product>airplay2-streamer</Product>
+    <Version>0.1.0</Version>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);xUnit1004</NoWarn>
+  </PropertyGroup>
+</Project>

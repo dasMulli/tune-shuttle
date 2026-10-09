@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Airplay2.FakeReceiver</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <Description>In-process fake AirPlay 2 receiver for tests: the receiver side of transient and HomeKit pairing, the encrypted RTSP control channel, event channel, SETUP/RECORD/SET_PARAMETER/FLUSH/TEARDOWN, UDP control/timing/data ports with an ALAC decoder, and a recorded /info response.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Airplay2.Sender\Airplay2.Sender.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>

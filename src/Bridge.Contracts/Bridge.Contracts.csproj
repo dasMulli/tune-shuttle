@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Bridge.Contracts</RootNamespace>
+    <Description>DTOs shared by the bridge service (REST + WebSocket API) and the Blazor web app. No dependencies.</Description>
+  </PropertyGroup>
+
+</Project>

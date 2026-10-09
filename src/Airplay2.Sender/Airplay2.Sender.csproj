@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Airplay2.Sender</RootNamespace>
+    <Description>AirPlay 2 sender library: discovery, HomeKit pairing, RTSP control channel, ALAC/RTP realtime stream, timing and group playback. No ASP.NET dependency and no Spotify session or playback code; it references Librespot.Discovery only for its mDNS packet codec (Librespot.Core comes along transitively as a library, see WORK-PLAN.md section 2).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\librespot-dotnet\src\Librespot.Discovery\Librespot.Discovery.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Airplay2.Sender.Tests" />
+    <InternalsVisibleTo Include="Airplay2.FakeReceiver" />
+  </ItemGroup>
+
+</Project>

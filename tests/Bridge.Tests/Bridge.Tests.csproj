@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Bridge.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Bridge.Service\Bridge.Service.csproj" />
+    <ProjectReference Include="..\..\src\Bridge.Contracts\Bridge.Contracts.csproj" />
+    <ProjectReference Include="..\Airplay2.FakeReceiver\Airplay2.FakeReceiver.csproj" />
+  </ItemGroup>
+
+</Project>

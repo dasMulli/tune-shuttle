@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>Bridge.Service</RootNamespace>
+    <AssemblyName>bridge</AssemblyName>
+    <UserSecretsId>airplay2-bridge</UserSecretsId>
+    <Description>Spotify Connect to AirPlay 2 bridge: hosts librespot with the AirPlay sink, the SQLite store, the REST/WebSocket API and the web app; runs as a Windows Service, under systemd or in a container.</Description>
+    <!-- The container image is produced by docker/Dockerfile (multi-stage); no SDK container tooling needed. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Airplay2.Sender\Airplay2.Sender.csproj" />
+    <ProjectReference Include="..\Bridge.Contracts\Bridge.Contracts.csproj" />
+    <ProjectReference Include="..\Bridge.Web\Bridge.Web.csproj" />
+    <ProjectReference Include="..\..\librespot-dotnet\src\Librespot.Core\Librespot.Core.csproj" />
+    <ProjectReference Include="..\..\librespot-dotnet\src\Librespot.Playback\Librespot.Playback.csproj" />
+    <ProjectReference Include="..\..\librespot-dotnet\src\Librespot.Connect\Librespot.Connect.csproj" />
+    <ProjectReference Include="..\..\librespot-dotnet\src\Librespot.Discovery\Librespot.Discovery.csproj" />
+    <ProjectReference Include="..\..\librespot-dotnet\src\Librespot.Metadata\Librespot.Metadata.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Dapper" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Store\schema.sql" LogicalName="Bridge.Service.Store.schema.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Bridge.Tests" />
+  </ItemGroup>
+
+</Project>
