@@ -109,6 +109,42 @@ are the working assumptions and the code keeps both branches where the parts nam
   an encrypted `GET /info` answers 200; with `--password` transient is refused in M4 (TLV Error 2), PIN pair-setup M1-M6
   and pair-verify succeed, but shairport-sync does not switch to encryption after pair-verify (SPEC-control 3.7 note).
   P2, P6 and P11 against the SpeakerA have not run yet (live pairing on the SpeakerA is held back to wave 3).
+- **P1 (control part, decisive for D1)** Result (2026-10-09, `session-streams`, SpeakerA, no audio): after transient
+  pairing the NTP session SETUP is answered `200` with `{eventPort: 7006, timingPort: 7005}`; event channel, RECORD and
+  stream SETUP succeed, and **3 timing requests (0xD2) were answered within 2 s of the stream SETUP, the first while it
+  was being answered**. A PTP session SETUP with a minimal `timingPeerInfo` is accepted as well (`200`, `timingPeerInfo`
+  with the SpeakerA's IPv4, two ULA and one link-local address). **Decision: D1 stands, the SpeakerA's realtime stream runs
+  under NTP** (`ReceiverQuirks.TimingProtocol = Ntp` for model "Test Speaker ABCD", `KnownReceiverQuirks`). shairport-sync
+  5.5.2 refuses NTP with `200` and an empty body (not 501, SPEC-control 4.2 note), so it stays on PTP. Log:
+  `artifacts/live/2026-10-09-P1-timing-protocol.log`, `-session-startup.log`.
+- P3 Result (2026-10-09, SpeakerA, no audio): both orders are accepted (session SETUP, event channel, RECORD before or
+  after the stream SETUP, all `200`, no `Audio-Latency` header). A volume sent **before** the stream SETUP is answered
+  `200` but not applied (`GET_PARAMETER` keeps the old value); after the stream SETUP it is applied: D5 (volume last)
+  confirmed. Log: `-P3-startup-order.log`.
+- P4 Result (2026-10-09, SpeakerA): not conclusive yet: a 10 s session without button presses (user not present) showed no
+  event-channel message and no `GET_PARAMETER` change. To repeat with the user pressing the buttons
+  (`P4_SECONDS=60`). Log: `-P4-device-volume.log`.
+- P5 Result (2026-10-09, SpeakerA): **no `streamID`** in the stream SETUP answer (`{type: 96, dataPort, controlPort}`), so
+  only `TEARDOWN {}` is sent; it is answered `200` **without `Connection: close`**, the control connection stays open,
+  the SpeakerA closes the event channel; the next session on a new connection starts with `200`. Log: `-P5-teardown.log`.
+- P8 Result (2026-10-09, SpeakerA): `POST /feedback` without body, with `{}` and with `{streams: []}` is always answered
+  `200 {streams: [{type: 96, sr: 44100}]}`; the idle-drop timing (10-minute runs) is still open. Log: `-P8-feedback.log`.
+- P9 Result (2026-10-09, SpeakerA, no audio): DMAP is answered **`500`** in all three forms (`mlit{minm,asar,asal,astm}`,
+  pyatv's minimal item, and with `RTP-Info: seq=;rtptime=`), artwork (JPEG) and progress `200`; the app check and DMAP
+  with audio playing are for wave 4. The session sends metadata best-effort. Log: `-P9-metadata.log`.
+- P10 Result (2026-10-09, SpeakerA): the paired `GET /info` (bare and stage 1) has **no `initialVolume`**; `GET_PARAMETER
+  volume` answers `volume: -24.000000\r\n` (no leading blank line) after the session SETUP already; the first session
+  ever read `-30`, later ones the last level set. Start-up seeding must use `GET_PARAMETER`. Log: `-P10-initial-volume.log`.
+- P13 Result (2026-10-09, SpeakerA): the SpeakerA sends **no event-channel request at all** (no `updateInfo` on connect or
+  after RECORD; 15 s observed with the answer delay at 5 s, the channel stayed open). The late-answer case cannot be
+  provoked on the SpeakerA. Log: `-P13-event-timing.log`.
+- P15 (control part) Result (2026-10-09, SpeakerA): stream SETUP is accepted with `shk = SS[0..31]` and with 32 random
+  bytes; the audio part (playback with each key) is wave 4. Log: `-P15-stream-key.log`.
+- P21 Result (2026-10-09, SpeakerA): a `GET /info` sent as **one 2048-byte HAP frame** makes the SpeakerA **close the
+  connection** without an answer; in normal sessions its own frames never exceed 1024 bytes. The 1024-byte send cap is
+  required for the SpeakerA; the receive rule stays. Log: `-P21-large-frame.log`.
+- Timeouts (no P id, `session-streams`, SpeakerA on Wi-Fi): pair-setup answers took up to 7.9 s, RECORD once 9.9 s, and one
+  M2 did not come within 10 s: D6's 10 s request timeout is too tight; the probes use 30 s (SPEC-control 2.1 note).
 
 ## 5. Glossary of the names used in code
 

@@ -104,6 +104,11 @@ classifies the session by this string and refuses NTP ("Shairport Sync can not h
 `[ot]` warns that with `timingProtocol: "None"` an Apple TV 4 will not respond to the stream `SETUP`
 (`airplay.c:2705`).
 
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** the session SETUP with `timingProtocol:
+"NTP"` and our `timingPort` is accepted (answer `{eventPort, timingPort: 7001}`), and the SpeakerA sends 0xD2 timing
+requests to our timing port from its port 7001 as soon as the stream SETUP is processed (3 within 2 s, then about every
+3 s), before any audio. The stream SETUP answer has `dataPort`/`controlPort` and no `streamID`. See SPEC.md P1.
+
 ### 1.2 RTP audio packet layout
 
 One packet per 352 frames. All multi-byte fields BE.
@@ -856,6 +861,11 @@ made on a receiver itself ... are read back via the event channel") therefore re
 observed on real devices (Section 9, Q5). Design for both outcomes: parse every event-channel plist, treat a
 `type` of `updateInfo` as a possible `initialVolume` update, log unknown types verbatim, and as a fallback poll
 `GET_PARAMETER volume` every few seconds while a session is active.
+
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** `GET_PARAMETER volume` answers
+`volume: <dB, six decimals>\r\n` without a leading blank line; the event channel carried no message at all during the
+sessions (no `updateInfo`), so the poll fallback of D10 is the only receiver-side channel seen so far (P4 with button
+presses is still open).
 
 ### 6.3 Recommendation for the group volume model
 

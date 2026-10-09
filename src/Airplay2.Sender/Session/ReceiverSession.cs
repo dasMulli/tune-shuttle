@@ -1,202 +1,89 @@
+using System.Globalization;
 using System.Net;
-using System.Threading.Channels;
+using System.Text;
+using Airplay2.Sender.Crypto;
 using Airplay2.Sender.Discovery;
 using Airplay2.Sender.Pairing;
+using Airplay2.Sender.Playback;
 using Airplay2.Sender.Plist;
 using Airplay2.Sender.Rtsp;
+using Airplay2.Sender.Tlv8;
 using Microsoft.Extensions.Logging;
 
 namespace Airplay2.Sender.Session;
 
-/// <summary>Timing protocol named in the session SETUP (SPEC-control.md 4.2).</summary>
-public enum TimingProtocol
+/// <summary>Options of a <see cref="ReceiverSession"/>.</summary>
+public sealed record ReceiverSessionOptions
 {
-    /// <summary>RAOP-style timing: the receiver sends 0xD2 requests to our timing port; we send 0xD4 syncs.</summary>
-    Ntp,
+    /// <summary>Event-channel connect retries, answer delay (probe P13) and message capacity.</summary>
+    public EventChannelOptions EventChannel { get; init; } = new();
 
-    /// <summary>IEEE 1588 with the sender as grandmaster; 0xD7 syncs or SETRATEANCHORTIME.</summary>
-    Ptp,
+    /// <summary>The M1 method byte of the PIN flow (SPEC.md D2: <c>PairSetup</c>; probe P6 / C-7.6 may change it for the TV).</summary>
+    public TlvMethod PinPairingMethod { get; init; } = TlvMethod.PairSetup;
 }
 
-/// <summary>Stream types (SPEC-control.md 4.4).</summary>
-public enum StreamType
+/// <summary>The answers of a TEARDOWN sequence (probe P5 inspects them).</summary>
+/// <param name="StreamResponses">One answer per per-stream TEARDOWN, in order.</param>
+/// <param name="SessionResponse">The answer to the session TEARDOWN <c>{}</c>, or null when the connection was already gone.</param>
+public sealed record TeardownResult(IReadOnlyList<RtspResponse> StreamResponses, RtspResponse? SessionResponse)
 {
-    /// <summary>Realtime UDP stream (type 96).</summary>
-    Realtime = 96,
-
-    /// <summary>Buffered TCP stream (type 103).</summary>
-    Buffered = 103,
-}
-
-/// <summary>Who we say we are in the session SETUP (SPEC-control.md 4.2).</summary>
-public sealed record SenderIdentity(string Name, string DeviceId, string MacAddress, string Model = "iPhone14,3", string OsName = "iPhone OS", string OsVersion = "16.5", string OsBuildVersion = "20F66", string SourceVersion = "690.7.1");
-
-/// <summary>The session-level SETUP request. <c>PtpClockId</c> is <see cref="Streams.IPtpMaster.ClockId"/>; it is written to the plist as a signed int64 (SPEC-audio.md 4.4).</summary>
-public sealed record SessionSetupRequest(
-    SenderIdentity Sender,
-    TimingProtocol TimingProtocol,
-    int TimingPort,
-    string SessionUuid,
-    string? GroupUuid,
-    bool GroupContainsGroupLeader,
-    bool IsMultiSelectAirPlay,
-    IReadOnlyList<IPAddress>? TimingPeerAddresses,
-    ulong? PtpClockId);
-
-/// <summary>The session-level SETUP response.</summary>
-public sealed record SessionSetupResult(int EventPort, int TimingPort, IReadOnlyList<IPAddress> TimingPeerAddresses, PlistDictionary Raw);
-
-/// <summary>The stream-level SETUP request for type 96 (SPEC-control.md 4.4, SPEC-audio.md 1.1).</summary>
-public sealed record StreamSetupRequest(
-    StreamType Type,
-    byte[] StreamKey,
-    int ControlPort,
-    int LatencyMin = 11025,
-    int LatencyMax = 88200,
-    int SamplesPerFrame = 352,
-    int SampleRate = 44100,
-    ulong StreamConnectionId = 0)
-{
-    /// <summary><c>ct</c> value for ALAC.</summary>
-    public const int CompressionTypeAlac = 2;
-
-    /// <summary><c>audioFormat</c> bit 18: ALAC 44100/16/2.</summary>
-    public const uint AudioFormatAlac44100S16Stereo = 0x40000;
-}
-
-/// <summary>The stream-level SETUP response.</summary>
-public sealed record StreamSetupResult(StreamType Type, int DataPort, int ControlPort, uint? StreamId, long? AudioBufferSize, PlistDictionary Raw);
-
-/// <summary>Text metadata for SET_PARAMETER DMAP (SPEC-control.md 5.2).</summary>
-public sealed record TrackMetadata(string? Title, string? Artist, string? Album, TimeSpan? Duration, int? TrackNumber = null, int? DiscNumber = null, string? Genre = null);
-
-/// <summary>Progress triple in RTP frames (SPEC-control.md 5.4).</summary>
-public sealed record ProgressInfo(uint Start, uint Current, uint End);
-
-/// <summary>Messages the receiver sends on the event channel (SPEC-control.md 4.3, 6.5).</summary>
-public abstract record ReceiverEventMessage
-{
-    /// <summary><c>{type: updateInfo, value: {...}}</c>: the /info dictionary; may carry <c>initialVolume</c>.</summary>
-    public sealed record UpdateInfo(PlistDictionary Value) : ReceiverEventMessage;
-
-    /// <summary><c>{type: sendMediaRemoteCommand, value: play|paus|nitm|pitm}</c>: the receiver's own buttons.</summary>
-    public sealed record MediaRemoteCommand(string Command) : ReceiverEventMessage;
-
-    /// <summary>Anything else, kept verbatim for open question C-7.4 (device-side volume changes).</summary>
-    public sealed record Unknown(string? Type, PlistDictionary? Body, RtspIncomingRequest Request) : ReceiverEventMessage;
-
-    /// <summary>The receiver closed the event channel (its view of the session ended).</summary>
-    public sealed record Closed(string Reason) : ReceiverEventMessage;
-}
-
-/// <summary>The reverse TCP connection to the receiver's <c>eventPort</c>, HAP-encrypted with the swapped Events keys.</summary>
-public interface IEventChannel : IAsyncDisposable
-{
-    /// <summary>Parsed messages; every incoming request is answered with 200 immediately by the channel itself.</summary>
-    ChannelReader<ReceiverEventMessage> Messages { get; }
-}
-
-/// <summary>Per-receiver behaviour switches learned from live tests (SPEC.md decisions and open questions).</summary>
-public sealed record ReceiverQuirks
-{
-    /// <summary>Answer retransmit requests with the raw packet on the data port instead of the wrapped 0xD6 (A-Q6).</summary>
-    public bool RetransmitOnDataPort { get; init; }
-
-    /// <summary>Re-send volume after the stream SETUP (Sonos quirk; our default order already does this).</summary>
-    public bool VolumeAfterStreamSetup { get; init; } = true;
-
-    /// <summary>Send <c>POST /auth-setup</c> (SPEC-control.md 3.10, the 33-byte body) right after pairing and before the session SETUP. AirPort Express AirPlay 1 heritage; not needed with HAP; off by default (SPEC.md D17).</summary>
-    public bool SendAuthSetup { get; init; }
-
-    /// <summary>Per-receiver output delay compensation in frames (SPEC-audio.md 3.3).</summary>
-    public int OffsetFrames { get; init; }
-
-    /// <summary>Defaults.</summary>
-    public static ReceiverQuirks Default { get; } = new();
+    /// <summary>True when the session TEARDOWN was answered with <c>Connection: close</c> (shairport-sync does [sps:rtsp.c:2312-2320]).</summary>
+    public bool ConnectionClose => string.Equals(SessionResponse?.Header(RtspHeaders.Connection), "close", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
-/// The control-plane state machine for one receiver (SPEC-control.md 4-6): GET /info, pairing, session SETUP, event
-/// channel, RECORD, SETPEERS, stream SETUP, SET_PARAMETER, FLUSH, TEARDOWN, feedback. Owns one
-/// <see cref="IRtspConnection"/> and at most one <see cref="IEventChannel"/>.
+/// Implementation of <see cref="IReceiverSession"/> over one <see cref="IRtspConnection"/> (SPEC-control.md 3.10, 4, 5;
+/// SPEC-audio.md 1.1, 6; SPEC.md D5-D7, D10, D12, D17). The caller drives the D5 start-up order:
+/// <see cref="GetInfoAsync"/> → <see cref="PairAsync"/> → (<see cref="AuthSetupAsync"/>, run by
+/// <see cref="SetupSessionAsync"/> when <see cref="ReceiverQuirks.SendAuthSetup"/> is set) → <see cref="SetupSessionAsync"/>
+/// → <see cref="ConnectEventChannelAsync"/> → <see cref="RecordAsync"/> → (<see cref="SetPeersAsync"/>, PTP) →
+/// <see cref="SetupStreamAsync"/> → <see cref="SetVolumeAsync"/> → audio → metadata → <see cref="FeedbackAsync(PlistDictionary?, CancellationToken)"/> every 2 s;
+/// <see cref="TeardownAsync"/> ends it (D7).
 /// </summary>
-public interface IReceiverSession : IAsyncDisposable
-{
-    /// <summary>The receiver.</summary>
-    DiscoveredReceiver Receiver { get; }
-
-    /// <summary>The underlying connection.</summary>
-    IRtspConnection Connection { get; }
-
-    /// <summary>The pairing result of this connection, null before pairing.</summary>
-    PairingSession? Pairing { get; }
-
-    /// <summary><c>GET /info</c> (plain or inside the encrypted channel). <paramref name="withQualifier"/> sends the stage-1 body.</summary>
-    Task<PlistDictionary> GetInfoAsync(bool withQualifier, CancellationToken cancellationToken);
-
-    /// <summary>Runs the pairing the receiver requires: pair-verify with stored credentials, else transient, else the PIN flow via <paramref name="pinPrompt"/>.</summary>
-    Task<PairingSession> PairAsync(IPairingStore store, Func<CancellationToken, Task<string>>? pinPrompt, CancellationToken cancellationToken);
-
-    /// <summary><c>POST /auth-setup</c> (3.10): body <c>0x01 || 32-byte X25519 public key</c>, response ignored. Only sent when <see cref="ReceiverQuirks.SendAuthSetup"/> is on; callable directly for probes.</summary>
-    Task AuthSetupAsync(CancellationToken cancellationToken);
-
-    /// <summary>Session SETUP (4.2); returns <c>eventPort</c> and PTP peer info. Runs <see cref="AuthSetupAsync"/> first when the quirk is set.</summary>
-    Task<SessionSetupResult> SetupSessionAsync(SessionSetupRequest request, CancellationToken cancellationToken);
-
-    /// <summary>Connects the event channel (4.3), retrying a refused connect up to 5 times 1 s apart.</summary>
-    Task<IEventChannel> ConnectEventChannelAsync(CancellationToken cancellationToken);
-
-    /// <summary><c>RECORD</c> (4.5); returns the <c>Audio-Latency</c> header value in frames (0 on AirPlay 2 receivers).</summary>
-    Task<int> RecordAsync(CancellationToken cancellationToken);
-
-    /// <summary><c>SETPEERS</c> (4.6), PTP sessions only.</summary>
-    Task SetPeersAsync(IReadOnlyList<IPAddress> peers, CancellationToken cancellationToken);
-
-    /// <summary>Stream SETUP (4.4); returns the receiver's data and control ports.</summary>
-    Task<StreamSetupResult> SetupStreamAsync(StreamSetupRequest request, CancellationToken cancellationToken);
-
-    /// <summary><c>SET_PARAMETER volume</c> in dB: 0 = full, -30 = quietest, -144 = mute (5.1).</summary>
-    Task SetVolumeAsync(double volumeDb, CancellationToken cancellationToken);
-
-    /// <summary><c>GET_PARAMETER volume</c> (4.11): the receiver's current level in dB. The body may start with a blank line (shairport-sync answers <c>\r\nvolume: %.6f\r\n</c>); parse with <see cref="Playback.VolumeMapping.ParseParameter"/>, which skips leading CRLF and finds the <c>volume:</c> line anywhere.</summary>
-    Task<double> GetVolumeAsync(CancellationToken cancellationToken);
-
-    /// <summary><c>SET_PARAMETER</c> DMAP text (5.2) with <c>RTP-Info: rtptime=&lt;startFrame&gt;</c>.</summary>
-    Task SetMetadataAsync(TrackMetadata metadata, uint startFrame, CancellationToken cancellationToken);
-
-    /// <summary><c>SET_PARAMETER</c> artwork (5.3); <paramref name="contentType"/> is image/jpeg or image/png.</summary>
-    Task SetArtworkAsync(ReadOnlyMemory<byte> image, string contentType, uint startFrame, CancellationToken cancellationToken);
-
-    /// <summary><c>SET_PARAMETER progress</c> (5.4).</summary>
-    Task SetProgressAsync(ProgressInfo progress, CancellationToken cancellationToken);
-
-    /// <summary><c>FLUSH</c> with <c>RTP-Info: seq=;rtptime=</c> (4.8): the receiver discards everything before the given packet.</summary>
-    Task FlushAsync(ushort nextSequence, uint nextTimestamp, CancellationToken cancellationToken);
-
-    /// <summary><c>SETRATEANCHORTIME</c> (4.7), buffered/PTP only. <paramref name="timelineId"/> is the PTP clock id (<see cref="Streams.IPtpMaster.ClockId"/>), written as a signed int64 in the plist.</summary>
-    Task SetRateAnchorTimeAsync(int rate, uint rtpTime, ulong networkTimeSecs, ulong networkTimeFrac, ulong timelineId, CancellationToken cancellationToken);
-
-    /// <summary><c>FLUSHBUFFERED</c> (4.8), buffered only.</summary>
-    Task FlushBufferedAsync(uint flushUntilSeq, uint flushUntilTimestamp, uint? flushFromSeq, uint? flushFromTimestamp, CancellationToken cancellationToken);
-
-    /// <summary><c>POST /feedback</c> (4.10); returns the body (may be empty). Call every 2 s while a session is up.</summary>
-    Task<PlistDictionary?> FeedbackAsync(CancellationToken cancellationToken);
-
-    /// <summary>Per-stream TEARDOWN when a <c>streamID</c> is known, then the session TEARDOWN <c>{}</c>, then closes the event channel (4.9, 6.4).</summary>
-    Task TeardownAsync(CancellationToken cancellationToken);
-}
-
-/// <summary>Implementation of <see cref="IReceiverSession"/>.</summary>
+/// <remarks>
+/// Requests are serialised by the connection (one in flight). Non-2xx answers throw <see cref="RtspStatusException"/>
+/// except where the spec says to ignore them (<c>/auth-setup</c>, the per-stream TEARDOWN); transport failures surface as
+/// <see cref="IOException"/>/<see cref="TimeoutException"/> from the connection and as its <see cref="IRtspConnection.Closed"/>.
+/// </remarks>
 public sealed class ReceiverSession : IReceiverSession
 {
+    /// <summary>Consecutive failed feedbacks after which the receiver counts as gone (SPEC-control.md 4.10).</summary>
+    public const int FeedbackFailureLimit = 3;
+
+    /// <summary>Artwork above this size is sent with a warning (SPEC.md D12: at most 200 KiB; shairport-sync buffers 256 KiB [sps:rtsp.c:594-598]).</summary>
+    public const int RecommendedMaxArtworkBytes = 200 * 1024;
+
+    private readonly Lock _lock = new();
+    private readonly List<(uint StreamId, StreamType Type)> _streams = [];
+    private readonly ReceiverSessionOptions _options;
+    private SessionSetupResult? _sessionSetup;
+    private EventChannel? _eventChannel;
+
+    // Only touched on the request path, which one caller drives at a time (requests are serialised anyway).
+    private bool _authSetupSent;
+    private int _feedbackFailures;
+    private int _disposed;
+
     /// <summary>Creates a session over an existing connection.</summary>
     public ReceiverSession(DiscoveredReceiver receiver, IRtspConnection connection, IPairingClient pairingClient, ReceiverQuirks quirks, ILogger<ReceiverSession> logger)
+        : this(receiver, connection, pairingClient, quirks, logger, options: null)
     {
+    }
+
+    /// <summary>Creates a session over an existing connection with options.</summary>
+    public ReceiverSession(DiscoveredReceiver receiver, IRtspConnection connection, IPairingClient pairingClient, ReceiverQuirks quirks, ILogger<ReceiverSession> logger, ReceiverSessionOptions? options)
+    {
+        ArgumentNullException.ThrowIfNull(receiver);
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(pairingClient);
+        ArgumentNullException.ThrowIfNull(quirks);
+        ArgumentNullException.ThrowIfNull(logger);
         Receiver = receiver;
         Connection = connection;
         PairingClient = pairingClient;
         Quirks = quirks;
         Logger = logger;
+        _options = options ?? new ReceiverSessionOptions();
     }
 
     /// <inheritdoc />
@@ -211,71 +98,603 @@ public sealed class ReceiverSession : IReceiverSession
     /// <summary>The quirks in effect.</summary>
     public ReceiverQuirks Quirks { get; }
 
+    /// <summary>The answer of the last session SETUP, or null.</summary>
+    public SessionSetupResult? SessionSetup
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _sessionSetup;
+            }
+        }
+    }
+
+    /// <summary>The connected event channel, or null.</summary>
+    public EventChannel? EventChannel
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _eventChannel;
+            }
+        }
+    }
+
+    /// <summary>Consecutive <see cref="FeedbackAsync(PlistDictionary?, CancellationToken)"/> failures; at <see cref="FeedbackFailureLimit"/> the receiver counts as gone.</summary>
+    public int ConsecutiveFeedbackFailures => Volatile.Read(ref _feedbackFailures);
+
+    /// <summary>The <c>streamID</c>s returned by stream SETUPs that are not torn down yet.</summary>
+    public IReadOnlyList<uint> StreamIds
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _streams.Select(s => s.StreamId)];
+            }
+        }
+    }
+
     private IPairingClient PairingClient { get; }
 
     private ILogger Logger { get; }
 
-    /// <inheritdoc />
-    public Task<PlistDictionary> GetInfoAsync(bool withQualifier, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    private string Uri => Connection.SessionUri;
 
     /// <inheritdoc />
-    public Task<PairingSession> PairAsync(IPairingStore store, Func<CancellationToken, Task<string>>? pinPrompt, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    public async Task<PlistDictionary> GetInfoAsync(bool withQualifier, CancellationToken cancellationToken)
+    {
+        var response = await Connection.SendExpectOkAsync(SessionRequests.Info(withQualifier), cancellationToken).ConfigureAwait(false);
+        var info = response.PlistBody();
+        Logger.LogDebug(
+            "GET /info{Stage} from {Receiver}{Encrypted}: {Keys} keys, initialVolume {InitialVolume}",
+            withQualifier ? " (stage 1)" : string.Empty,
+            Receiver.Name,
+            Connection.IsEncrypted ? " (encrypted)" : string.Empty,
+            info.Count,
+            info.GetDouble("initialVolume")?.ToString(CultureInfo.InvariantCulture) ?? "absent");
+        return info;
+    }
 
     /// <inheritdoc />
-    public Task AuthSetupAsync(CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <remarks>
+    /// SPEC-control.md 3.8/3.9, 6.2 and SPEC.md D2: with stored credentials pair-verify; a rejection
+    /// (<see cref="PairingFailure.CredentialsRejected"/>: TLV error, 470, wrong identity or signature) deletes the stored
+    /// pairing and falls through. Then, per the TXT decision procedure (1.6), transient pair-setup; a refusal (470 or TLV
+    /// error, <see cref="PairingFailure.TransientRefused"/>) falls back to the PIN flow. The PIN flow
+    /// (<c>/pair-pin-start</c>, M1/M2, <paramref name="pinPrompt"/>, M3-M6, persist, pair-verify on the same connection as
+    /// owntone does [owntone:airplay.c:3686-3693]) needs a prompt; without one a <see cref="PairingException"/> with
+    /// <see cref="PairingFailure.TransientRefused"/> tells the caller that a PIN is required (the bridge emits
+    /// <c>PairingRequired</c>). On success the connection is switched to encryption with the control keys (2.5).
+    /// </remarks>
+    public async Task<PairingSession> PairAsync(IPairingStore store, Func<CancellationToken, Task<string>>? pinPrompt, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (Pairing is not null || Connection.IsEncrypted)
+        {
+            throw new InvalidOperationException("This connection is already paired.");
+        }
+
+        var session = await PairCoreAsync(store, pinPrompt, cancellationToken).ConfigureAwait(false);
+        Connection.EnableEncryption(session.ControlKeys);
+        Pairing = session;
+        Logger.LogInformation("Paired with {Receiver} ({Kind}); control channel encrypted", Receiver.Name, session.Kind);
+        return session;
+    }
 
     /// <inheritdoc />
-    public Task<SessionSetupResult> SetupSessionAsync(SessionSetupRequest request, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <remarks>
+    /// SPEC-control.md 3.10: <c>POST /auth-setup RTSP/1.0</c>, <c>application/octet-stream</c>, 33 bytes = <c>0x01</c> + the
+    /// public key of a fresh ephemeral X25519 key pair (nothing derived from it is ever used, pyatv sends a fixed key for
+    /// the same reason [pyatv:pyatv/support/rtsp.py:40-49]). Any 2xx is accepted and the body discarded; a non-2xx is
+    /// logged at Warning and ignored (best effort, as pyatv [pyatv:pyatv/protocols/raop/stream_client.py:354-363]).
+    /// </remarks>
+    public async Task AuthSetupAsync(CancellationToken cancellationToken)
+    {
+        var key = X25519KeyPair.Generate();
+        var response = await Connection.SendAsync(SessionRequests.AuthSetup(key.PublicKey), cancellationToken).ConfigureAwait(false);
+        _authSetupSent = true;
+
+        if (response.IsSuccess)
+        {
+            Logger.LogDebug("POST /auth-setup to {Receiver}: {Status}, {Bytes} bytes ignored", Receiver.Name, response.StatusCode, response.Body.Length);
+        }
+        else
+        {
+            Logger.LogWarning("POST /auth-setup to {Receiver} answered {Status} {Reason}; ignored", Receiver.Name, response.StatusCode, response.ReasonPhrase);
+        }
+    }
 
     /// <inheritdoc />
-    public Task<IEventChannel> ConnectEventChannelAsync(CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <remarks>
+    /// The body is <see cref="SessionRequests.SessionSetupBody"/>. A non-2xx answer surfaces as
+    /// <see cref="RtspStatusException"/>; a 2xx without a plist or without <c>eventPort</c> as
+    /// <see cref="InvalidDataException"/> (owntone aborts without it [owntone:airplay.c:3216-3227]); that is how
+    /// shairport-sync 5.5.2 refuses an NTP session in practice (200 with an empty body; the spec expected 501). The D1 gate
+    /// (probe P1) treats both as "no NTP".
+    /// </remarks>
+    public async Task<SessionSetupResult> SetupSessionAsync(SessionSetupRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        // SPEC-control.md 3.10: after pairing, before the session SETUP, inside the encrypted channel.
+        if (Quirks.SendAuthSetup && !_authSetupSent)
+        {
+            await AuthSetupAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var body = SessionRequests.SessionSetupBody(request, Connection.LocalAddress);
+        Logger.LogInformation(
+            "SETUP session to {Receiver}: timing {Protocol}, timing port {TimingPort}, group {Group}",
+            Receiver.Name,
+            request.TimingProtocol,
+            request.TimingPort,
+            request.GroupUuid ?? "none");
+        var response = await Connection.SendExpectOkAsync(RtspRequest.WithPlist("SETUP", Uri, body), cancellationToken).ConfigureAwait(false);
+        PlistDictionary plist;
+        try
+        {
+            plist = response.PlistBody();
+        }
+        catch (FormatException)
+        {
+            // shairport-sync 5.5.2 answers an NTP session SETUP with "200 OK" and an empty body (it logs "Shairport Sync
+            // can not handle NTP streams"; live 2026-10-09, SPEC-control.md 4.2 note), not with 501.
+            Logger.LogWarning("Session SETUP ({Protocol}) answered {Status} by {Receiver} without a plist: the receiver refused the session", request.TimingProtocol, response.StatusCode, Receiver.Name);
+            throw new InvalidDataException($"{Receiver.Name} answered the {request.TimingProtocol} session SETUP with {response.StatusCode} but no plist (no eventPort): the session was refused.");
+        }
+
+        var eventPort = plist.GetInt64("eventPort");
+        if (eventPort is not (> 0 and <= ushort.MaxValue))
+        {
+            throw new InvalidDataException($"The session SETUP answer of {Receiver.Name} carries no valid eventPort.");
+        }
+
+        var peers = new List<IPAddress>();
+        if (plist.GetDictionary("timingPeerInfo")?.GetArray("Addresses") is { } addresses)
+        {
+            foreach (var entry in addresses)
+            {
+                if (entry is string text && IPAddress.TryParse(text, out var address))
+                {
+                    peers.Add(address);
+                }
+            }
+        }
+
+        var result = new SessionSetupResult((int)eventPort.Value, (int)(plist.GetInt64("timingPort") ?? 0), peers, plist);
+        lock (_lock)
+        {
+            _sessionSetup = result;
+        }
+
+        Logger.LogDebug("Session SETUP answered by {Receiver}: eventPort {EventPort}, timingPort {TimingPort}, {Peers} PTP peer address(es)", Receiver.Name, result.EventPort, result.TimingPort, peers.Count);
+        return result;
+    }
 
     /// <inheritdoc />
-    public Task<int> RecordAsync(CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    async Task<IEventChannel> IReceiverSession.ConnectEventChannelAsync(CancellationToken cancellationToken) =>
+        await ConnectEventChannelAsync(cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Connects the event channel (SPEC-control.md 4.3) to the receiver's address and <c>eventPort</c>, with the Events keys
+    /// in the swapped roles; retries a refused connect (<see cref="EventChannelOptions.ConnectAttempts"/> x
+    /// <see cref="EventChannelOptions.ConnectRetryDelay"/>). Replaces (and closes) an earlier channel of this session.
+    /// </summary>
+    public async Task<EventChannel> ConnectEventChannelAsync(CancellationToken cancellationToken)
+    {
+        SessionSetupResult setup;
+        lock (_lock)
+        {
+            setup = _sessionSetup ?? throw new InvalidOperationException("The event channel needs a session SETUP first.");
+        }
+
+        var remote = new IPEndPoint(Connection.RemoteEndPoint.Address, setup.EventPort);
+        var channel = await EventChannel.ConnectAsync(remote, Pairing?.EventKeys, _options.EventChannel, Logger, cancellationToken).ConfigureAwait(false);
+        EventChannel? previous;
+        lock (_lock)
+        {
+            previous = _eventChannel;
+            _eventChannel = channel;
+        }
+
+        if (previous is not null)
+        {
+            await previous.DisposeAsync().ConfigureAwait(false);
+        }
+
+        Logger.LogInformation("Event channel to {Receiver} connected ({Endpoint})", Receiver.Name, remote);
+        return channel;
+    }
 
     /// <inheritdoc />
-    public Task SetPeersAsync(IReadOnlyList<IPAddress> peers, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <remarks>
+    /// No body (SPEC-control.md 4.5). <c>Audio-Latency</c> (frames) is returned as is; a non-zero value is that receiver's
+    /// output delay for its <c>offset_frames</c>, never a change of <c>L</c> (SPEC.md C2). Absent or unparsable → 0.
+    /// </remarks>
+    public async Task<int> RecordAsync(CancellationToken cancellationToken)
+    {
+        var response = await Connection.SendExpectOkAsync(SessionRequests.Record(Uri), cancellationToken).ConfigureAwait(false);
+        var header = response.Header(RtspHeaders.AudioLatency);
+        var latency = 0;
+        if (header is not null && !int.TryParse(header.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out latency))
+        {
+            Logger.LogWarning("RECORD answer of {Receiver} has an unparsable Audio-Latency '{Value}'", Receiver.Name, header);
+            latency = 0;
+        }
+
+        Logger.LogInformation("RECORD to {Receiver}: Audio-Latency {Latency}", Receiver.Name, header ?? "absent");
+        return latency;
+    }
 
     /// <inheritdoc />
-    public Task<StreamSetupResult> SetupStreamAsync(StreamSetupRequest request, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    public async Task SetPeersAsync(IReadOnlyList<IPAddress> peers, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(peers);
+        Logger.LogDebug("SETPEERS to {Receiver}: {Peers}", Receiver.Name, string.Join(", ", peers.Select(SessionRequests.FormatAddress)));
+        await Connection.SendExpectOkAsync(SessionRequests.SetPeers(Uri, peers), cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
-    public Task SetVolumeAsync(double volumeDb, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <remarks>
+    /// Body per SPEC-audio.md 1.1 (<see cref="SessionRequests.StreamSetupBody"/>). The answer's <c>streams[0]</c> must carry
+    /// non-zero <c>dataPort</c> and <c>controlPort</c> (owntone requires both [owntone:airplay.c:3071-3098]); a returned
+    /// <c>streamID</c> is remembered for the per-stream TEARDOWN (D7).
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The connection is not encrypted (pair first).</exception>
+    public async Task<StreamSetupResult> SetupStreamAsync(StreamSetupRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!Connection.IsEncrypted)
+        {
+            // shk travels in the clear inside the stream SETUP body: the connection must be encrypted (SPEC-control.md 4.4,
+            // SPEC.md D4); refuse rather than leak the audio key.
+            throw new InvalidOperationException("The stream SETUP carries shk; pair first (the connection must be encrypted).");
+        }
+
+        var body = SessionRequests.StreamSetupBody(request, Connection.SessionId);
+        Logger.LogInformation("SETUP stream {StreamType} to {Receiver}, our control port {ControlPort}", (int)request.Type, Receiver.Name, request.ControlPort);
+        var response = await Connection.SendExpectOkAsync(RtspRequest.WithPlist("SETUP", Uri, body), cancellationToken).ConfigureAwait(false);
+        var plist = response.PlistBody();
+        if (plist.GetArray("streams") is not [PlistDictionary stream, ..])
+        {
+            throw new InvalidDataException($"The stream SETUP answer of {Receiver.Name} has no streams[0].");
+        }
+
+        var type = stream.GetInt64("type") is { } t && Enum.IsDefined((StreamType)(int)t) ? (StreamType)(int)t : request.Type;
+        var dataPort = (int)(stream.GetInt64("dataPort") ?? 0);
+        var controlPort = (int)(stream.GetInt64("controlPort") ?? 0);
+        if (dataPort is <= 0 or > ushort.MaxValue || (type == StreamType.Realtime && controlPort is <= 0 or > ushort.MaxValue))
+        {
+            throw new InvalidDataException($"The stream SETUP answer of {Receiver.Name} lacks a valid dataPort/controlPort ({dataPort}/{controlPort}).");
+        }
+
+        uint? streamId = stream.GetInt64("streamID") is { } id and >= 0 and <= uint.MaxValue ? (uint)id : null;
+        var result = new StreamSetupResult(type, dataPort, controlPort, streamId, stream.GetInt64("audioBufferSize"), stream);
+        if (streamId is { } sid)
+        {
+            lock (_lock)
+            {
+                _streams.Add((sid, type));
+            }
+        }
+
+        Logger.LogInformation(
+            "Stream SETUP answered by {Receiver}: data port {DataPort}, control port {ControlPort}, streamID {StreamId}",
+            Receiver.Name,
+            dataPort,
+            controlPort,
+            streamId?.ToString(CultureInfo.InvariantCulture) ?? "none");
+        return result;
+    }
 
     /// <inheritdoc />
-    public Task<double> GetVolumeAsync(CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <remarks>Body <c>volume: %.6f\r\n</c> (SPEC-control.md 5.1, SPEC-audio.md 6.1); ordering and coalescing are the group player's (D10).</remarks>
+    public async Task SetVolumeAsync(double volumeDb, CancellationToken cancellationToken)
+    {
+        var request = SessionRequests.SetVolume(Uri, volumeDb);
+        Logger.LogDebug("SET_PARAMETER volume {Volume} dB to {Receiver}", volumeDb, Receiver.Name);
+        await Connection.SendExpectOkAsync(request, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
-    public Task SetMetadataAsync(TrackMetadata metadata, uint startFrame, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <exception cref="InvalidDataException">The answer carries no <c>volume:</c> line (the receiver does not support it).</exception>
+    public async Task<double> GetVolumeAsync(CancellationToken cancellationToken) =>
+        await TryGetVolumeAsync(cancellationToken).ConfigureAwait(false)
+        ?? throw new InvalidDataException($"{Receiver.Name} answered GET_PARAMETER volume without a volume line.");
+
+    /// <summary>
+    /// <c>GET_PARAMETER volume</c> (SPEC-control.md 4.11, SPEC-audio.md 6.2): the reply's text is parsed with
+    /// <see cref="VolumeMapping.ParseParameter"/> (leading blank line skipped, <c>volume:</c> found anywhere); null when
+    /// the reply has no volume line.
+    /// </summary>
+    public async Task<double?> TryGetVolumeAsync(CancellationToken cancellationToken)
+    {
+        var response = await Connection.SendExpectOkAsync(SessionRequests.GetVolume(Uri), cancellationToken).ConfigureAwait(false);
+        var text = Encoding.UTF8.GetString(response.Body.Span);
+        var volume = VolumeMapping.ParseParameter(text);
+        Logger.LogDebug("GET_PARAMETER volume from {Receiver}: {Volume}", Receiver.Name, volume?.ToString(CultureInfo.InvariantCulture) ?? "none");
+        return volume;
+    }
 
     /// <inheritdoc />
-    public Task SetArtworkAsync(ReadOnlyMemory<byte> image, string contentType, uint startFrame, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <remarks>
+    /// Metadata is best effort (SPEC-control.md 5: a receiver that does not want an item drops it): a non-2xx answer is
+    /// logged at Warning and not thrown. The Test Speaker ABCD answers DMAP with 500 in a session without audio (probe P9,
+    /// 2026-10-09). Transport failures still throw.
+    /// </remarks>
+    public async Task SetMetadataAsync(TrackMetadata metadata, uint startFrame, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        Logger.LogDebug("SET_PARAMETER DMAP to {Receiver}: '{Title}' / '{Artist}' / '{Album}' at rtptime {Start}", Receiver.Name, metadata.Title, metadata.Artist, metadata.Album, startFrame);
+        await SendMetadataItemAsync(SessionRequests.Metadata(Uri, metadata, startFrame), "DMAP", cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
-    public Task SetProgressAsync(ProgressInfo progress, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <remarks>
+    /// The image goes through the 1024-byte frames of the control channel (~200 frames for 200 KiB); one request at a time
+    /// keeps other requests from interleaving (SPEC-control.md 5.3). Larger than <see cref="RecommendedMaxArtworkBytes"/> is
+    /// sent with a warning; scaling is the caller's. Best effort like <see cref="SetMetadataAsync"/>: a non-2xx answer is
+    /// logged, not thrown.
+    /// </remarks>
+    public async Task SetArtworkAsync(ReadOnlyMemory<byte> image, string contentType, uint startFrame, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(contentType);
+        var request = SessionRequests.Artwork(Uri, image, contentType, startFrame);
+        if (image.Length > RecommendedMaxArtworkBytes)
+        {
+            Logger.LogWarning("Artwork for {Receiver} is {Bytes} bytes, above the recommended {Max}", Receiver.Name, image.Length, RecommendedMaxArtworkBytes);
+        }
+
+        Logger.LogDebug("SET_PARAMETER {ContentType} ({Bytes} bytes) to {Receiver} at rtptime {Start}", contentType, image.Length, Receiver.Name, startFrame);
+        await SendMetadataItemAsync(request, "artwork", cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
-    public Task FlushAsync(ushort nextSequence, uint nextTimestamp, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <remarks>Best effort like <see cref="SetMetadataAsync"/>: a non-2xx answer is logged, not thrown.</remarks>
+    public async Task SetProgressAsync(ProgressInfo progress, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        Logger.LogDebug("SET_PARAMETER progress {Start}/{Current}/{End} to {Receiver}", progress.Start, progress.Current, progress.End, Receiver.Name);
+        await SendMetadataItemAsync(SessionRequests.Progress(Uri, progress), "progress", cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
-    public Task SetRateAnchorTimeAsync(int rate, uint rtpTime, ulong networkTimeSecs, ulong networkTimeFrac, ulong timelineId, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    public async Task FlushAsync(ushort nextSequence, uint nextTimestamp, CancellationToken cancellationToken)
+    {
+        Logger.LogDebug("FLUSH to {Receiver}: seq {Sequence}, rtptime {Timestamp}", Receiver.Name, nextSequence, nextTimestamp);
+        await Connection.SendExpectOkAsync(SessionRequests.Flush(Uri, nextSequence, nextTimestamp), cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
-    public Task FlushBufferedAsync(uint flushUntilSeq, uint flushUntilTimestamp, uint? flushFromSeq, uint? flushFromTimestamp, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    public async Task SetRateAnchorTimeAsync(int rate, uint rtpTime, ulong networkTimeSecs, ulong networkTimeFrac, ulong timelineId, CancellationToken cancellationToken)
+    {
+        Logger.LogDebug("SETRATEANCHORTIME to {Receiver}: rate {Rate}, rtpTime {RtpTime}, network time {Secs}+{Frac}, timeline {Timeline:X16}", Receiver.Name, rate, rtpTime, networkTimeSecs, networkTimeFrac, timelineId);
+        await Connection.SendExpectOkAsync(SessionRequests.SetRateAnchorTime(Uri, rate, rtpTime, networkTimeSecs, networkTimeFrac, timelineId), cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
-    public Task<PlistDictionary?> FeedbackAsync(CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    public async Task FlushBufferedAsync(uint flushUntilSeq, uint flushUntilTimestamp, uint? flushFromSeq, uint? flushFromTimestamp, CancellationToken cancellationToken)
+    {
+        Logger.LogDebug("FLUSHBUFFERED to {Receiver}: until seq {Seq} ts {Ts}", Receiver.Name, flushUntilSeq, flushUntilTimestamp);
+        await Connection.SendExpectOkAsync(SessionRequests.FlushBuffered(Uri, flushUntilSeq, flushUntilTimestamp, flushFromSeq, flushFromTimestamp), cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
-    public Task TeardownAsync(CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: session-streams)");
+    public Task<PlistDictionary?> FeedbackAsync(CancellationToken cancellationToken) => FeedbackAsync(body: null, cancellationToken);
+
+    /// <summary>
+    /// <c>POST /feedback</c> (SPEC-control.md 4.10) with an optional bplist body (probe P8 tries <c>{}</c> and
+    /// <c>{streams: []}</c>). Any 2xx counts as alive and resets <see cref="ConsecutiveFeedbackFailures"/>; a non-2xx
+    /// (<see cref="RtspStatusException"/>) or a transport error increments it and is rethrown. Returns the answer's bplist
+    /// (shairport-sync: <c>{streams: [{type, sr}]}</c> while playing), or null for an empty or non-plist body.
+    /// </summary>
+    public async Task<PlistDictionary?> FeedbackAsync(PlistDictionary? body, CancellationToken cancellationToken)
+    {
+        RtspResponse response;
+        try
+        {
+            response = await Connection.SendExpectOkAsync(SessionRequests.Feedback(body), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is RtspStatusException or IOException or TimeoutException)
+        {
+            var failures = Interlocked.Increment(ref _feedbackFailures);
+            Logger.Log(
+                failures >= FeedbackFailureLimit ? LogLevel.Warning : LogLevel.Debug,
+                "POST /feedback to {Receiver} failed ({Failures} in a row): {Error}",
+                Receiver.Name,
+                failures,
+                ex.Message);
+            throw;
+        }
+
+        Volatile.Write(ref _feedbackFailures, 0);
+        if (response.Body.IsEmpty)
+        {
+            return null;
+        }
+
+        try
+        {
+            return response.PlistBody();
+        }
+        catch (FormatException)
+        {
+            Logger.LogDebug("POST /feedback answer of {Receiver} is not a bplist ({Bytes} bytes)", Receiver.Name, response.Body.Length);
+            return null;
+        }
+    }
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync() => Connection.DisposeAsync();
-}
+    public Task TeardownAsync(CancellationToken cancellationToken) => TeardownWithResultAsync(cancellationToken);
 
-/// <summary>DMAP (<c>application/x-dmap-tagged</c>) encoder for the text metadata item (SPEC-control.md 5.2).</summary>
-public static class DmapEncoder
-{
-    /// <summary>Encodes <c>mlit { minm, asar, asal, astm?, astn?, asdn?, asgn? }</c>.</summary>
-    public static byte[] EncodeListingItem(TrackMetadata metadata) => throw new NotImplementedException("TODO(impl: session-streams)");
+    /// <summary>
+    /// SPEC.md D7 / SPEC-control.md 4.9, 6.4: a per-stream TEARDOWN <c>{streams: [{streamID, type}]}</c> for every
+    /// <c>streamID</c> the receiver returned (non-2xx is logged and ignored), then the session TEARDOWN <c>{}</c>, then the
+    /// event channel is closed. A connection that is already closed (the receiver ended it) is not an error: the remaining
+    /// steps are skipped and the event channel is still closed. The control connection itself is closed by
+    /// <see cref="DisposeAsync"/>.
+    /// </summary>
+    public async Task<TeardownResult> TeardownWithResultAsync(CancellationToken cancellationToken)
+    {
+        // Each stream is forgotten only once its TEARDOWN was answered, so a TEARDOWN that times out or is cancelled can be
+        // retried with the per-stream form (D7).
+        (uint StreamId, StreamType Type)[] streams;
+        lock (_lock)
+        {
+            streams = [.. _streams];
+        }
+
+        var streamResponses = new List<RtspResponse>();
+        RtspResponse? sessionResponse = null;
+        try
+        {
+            foreach (var (streamId, type) in streams)
+            {
+                var response = await Connection.SendAsync(SessionRequests.TeardownStream(Uri, streamId, type), cancellationToken).ConfigureAwait(false);
+                streamResponses.Add(response);
+                lock (_lock)
+                {
+                    _streams.Remove((streamId, type));
+                }
+
+                if (!response.IsSuccess)
+                {
+                    Logger.LogWarning("Per-stream TEARDOWN of stream {StreamId} on {Receiver} answered {Status}", streamId, Receiver.Name, response.StatusCode);
+                }
+            }
+
+            sessionResponse = await Connection.SendAsync(SessionRequests.TeardownSession(Uri), cancellationToken).ConfigureAwait(false);
+            if (!sessionResponse.IsSuccess)
+            {
+                Logger.LogWarning("Session TEARDOWN on {Receiver} answered {Status}", Receiver.Name, sessionResponse.StatusCode);
+            }
+
+            Logger.LogInformation(
+                "TEARDOWN {Receiver}: {Streams} stream(s), session {Status}{Close}",
+                Receiver.Name,
+                streams.Length,
+                sessionResponse.StatusCode,
+                string.Equals(sessionResponse.Header(RtspHeaders.Connection), "close", StringComparison.OrdinalIgnoreCase) ? ", Connection: close" : string.Empty);
+        }
+        catch (IOException ex) when (Connection.Closed.IsCompleted)
+        {
+            // The receiver ended the session with the connection: nothing is left to tear down.
+            lock (_lock)
+            {
+                _streams.Clear();
+            }
+
+            Logger.LogInformation("TEARDOWN {Receiver}: the connection is already closed ({Reason})", Receiver.Name, ex.Message);
+        }
+        finally
+        {
+            await CloseEventChannelAsync().ConfigureAwait(false);
+            lock (_lock)
+            {
+                _sessionSetup = null;
+            }
+        }
+
+        return new TeardownResult(streamResponses, sessionResponse);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Closes the event channel and the control connection; does not send TEARDOWN (call <see cref="TeardownAsync"/> first).</remarks>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        await CloseEventChannelAsync().ConfigureAwait(false);
+        await Connection.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private async Task CloseEventChannelAsync()
+    {
+        EventChannel? channel;
+        lock (_lock)
+        {
+            channel = _eventChannel;
+            _eventChannel = null;
+        }
+
+        if (channel is not null)
+        {
+            await channel.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task<PairingSession> PairCoreAsync(IPairingStore store, Func<CancellationToken, Task<string>>? pinPrompt, CancellationToken cancellationToken)
+    {
+        var receiverId = Receiver.Id;
+        if (await store.GetAsync(receiverId, cancellationToken).ConfigureAwait(false) is { } stored)
+        {
+            try
+            {
+                var verified = await PairingClient.VerifyAsync(Connection, stored, cancellationToken).ConfigureAwait(false);
+                Logger.LogDebug("Pair-verify with {Receiver} succeeded with the stored pairing", Receiver.Name);
+                return verified;
+            }
+            catch (PairingException ex) when (ex.Failure == PairingFailure.CredentialsRejected)
+            {
+                // SPEC-control.md 3.8: drop the stored pairing and pair again [owntone:airplay.c:3575-3586].
+                Logger.LogWarning("Pair-verify with {Receiver} rejected ({Reason}); deleting the stored pairing", Receiver.Name, ex.Message);
+                await store.DeleteAsync(receiverId, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var requirement = Receiver.Capabilities.Pairing;
+        switch (requirement)
+        {
+            case PairingRequirement.Disabled:
+                throw new PairingException(PairingFailure.Protocol, $"{Receiver.Name} admits only HomeKit home members (acl=1 or act=2); pairing is not attempted (SPEC-control.md 1.6).");
+            case PairingRequirement.Transient:
+                try
+                {
+                    return await PairingClient.PairTransientAsync(Connection, cancellationToken).ConfigureAwait(false);
+                }
+                catch (PairingException ex) when (ex.Failure == PairingFailure.TransientRefused)
+                {
+                    Logger.LogInformation("Transient pairing refused by {Receiver} ({Reason}); falling back to the PIN flow", Receiver.Name, ex.Message);
+                }
+
+                break;
+        }
+
+        return await PinPairAsync(store, pinPrompt, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<PairingSession> PinPairAsync(IPairingStore store, Func<CancellationToken, Task<string>>? pinPrompt, CancellationToken cancellationToken)
+    {
+        if (pinPrompt is null)
+        {
+            throw new PairingException(PairingFailure.TransientRefused, $"{Receiver.Name} requires PIN pairing and no PIN prompt was given.");
+        }
+
+        var controller = await store.GetControllerIdentityAsync(cancellationToken).ConfigureAwait(false);
+        Logger.LogInformation("PIN pairing with {Receiver}: the receiver shows its PIN", Receiver.Name);
+        var started = await PairingClient.StartPinPairingAsync(Connection, controller, _options.PinPairingMethod, cancellationToken).ConfigureAwait(false);
+        var pin = await pinPrompt(cancellationToken).ConfigureAwait(false);
+        var credentials = await PairingClient.FinishPinPairingAsync(started, pin, cancellationToken).ConfigureAwait(false);
+        await store.SaveAsync(Receiver.Id, credentials, cancellationToken).ConfigureAwait(false);
+        Logger.LogInformation("PIN pairing with {Receiver} stored (accessory {AccessoryId}); verifying", Receiver.Name, credentials.AccessoryId);
+
+        // SPEC-control.md 3.6 step 8: pair-verify on the same connection (owntone [owntone:airplay.c:3686-3693]).
+        return await PairingClient.VerifyAsync(Connection, credentials, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<RtspResponse> SendMetadataItemAsync(RtspRequest request, string what, CancellationToken cancellationToken)
+    {
+        var response = await Connection.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccess)
+        {
+            Logger.LogWarning("SET_PARAMETER {What} to {Receiver} answered {Status} {Reason}; ignored", what, Receiver.Name, response.StatusCode, response.ReasonPhrase);
+        }
+
+        return response;
+    }
 }

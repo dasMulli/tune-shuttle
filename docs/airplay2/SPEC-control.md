@@ -405,6 +405,13 @@ and treat a response whose `CSeq` does not match as belonging to the oldest outs
 Timeouts pyatv uses: 4 s for an RTSP exchange [pyatv:rtsp.py:316], 10 s for a plain HTTP exchange (pairing)
 [pyatv:http.py:446], 25 s for a sleeping receiver to wake [pyatv:http.py:36-39]. Also see 4.10.
 
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** over Wi-Fi the
+SpeakerA answered transient pair-setup M2 after 0.5-3.4 s, M4 after 0.3-7.9 s, and RECORD once after 9.9 s; one M2 did not
+come within 10 s (a new connection 3 s after the previous session's TEARDOWN; `ping` showed up to 740 ms). The 10 s
+request timeout of D6 is too tight for this receiver: the session probes use 30 s
+(`SessionProbeOptions.Connection`), and the facade should do the same (`RtspConnectionOptions.RequestTimeout`, owned by
+`rtsp-transport`). Logs: `artifacts/live/2026-10-09-P5-teardown.log`, `-P10-initial-volume.log`.
+
 ### 2.2 Headers
 
 | Header | Value | Who sends it | Notes |
@@ -514,6 +521,12 @@ back the counter and returns -1 [sps:pair_homekit.c:3080-3086]); close the socke
 The same framing, with other key pairs, is used for the event channel (4.3) and the remote-control data
 channel (salt `DataStream-Salt<seed>`, infos `DataStream-Output-Encryption-Key` / `DataStream-Input-Encryption-Key`
 [pyatv:pyatv/protocols/airplay/ap2_session.py:35-37, 155-187; sps:pair_homekit.c:116-122]; not used by this project).
+
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** (probe P21) a `GET /info`
+sent as **one 2048-byte frame** after transient pairing made the SpeakerA close the connection without an answer: the
+SpeakerA does **not** accept frames above 1024 bytes from the sender, so the fixed 1024-byte send cap is required, not just
+cautious. In normal sessions every frame it sent had at most 1024 bytes of plaintext (it splits like HAP); the receive
+rule (up to 65 535) stays for other receivers. Log: `artifacts/live/2026-10-09-P21-large-frame.log`.
 
 ---
 
@@ -881,6 +894,19 @@ of the realtime stream with NTP timing stands for v1, its rationale is corrected
 libairptp), and the timing protocol is part of the pluggable stream layer: if probe P1 shows the SpeakerA refuses NTP,
 the realtime stream runs under PTP (0xD7 syncs) with the PTP-master package pulled forward, and nothing else changes.
 
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** the NTP session SETUP
+(pyatv's key set plus `isMultiSelectAirPlay`) is answered `200` with `{eventPort: 7002, timingPort: 7001}`; unlike the
+references, the SpeakerA's `timingPort` is **not** 0 (the 0xD2 timing requests come from that port). A PTP session SETUP
+with a minimal `timingPeerInfo` is answered `200` with `{eventPort, timingPort, timingPeerInfo: {Addresses: [192.0.2.26,
+two ULA, one link-local IPv6], ...}}`. Probe P1 settles D1: NTP is accepted and timing requests arrive (see SPEC.md
+section 4). **Note (2026-10-09, `session-streams`, live against shairport-sync 5.5.2 in Docker):** the NTP session SETUP
+is answered **`200 OK` with `Content-Length: 0`**, not `501` as read from the source above (the `501` set at [sps:rtsp.c:2396]
+does not reach the wire for this path; the NTP branch only warns "Shairport Sync can not handle NTP streams"
+[sps:rtsp.c:2683-2686]); a sender must
+treat a 2xx without a plist / `eventPort` as a refusal (`ReceiverSession.SetupSessionAsync` throws
+`InvalidDataException`). The PTP session SETUP works there (event channel, `updateInfo` on connect, RECORD, stream SETUP
+without `streamID`, `GET_PARAMETER` with the leading blank line, `TEARDOWN {}` with `Connection: close`).
+
 ### 4.3 The event channel
 
 After the session SETUP response, open a TCP connection from the sender to `<receiver ip>:<eventPort>`
@@ -913,6 +939,11 @@ the bplist by its `bplist` magic if the headers are odd [owntone:airplay_events.
 Closing the event channel ends the receiver's view of the session: shairport's event-receiver thread cleanup
 drops the group id and `Active-Remote` [sps:ap2_event_receiver.c:37-59]. Keep it open for the life of the control
 connection and close it after TEARDOWN.
+
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** the SpeakerA sent
+**nothing** on the event channel: no `updateInfo` on connect and none after RECORD, in every session (probe P13 waited
+15 s after RECORD with the answer delay set to 5 s; probe P4 kept a session for 10 s). It closes the event channel
+right after the session `TEARDOWN {}`. The channel connected on the first attempt every time.
 
 ### 4.4 Stream-level `SETUP`
 
@@ -961,6 +992,11 @@ nonce = 00000000 || counter64 LE, aad = header[4:12] (timestamp + ssrc), plainte
 counter (8 bytes, little-endian)` [pyatv:airplayv2.py:183-208; stream_client.py:581-587]. pyatv notes that sending a
 zero nonce "worked with Apple but other vendors might care" [airplayv2.py:195-198], so increment it.
 
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** the stream SETUP answer is
+`{streams: [{type: 96, dataPort: 7003, controlPort: 7004}]}`: **no `streamID`** (as shairport-sync), so only the session
+TEARDOWN is sent. Both `shk` = `SS[0..31]` and 32 random bytes are accepted (probe P15, control part). The SpeakerA's
+0xD2 timing requests start while the stream SETUP is being answered.
+
 ### 4.5 `RECORD`
 
 `RECORD rtsp://…/… RTSP/1.0` with the standard headers and **no body**. pyatv sends none [pyatv:rtsp.py:178-184;
@@ -972,6 +1008,10 @@ that and replies `200 OK` with `Audio-Latency: 0` [sps:rtsp.c:903-911]; its AirP
 and replies `Audio-Latency: 0` [ap2r:ap2-receiver.py:717-732]. Read `Audio-Latency` (samples); a non-zero value is
 treated as that receiver's output delay, i.e. folded into its per-receiver `offset_frames` (SPEC-audio.md 1.5, 3.3),
 never as a change of the group latency `L` (resolution recorded in SPEC.md).
+
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** RECORD (no body) is answered
+`200` **without an `Audio-Latency` header**; the session reads that as 0. RECORD before and after the stream SETUP are
+both accepted (probe P3).
 
 ### 4.6 `SETPEERS` and `SETPEERSX`
 
@@ -1039,6 +1079,10 @@ logs "has no plist -- nothing done" for that and keeps everything running [sps:r
 bplist (SPEC.md D7). Graceful stop: per-stream TEARDOWN (if a `streamID` is known) → session TEARDOWN → close the event channel
 and the control socket. Response 200 (shairport adds `Connection: close` to the session form).
 
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** (probe P5) the session
+`TEARDOWN {}` is answered `200` **without `Connection: close`** and the control connection stays open (still open 2 s
+later); the SpeakerA closes the event channel. The next session on a new connection starts with `200` (no 451/453).
+
 ### 4.10 Keep-alive: `POST /feedback`, timeouts
 
 `POST /feedback RTSP/1.0` with the standard headers and no body. iOS sends it every 2 s
@@ -1061,6 +1105,10 @@ Receiver-side timeouts to respect: an unanswered event-channel request closes th
 `/info` plist (both `true` on the SpeakerA) hint at feedback bodies with statistics; no sender in the references
 sends one (7.8).
 
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** (probe P8) `POST /feedback` is
+answered `200` with `{streams: [{type: 96, sr: 44100}]}` (integer `sr`) after a stream SETUP, whether the request has no
+body, `{}` or `{streams: []}`. The idle-drop timing (10-minute runs) has not been measured.
+
 ### 4.11 Other control-plane messages
 
 - `OPTIONS * RTSP/1.0` → `Public: ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, FLUSHBUFFERED, TEARDOWN, OPTIONS, POST,
@@ -1082,6 +1130,11 @@ sends one (7.8).
 - `POST /audioMode` [sps:rtsp.c:2169-2174], `POST /configure` (HomeKit setup) [sps:rtsp.c:1969-2031], `SETMAGICCOOKIE`
   (iOS 17) [ap2r:ap2-receiver.py:870-883], `PUT /setProperty`, `POST /rate`, `/play`, `/playback-info` (video)
   [pyatv:airplayv2.py:210-273; player.py]. Out of scope.
+
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** `GET_PARAMETER volume` is answered
+`volume: -24.000000\r\n` with **no leading blank line** (the airplay2-receiver shape); before any volume was set in the
+first session it reported `-30.000000`, later sessions reported the last value set (the level persists across sessions).
+The paired `GET /info` (bare and stage 1) still has no `initialVolume` (probe P10).
 
 ### 4.12 What crosses to the data plane
 
@@ -1124,6 +1177,10 @@ after RECORD + FLUSH and, if an attempt before streaming failed, retries after t
 connection is the one playing [sps:rtsp.c:3240-3258]. Rule: send after the stream SETUP, repeat on every user
 change, and re-send after any FLUSH/re-SETUP. Reading it back: `GET_PARAMETER volume` (4.11); unsolicited
 receiver-side changes: open question 7.4.
+
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** (probe P3) a `SET_PARAMETER volume`
+sent **before** the stream SETUP is answered `200` but **not applied** (`GET_PARAMETER` kept the previous value, also after
+the stream SETUP); after the stream SETUP it is applied. This confirms the "volume last" rule of D5 for the SpeakerA.
 
 ### 5.2 Metadata (DMAP)
 
@@ -1169,6 +1226,12 @@ pictures, that refer to the same entity" and brackets each item with `mdst`/`mde
 carrying that time [sps:rtsp.c:3352-3412]. owntone computes it as the RTP timestamp of the first sample of the
 track (`start`), see 5.4 [owntone:airplay.c:936-1002]. Send the same `rtptime` in metadata, artwork and
 progress for one track.
+
+**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** (probe P9) in a session **without
+audio** the SpeakerA answers every DMAP item with **`500 Internal Server Error`** (after ~10 s for the first one): the
+D12 form `mlit{minm, asar, asal, astm}`, pyatv's minimal `mlit{minm, asar, asal}`, and the latter with `RTP-Info:
+seq=0;rtptime=`. Artwork (634-byte JPEG) and progress are answered `200`. Whether DMAP is accepted while audio plays is
+for wave 4; the session sends metadata best-effort (non-2xx logged, not thrown).
 
 ### 5.3 Artwork
 
