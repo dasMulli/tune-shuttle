@@ -1,15 +1,19 @@
 # Linux container image of the bridge (docs/PLAN.md "Deployment"). Build from the repository root:
 #   docker build -f docker/Dockerfile -t airplay2-bridge .
+# Cross-build for the Raspberry Pi clusters (the SDK stage runs natively on the build host and cross-compiles;
+# only the runtime stage is pulled for the target platform, so nothing runs under QEMU):
+#   docker buildx build --platform linux/arm64 -f docker/Dockerfile -t registry.example.com/dasmulli/airplay2-bridge:latest --push .
 # Run with a macvlan interface so mDNS and inbound UDP work (Kubernetes: a macvlan/multus pod interface):
 #   docker network create -d macvlan --subnet=192.0.2.0/24 --gateway=192.0.2.1 -o parent=eth0 lan
 #   docker run -d --network lan --ip 192.0.2.60 -v bridge-data:/data airplay2-bridge
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG TARGETARCH
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props .editorconfig AirplayBridge.sln ./
 COPY librespot-dotnet/ librespot-dotnet/
 COPY src/ src/
-RUN dotnet restore src/Bridge.Service/Bridge.Service.csproj
-RUN dotnet publish src/Bridge.Service/Bridge.Service.csproj -c Release -o /app --no-restore
+RUN dotnet restore src/Bridge.Service/Bridge.Service.csproj -a $TARGETARCH
+RUN dotnet publish src/Bridge.Service/Bridge.Service.csproj -c Release -a $TARGETARCH --no-restore -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
