@@ -1,0 +1,88 @@
+@* A 0..100 level slider (r_i or G). While it is dragged, the latest position is sent through a CoalescingSender
+   (one request in flight, newest value wins) and the thumb shows the local value; once nothing is pending it shows
+   the value the bridge reports again. DraftChanged reports the dragged value (null when settled) for live previews.
+   Only "input" is bound: browsers fire it for every thumb move and keyboard step, and "change" would only repeat the
+   last value as a second request. *@
+@implements IDisposable
+
+<div class="level @(Disabled ? "disabled" : null)">
+    <label for="@_id">@Label</label>
+    <input id="@_id" type="range" min="0" max="100" step="1"
+           value="@Shown" disabled="@Disabled"
+           aria-valuetext="@($"{Shown} of 100")"
+           @oninput="OnInputAsync" />
+    <output for="@_id" class="@(_draft is null ? null : "draft")">@Shown</output>
+</div>
+
+@code {
+    private static int s_next;
+    private readonly string _id = "level-" + Interlocked.Increment(ref s_next).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    private readonly CancellationTokenSource _lifetime = new();
+    private CoalescingSender<int>? _sender;
+    private int? _draft;
+
+    /// <summary>The level the bridge reports.</summary>
+    [Parameter]
+    public int Value { get; set; }
+
+    /// <summary>Label text.</summary>
+    [Parameter]
+    public string Label { get; set; } = "Volume";
+
+    /// <summary>Disables the control.</summary>
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>Sends a level; returns false on failure (the command layer shows the error).</summary>
+    [Parameter, EditorRequired]
+    public Func<int, CancellationToken, Task<bool>> Send { get; set; } = default!;
+
+    /// <summary>The dragged value while it differs from what the bridge reports, null once settled.</summary>
+    [Parameter]
+    public EventCallback<int?> DraftChanged { get; set; }
+
+    private int Shown => _draft ?? Value;
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        _sender = new CoalescingSender<int>(async (level, ct) => await Send(level, ct).ConfigureAwait(false));
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        if (Disabled || !int.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var level))
+        {
+            return;
+        }
+
+        level = Math.Clamp(level, 0, 100);
+        if (_draft != level)
+        {
+            _draft = level;
+            await DraftChanged.InvokeAsync(level);
+        }
+
+        try
+        {
+            await _sender!.SubmitAsync(level, _lifetime.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // the component went away
+        }
+
+        if (!_sender.Busy && _draft is not null)
+        {
+            _draft = null;
+            await DraftChanged.InvokeAsync(null);
+        }
+    }
+}

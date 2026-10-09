@@ -1,0 +1,148 @@
+@page "/settings"
+@inherits BridgeComponentBase
+
+<PageTitle>Settings · AirPlay Bridge</PageTitle>
+
+<h1>Settings</h1>
+
+@if (_model is null)
+{
+    <p class="muted">@(_loadError ?? "Loading…")</p>
+    @if (_loadError is not null)
+    {
+        <button type="button" @onclick="LoadAsync">Retry</button>
+    }
+}
+else
+{
+    <EditForm Model="_model" OnValidSubmit="SaveAsync" class="card settings">
+        <DataAnnotationsValidator />
+
+        <div class="field">
+            <label for="device-name">Spotify device name</label>
+            <InputText id="device-name" @bind-Value="_model.DeviceName" maxlength="64" />
+            <ValidationMessage For="() => _model.DeviceName" />
+            <p class="hint">The name shown in Spotify apps. Changing it restarts the Spotify Connect device.</p>
+        </div>
+
+        <div class="field">
+            <label for="latency">Latency L (frames)</label>
+            <InputNumber id="latency" @bind-Value="_model.LatencyFrames" min="@SettingsModel.MinLatencyFrames" max="@SettingsModel.MaxLatencyFrames" step="441" />
+            <ValidationMessage For="() => _model.LatencyFrames" />
+            <p class="hint">
+                = @Format.FramesAsMs(_model.LatencyFrames) ms at 44.1 kHz (@SettingsModel.MinLatencyFrames–@SettingsModel.MaxLatencyFrames).
+                How far ahead of playback the receivers get the audio (SPEC-audio.md 1.5); the default 77175 frames (1.75 s)
+                fits most receivers. Changing it rebuilds the output.
+            </p>
+        </div>
+
+        <div class="field">
+            <label for="stream">Stream type</label>
+            <InputSelect id="stream" @bind-Value="_model.PreferredStream">
+                <option value="Realtime">Realtime (RTP over UDP, NTP or PTP timing)</option>
+                <option value="Buffered">Buffered (TCP, PTP timing)</option>
+            </InputSelect>
+            <p class="hint">Realtime is what the bridge was built and tested with first; Buffered is used only for receivers that support it.</p>
+        </div>
+
+        <div class="field checkbox">
+            <InputCheckbox id="poll" @bind-Value="_model.PollReceiverVolume" />
+            <label for="poll">Poll receiver volume</label>
+            <p class="hint">Reads the volume back from receivers every few seconds, for receivers whose own buttons do not report changes over the event channel (SPEC-audio.md 6.2).</p>
+        </div>
+
+        <div class="actions">
+            <button type="submit" class="primary" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
+            <button type="button" class="subtle" @onclick="LoadAsync" disabled="@_saving">Reset</button>
+        </div>
+    </EditForm>
+}
+
+<section class="card spotify">
+    <h2>Spotify</h2>
+    @if (State.Status is { } status)
+    {
+        <p>
+            @(status.SpotifyConnected
+                ? $"Connected{(status.SpotifyUser is { } user ? " as " + user : string.Empty)}."
+                : "Not connected. Select the bridge in a Spotify app to log in.")
+        </p>
+    }
+    @if (_confirmForget)
+    {
+        <p>Forget the cached Spotify login? The bridge then needs a new hand-off from a Spotify app.</p>
+        <div class="actions">
+            <button type="button" class="danger" @onclick="ForgetSpotifyAsync" disabled="@_saving">Forget</button>
+            <button type="button" @onclick="() => _confirmForget = false">Keep</button>
+        </div>
+    }
+    else
+    {
+        <button type="button" class="subtle" @onclick="() => _confirmForget = true">Forget Spotify login</button>
+    }
+</section>
+
+@code {
+    private SettingsModel? _model;
+    private string? _loadError;
+    private bool _saving;
+    private bool _confirmForget;
+
+    /// <inheritdoc />
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loadError = null;
+        try
+        {
+            _model = SettingsModel.From(await Commands.Api.GetSettingsAsync(Lifetime));
+        }
+        catch (Exception ex) when (ex is BridgeApiException or HttpRequestException or System.Text.Json.JsonException)
+        {
+            _loadError = "The settings could not be loaded. " + BridgeCommands.Describe(ex);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the page went away
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model is null)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (await Commands.SaveSettingsAsync(_model.ToDto(), Lifetime) is { } saved)
+            {
+                _model = SettingsModel.From(saved);
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ForgetSpotifyAsync()
+    {
+        _saving = true;
+        try
+        {
+            await Commands.ForgetSpotifyAsync(Lifetime);
+            _confirmForget = false;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

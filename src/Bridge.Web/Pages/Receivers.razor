@@ -1,0 +1,203 @@
+@page "/"
+@inherits BridgeComponentBase
+
+<PageTitle>Receivers · AirPlay Bridge</PageTitle>
+
+<h1>Receivers</h1>
+
+@if (State.Status is { } status)
+{
+    <p class="lead">
+        Spotify device <strong>@status.DeviceName</strong>,
+        @(status.SpotifyConnected ? $"connected{(status.SpotifyUser is { } user ? " as " + user : string.Empty)}" : "not connected to Spotify").
+        @OutputSummary()
+    </p>
+}
+
+@if (!State.Loaded)
+{
+    <p class="muted">Connecting to the bridge…</p>
+}
+else if (State.Receivers.Count == 0)
+{
+    <div class="empty">
+        <p>No AirPlay receivers found yet.</p>
+        <p class="muted">Receivers appear here as soon as the bridge sees them on the network (mDNS). Check that the speaker is on and in the same network as the bridge.</p>
+    </div>
+}
+else
+{
+    <div class="cards">
+        @foreach (var receiver in State.Receivers)
+        {
+            var busy = _busy.Contains(receiver.Id);
+            var inOutput = State.IsInOutput(receiver.Id);
+            <article class="card receiver" data-receiver-id="@receiver.Id" @key="receiver.Id">
+                <header class="card-header">
+                    <h2>@receiver.Name</h2>
+                    <StateBadge State="receiver.State" />
+                </header>
+
+                <p class="meta">
+                    @(receiver.Model ?? "Unknown model")
+                    @if (receiver.Address is not null)
+                    {
+                        <span> · @receiver.Address:@receiver.Port</span>
+                    }
+                </p>
+
+                <p class="tags">
+                    @if (receiver.Capabilities.AirPlay2) { <span class="tag">AirPlay 2</span> }
+                    @if (receiver.Capabilities.Ptp) { <span class="tag">PTP</span> }
+                    @if (receiver.Capabilities.Buffered) { <span class="tag">Buffered</span> }
+                    <span class="tag pairing-@receiver.Pairing.ToString().ToLowerInvariant()">@PairingText(receiver.Pairing)</span>
+                    @if (receiver.GroupId is { } groupId && State.Group(groupId) is { } group)
+                    {
+                        <span class="tag group">Group: @group.Name</span>
+                    }
+                    @if (inOutput)
+                    {
+                        <span class="tag output">Output</span>
+                    }
+                </p>
+
+                @if (receiver.Error is { } error && receiver.State == ReceiverConnectionState.Error)
+                {
+                    <p class="error">@error</p>
+                }
+
+                <div class="actions">
+                    @if (receiver.State is ReceiverConnectionState.Connected or ReceiverConnectionState.Streaming or ReceiverConnectionState.Connecting)
+                    {
+                        <button type="button" @onclick="() => DisconnectAsync(receiver.Id)" disabled="@busy">Disconnect</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="primary" @onclick="() => ConnectAsync(receiver.Id)"
+                                disabled="@(busy || !receiver.Online || receiver.Pairing == PairingState.Disabled)"
+                                title="@(receiver.Online ? "Play to this receiver alone" : "The receiver is offline")">
+                            @(busy ? "Working…" : "Connect")
+                        </button>
+                    }
+
+                    @if (receiver.Pairing == PairingState.PinRequired)
+                    {
+                        <button type="button" @onclick="() => PairAsync(receiver.Id)" disabled="@(busy || !receiver.Online)">Pair with PIN</button>
+                    }
+                    else if (receiver.Pairing == PairingState.Paired)
+                    {
+                        <button type="button" class="subtle" @onclick="() => ForgetAsync(receiver.Id)" disabled="@busy">Forget pairing</button>
+                    }
+                </div>
+
+                <LevelSlider Value="State.LevelOf(receiver)" Label="Volume"
+                             Send="(level, ct) => Commands.SetReceiverLevelAsync(receiver.Id, level, ct)" />
+
+                <form class="offset" @onsubmit="() => ApplyOffsetAsync(receiver)" @onsubmit:preventDefault>
+                    <label for="offset-@receiver.Id">Offset</label>
+                    <input id="offset-@receiver.Id" type="number" step="1" min="@(-MaxOffsetFrames)" max="@MaxOffsetFrames"
+                           value="@OffsetDraft(receiver)" @onchange="e => SetOffsetDraft(receiver.Id, e)"
+                           aria-describedby="offset-hint-@receiver.Id" />
+                    <button type="submit" class="subtle" disabled="@(busy || OffsetDraft(receiver) == receiver.OffsetFrames)">Apply</button>
+                    <span id="offset-hint-@receiver.Id" class="offset-hint muted small">frames = @Format.FramesAsMs(OffsetDraft(receiver)) ms (latency trim, ±2 s)</span>
+                </form>
+                @if (_offsetErrors.TryGetValue(receiver.Id, out var offsetError))
+                {
+                    <p class="error">@offsetError</p>
+                }
+            </article>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Largest offset the service accepts (2 s at 44.1 kHz, SPEC-audio.md 3.3).</summary>
+    public const int MaxOffsetFrames = 88200;
+
+    private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _offsetDrafts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _offsetErrors = new(StringComparer.Ordinal);
+
+    /// <summary>Label of a pairing state.</summary>
+    public static string PairingText(PairingState pairing) => pairing switch
+    {
+        PairingState.Transient => "No PIN needed",
+        PairingState.PinRequired => "PIN pairing needed",
+        PairingState.Paired => "Paired",
+        PairingState.Disabled => "HomeKit home only",
+        _ => pairing.ToString(),
+    };
+
+    private string OutputSummary()
+    {
+        var output = State.Output;
+        if (output.GroupId is { } groupId)
+        {
+            return $"Output: group {State.Group(groupId)?.Name ?? groupId}.";
+        }
+
+        return output.ReceiverId is { } receiverId ? $"Output: {State.NameOf(receiverId)}." : "No output selected; audio is discarded.";
+    }
+
+    private int OffsetDraft(ReceiverDto receiver) => _offsetDrafts.TryGetValue(receiver.Id, out var draft) ? draft : receiver.OffsetFrames;
+
+    private void SetOffsetDraft(string receiverId, ChangeEventArgs e)
+    {
+        _offsetErrors.Remove(receiverId);
+        if (int.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var frames))
+        {
+            _offsetDrafts[receiverId] = frames;
+        }
+        else
+        {
+            _offsetErrors[receiverId] = "Enter a whole number of frames.";
+        }
+    }
+
+    private async Task ApplyOffsetAsync(ReceiverDto receiver)
+    {
+        var frames = OffsetDraft(receiver);
+        if (Math.Abs(frames) > MaxOffsetFrames)
+        {
+            _offsetErrors[receiver.Id] = $"The offset must be within ±{MaxOffsetFrames} frames (2 s).";
+            return;
+        }
+
+        await RunAsync(receiver.Id, async ct =>
+        {
+            if (await Commands.SetOffsetAsync(receiver.Id, frames, ct))
+            {
+                _offsetDrafts.Remove(receiver.Id);
+            }
+        });
+    }
+
+    private Task ConnectAsync(string id) => RunAsync(id, ct => Commands.ConnectAsync(id, ct));
+
+    private Task DisconnectAsync(string id) => RunAsync(id, ct => Commands.DisconnectAsync(id, ct));
+
+    private Task PairAsync(string id) => RunAsync(id, ct => Commands.StartPairingAsync(id, ct));
+
+    private Task ForgetAsync(string id) => RunAsync(id, ct => Commands.ForgetPairingAsync(id, ct));
+
+    private async Task RunAsync(string id, Func<CancellationToken, Task> action)
+    {
+        if (!_busy.Add(id))
+        {
+            return;
+        }
+
+        try
+        {
+            await action(Lifetime);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the page went away
+        }
+        finally
+        {
+            _busy.Remove(id);
+        }
+    }
+}

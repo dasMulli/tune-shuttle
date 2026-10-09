@@ -1,0 +1,20 @@
+@* The dot next to the app name: green while live updates flow, amber while connecting, grey while paused. *@
+@inherits BridgeComponentBase
+
+<span class="live-dot @CssClass" title="@Title" aria-label="@Title" role="img"></span>
+
+@code {
+    private string CssClass => State.Connection switch
+    {
+        EventConnectionState.Connected => "live",
+        EventConnectionState.Connecting => "connecting",
+        _ => "down",
+    };
+
+    private string Title => State.Connection switch
+    {
+        EventConnectionState.Connected => "Live updates on",
+        EventConnectionState.Connecting => "Connecting to the bridge",
+        _ => "Live updates paused",
+    };
+}

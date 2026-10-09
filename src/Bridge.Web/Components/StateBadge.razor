@@ -1,0 +1,32 @@
+@* Connection state of a receiver as a coloured badge. *@
+<span class="badge state-@State.ToString().ToLowerInvariant()" title="@Describe(State)">@Text(State)</span>
+
+@code {
+    /// <summary>The state.</summary>
+    [Parameter]
+    public ReceiverConnectionState State { get; set; }
+
+    /// <summary>Short label.</summary>
+    public static string Text(ReceiverConnectionState state) => state switch
+    {
+        ReceiverConnectionState.Offline => "Offline",
+        ReceiverConnectionState.Available => "Available",
+        ReceiverConnectionState.Connecting => "Connecting",
+        ReceiverConnectionState.Connected => "Connected",
+        ReceiverConnectionState.Streaming => "Playing",
+        ReceiverConnectionState.Error => "Error",
+        _ => state.ToString(),
+    };
+
+    /// <summary>Tooltip.</summary>
+    public static string Describe(ReceiverConnectionState state) => state switch
+    {
+        ReceiverConnectionState.Offline => "Not seen on the network.",
+        ReceiverConnectionState.Available => "On the network, not connected.",
+        ReceiverConnectionState.Connecting => "Pairing and setting up the session.",
+        ReceiverConnectionState.Connected => "Session set up; audio goes here when Spotify plays.",
+        ReceiverConnectionState.Streaming => "Audio is being sent.",
+        ReceiverConnectionState.Error => "The last attempt failed; see the error.",
+        _ => string.Empty,
+    };
+}

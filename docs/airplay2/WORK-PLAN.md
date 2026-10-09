@@ -71,7 +71,7 @@ src/
 tests/
   Airplay2.FakeReceiver/               in-process receiver used by every test project                                     [fake-receiver]; RtspServerConnection.cs is owned by rtsp-transport (added in wave 1)
   Airplay2.Sender.Tests/               unit + fake-receiver + live tests for the sender
-  Bridge.Tests/                        store, API, sink and end-to-end tests for the bridge
+  Bridge.Tests/                        store, API, sink and end-to-end tests for the bridge; Web/ holds the web-app tests (references Bridge.Web, bUnit)
 docker/Dockerfile                      Linux image of the bridge; docker/shairport-sync/ local test receiver (TEST-RECEIVER.md)
 install/windows/install-service.ps1    Windows Service + firewall; install/linux/airplay-bridge.service systemd unit
 docs/airplay2/                         SPEC.md (index), SPEC-control.md, SPEC-audio.md, WORK-PLAN.md, TEST-RECEIVER.md, test-vectors/, probes/
@@ -109,6 +109,7 @@ owned by `bridge-store` and added in wave 1 (`sender-api-cli` and `bridge-servic
 | Web app | **Blazor WebAssembly** (`Microsoft.AspNetCore.Components.WebAssembly` 10.0.12, `.DevServer`, `.Server` for hosting) | No node toolchain is available. Blazor WASM is built by the .NET SDK alone (verified: the solution builds without the `wasm-tools` workload as long as AOT/SIMD/relinking stay at their defaults), shares the `Bridge.Contracts` DTOs at compile time, and its view-model/state code is unit-testable with xunit. A no-build vanilla JS SPA would avoid the ~2 MB initial download but has no shared types, no compiler and no test runner without node. Both choices fit PLAN.md's "web only"; Blazor is recommended. |
 | CLI | **System.CommandLine 2.0.12** | Stable 2.0 API (`SetAction`, `Parse().InvokeAsync()`). |
 | Tests | Microsoft.NET.Test.Sdk 18.10.1, xunit 2.9.3, xunit.runner.visualstudio 3.1.5, NSubstitute 6.2.0 | Same as librespot-dotnet. |
+| Web component tests | bunit 2.11.3 (added by web-app, wave 7, 2026-10-09) | Supports .NET 10; used only by `tests/Bridge.Tests/Web`. |
 | Not used | NAudio (Windows only; the bridge's sink is the AirPlay sender), Zeroconf/Makaretu.Dns (the librespot mDNS codec is reused), SignalR, EF Core | PLAN.md: container path must not depend on NAudio. |
 
 ## 4. Live tests: what is allowed when

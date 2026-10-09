@@ -11,11 +11,14 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="bunit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Bridge.Service\Bridge.Service.csproj" />
     <ProjectReference Include="..\..\src\Bridge.Contracts\Bridge.Contracts.csproj" />
+    <!-- The web app's state, clients and components (web-app tests under Web/). -->
+    <ProjectReference Include="..\..\src\Bridge.Web\Bridge.Web.csproj" />
     <!-- JsonFilePairingStore (owned by bridge-store) lives in the CLI; its tests sit next to the SQLite store's. -->
     <ProjectReference Include="..\..\src\Airplay2.Sender.Cli\Airplay2.Sender.Cli.csproj" />
     <ProjectReference Include="..\Airplay2.FakeReceiver\Airplay2.FakeReceiver.csproj" />

@@ -1,0 +1,22 @@
+@* Shows when the live event connection is down (the pages still work over REST, but do not update by themselves). *@
+@inherits BridgeComponentBase
+
+@if (State.Connection != EventConnectionState.Connected)
+{
+    <div class="connection-banner" role="status">
+        @if (State.Connection == EventConnectionState.Connecting)
+        {
+            <span>Connecting to the bridge for live updates…</span>
+        }
+        else
+        {
+            <span>
+                Live updates paused@(State.ConnectionError is { } error ? ": " + error : ".")
+                @if (State.NextAttemptAt is not null)
+                {
+                    <text> Retrying shortly.</text>
+                }
+            </span>
+        }
+    </div>
+}

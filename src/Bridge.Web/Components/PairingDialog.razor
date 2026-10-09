@@ -1,0 +1,114 @@
+@* The PIN dialog (SPEC-control.md 3.6, WORK-PLAN.md section 7): opened by a pairingRequired event (a connect needed a
+   PIN) or by the Pair button. The receiver shows its PIN while the dialog is open; a wrong PIN or an expired token
+   consume the pairing on the service side, so the dialog offers to start again (the receiver then shows a new PIN). *@
+@inherits BridgeComponentBase
+
+@if (State.Pairing is { } prompt)
+{
+    <div class="modal-backdrop">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pairing-title">
+            <h2 id="pairing-title">Pair with @State.NameOf(prompt.ReceiverId)</h2>
+            <p>@prompt.Message</p>
+            <form @onsubmit="SubmitAsync" @onsubmit:preventDefault>
+                <label for="pairing-pin">PIN</label>
+                <input id="pairing-pin" class="pin" type="text" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="8" placeholder="0000" @bind="_pin" @bind:event="oninput" disabled="@_busy" />
+                @if (_result is { } result && result.Outcome != PinOutcome.Paired)
+                {
+                    <p class="error" role="alert">@Explain(result)</p>
+                }
+                <div class="actions">
+                    @if (_result?.Outcome is PinOutcome.Rejected or PinOutcome.Expired)
+                    {
+                        <button type="button" class="primary" @onclick="RestartAsync" disabled="@_busy">Start again</button>
+                    }
+                    else
+                    {
+                        <button type="submit" class="primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_pin))">Pair</button>
+                    }
+                    <button type="button" @onclick="Cancel" disabled="@_busy">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
+
+@code {
+    private string? _token;
+    private string _pin = string.Empty;
+    private PinResult? _result;
+    private bool _busy;
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Reset();
+    }
+
+    /// <inheritdoc />
+    protected override void OnBridgeStateChanged() => Reset();
+
+    private void Reset()
+    {
+        // A new prompt (another receiver, or a new token after "Start again") starts with an empty field.
+        if (State.Pairing?.Token != _token)
+        {
+            _token = State.Pairing?.Token;
+            _pin = string.Empty;
+            _result = null;
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (State.Pairing is not { } prompt || _busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            _result = await Commands.SubmitPinAsync(prompt, _pin, Lifetime);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RestartAsync()
+    {
+        if (State.Pairing is not { } prompt)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            if (!await Commands.StartPairingAsync(prompt.ReceiverId, Lifetime))
+            {
+                State.ClosePairing(prompt.Token);
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        // The service closes an abandoned pairing after its timeout; nothing to call.
+        State.ClosePairing(State.Pairing?.Token);
+    }
+
+    private static string Explain(PinResult result) => result.Outcome switch
+    {
+        PinOutcome.Rejected => "The receiver rejected the PIN. Start again; it then shows a new PIN.",
+        PinOutcome.Expired => "This pairing expired. Start again; the receiver then shows a new PIN.",
+        _ => result.Message ?? "The pairing failed.",
+    };
+}

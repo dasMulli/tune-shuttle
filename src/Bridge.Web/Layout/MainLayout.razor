@@ -1,14 +1,46 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject BridgeState State
+@inject BridgeCommands Commands
 
 <div class="page">
-    <nav class="sidebar">
-        <h2>AirPlay Bridge</h2>
+    <nav class="sidebar" aria-label="Main">
+        <div class="brand">
+            <span class="brand-name">AirPlay Bridge</span>
+            <LiveIndicator />
+        </div>
         <NavLink href="" Match="NavLinkMatch.All">Receivers</NavLink>
         <NavLink href="groups">Groups</NavLink>
+        <NavLink href="now-playing">Now Playing</NavLink>
         <NavLink href="settings">Settings</NavLink>
         <NavLink href="diagnostics">Diagnostics</NavLink>
     </nav>
     <main>
+        <ConnectionBanner />
+        <NoticeArea />
         @Body
     </main>
 </div>
+
+<PairingDialog />
+
+@code {
+    private readonly CancellationTokenSource _lifetime = new();
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnInitializedAsync()
+    {
+        // REST first: the pages show data even before (or without) the WebSocket; the WebSocket snapshot supersedes it.
+        if (!State.Loaded)
+        {
+            await Commands.RefreshAsync(_lifetime.Token);
+        }
+    }
+}

@@ -1,0 +1,234 @@
+@page "/groups"
+@inherits BridgeComponentBase
+
+<PageTitle>Groups · AirPlay Bridge</PageTitle>
+
+<h1>Groups</h1>
+<p class="lead">
+    A group plays to several receivers in sync. Its master level G scales every member's level r_i by G'/G, so the balance
+    between rooms stays as you set it (members clamp at 100). The Spotify volume slider moves G of the active group.
+</p>
+
+<form class="create-group" @onsubmit="CreateAsync" @onsubmit:preventDefault>
+    <label for="new-group">New group</label>
+    <input id="new-group" type="text" maxlength="@MaxNameLength" placeholder="Living room + kitchen" @bind="_newName" @bind:event="oninput" />
+    <button type="submit" class="primary" disabled="@(_creating || string.IsNullOrWhiteSpace(_newName))">Create</button>
+</form>
+
+@if (State.Loaded && State.Groups.Count == 0)
+{
+    <div class="empty">
+        <p>No groups yet. Create one, add receivers, then activate it.</p>
+    </div>
+}
+
+<div class="cards wide">
+    @foreach (var group in State.Groups)
+    {
+        var busy = _busy.Contains(group.Id);
+        var draft = _masterDrafts.TryGetValue(group.Id, out var d) ? d : (int?)null;
+        var members = draft is { } g ? GroupVolumePreview.Preview(group, g) : group.Members;
+        var candidates = State.Receivers.Where(r => group.Members.All(m => m.ReceiverId != r.Id)).ToList();
+        <article class="card group @(group.Active ? "active" : null)" data-group-id="@group.Id" @key="group.Id">
+            <header class="card-header">
+                @if (_renaming == group.Id)
+                {
+                    <form class="rename" @onsubmit="() => RenameAsync(group.Id)" @onsubmit:preventDefault>
+                        <input type="text" aria-label="Group name" maxlength="@MaxNameLength" @bind="_renameText" @bind:event="oninput" />
+                        <button type="submit" class="primary" disabled="@(busy || string.IsNullOrWhiteSpace(_renameText))">Save</button>
+                        <button type="button" @onclick="() => _renaming = null">Cancel</button>
+                    </form>
+                }
+                else
+                {
+                    <h2>@group.Name</h2>
+                    @if (group.Active)
+                    {
+                        <span class="badge state-streaming">Active</span>
+                    }
+                }
+            </header>
+
+            <div class="actions">
+                @if (group.Active)
+                {
+                    <button type="button" @onclick="() => DeactivateAsync(group.Id)" disabled="@busy">Stop output</button>
+                }
+                else
+                {
+                    <button type="button" class="primary" @onclick="() => ActivateAsync(group.Id)" disabled="@(busy || group.Members.Count == 0)"
+                            title="@(group.Members.Count == 0 ? "Add receivers first" : "Play to this group")">Activate</button>
+                }
+                @if (_renaming != group.Id)
+                {
+                    <button type="button" class="subtle" @onclick="() => StartRename(group)">Rename</button>
+                }
+                @if (_confirmDelete == group.Id)
+                {
+                    <span class="confirm">
+                        Delete @group.Name?
+                        <button type="button" class="danger" @onclick="() => DeleteAsync(group.Id)" disabled="@busy">Delete</button>
+                        <button type="button" @onclick="() => _confirmDelete = null">Keep</button>
+                    </span>
+                }
+                else
+                {
+                    <button type="button" class="subtle" @onclick="() => _confirmDelete = group.Id">Delete</button>
+                }
+            </div>
+
+            <LevelSlider Value="group.MasterLevel" Label="Master (G)" Disabled="group.Members.Count == 0"
+                         DraftChanged="level => OnMasterDraft(group.Id, level)"
+                         Send="(level, ct) => Commands.SetGroupLevelAsync(group.Id, level, ct)" />
+            @if (draft is { } preview && GroupVolumePreview.Clamps(group, preview))
+            {
+                <p class="muted small">Some members reach 100 and clamp; the balance between them changes.</p>
+            }
+
+            @if (members.Count == 0)
+            {
+                <p class="muted">No members yet.</p>
+            }
+            else
+            {
+                <ul class="members">
+                    @foreach (var member in members)
+                    {
+                        <li class="member @(draft is null ? null : "previewing")" data-receiver-id="@member.ReceiverId" @key="member.ReceiverId">
+                            <div class="member-header">
+                                <span class="member-name">@member.Name</span>
+                                <StateBadge State="member.State" />
+                                <button type="button" class="subtle small" aria-label="Remove @member.Name"
+                                        @onclick="() => RemoveAsync(group.Id, member.ReceiverId)" disabled="@busy">Remove</button>
+                            </div>
+                            <LevelSlider Value="member.Level" Label="r_i" Disabled="draft is not null"
+                                         Send="(level, ct) => Commands.SetMemberLevelAsync(group.Id, member.ReceiverId, level, ct)" />
+                        </li>
+                    }
+                </ul>
+            }
+
+            @if (candidates.Count > 0)
+            {
+                <form class="add-member" @onsubmit="() => AddAsync(group.Id)" @onsubmit:preventDefault>
+                    <label for="add-@group.Id">Add receiver</label>
+                    <select id="add-@group.Id" value="@AddChoice(group.Id)" @onchange="e => _addChoice[group.Id] = e.Value?.ToString() ?? string.Empty">
+                        <option value="">Choose…</option>
+                        @foreach (var receiver in candidates)
+                        {
+                            <option value="@receiver.Id">@receiver.Name@(receiver.Online ? string.Empty : " (offline)")</option>
+                        }
+                    </select>
+                    <button type="submit" disabled="@(busy || string.IsNullOrEmpty(AddChoice(group.Id)))">Add</button>
+                </form>
+            }
+        </article>
+    }
+</div>
+
+@code {
+    /// <summary>Longest group name the service accepts.</summary>
+    public const int MaxNameLength = 64;
+
+    private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _masterDrafts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _addChoice = new(StringComparer.Ordinal);
+    private string _newName = string.Empty;
+    private bool _creating;
+    private string? _renaming;
+    private string _renameText = string.Empty;
+    private string? _confirmDelete;
+
+    private string AddChoice(string groupId) => _addChoice.TryGetValue(groupId, out var choice) ? choice : string.Empty;
+
+    private void OnMasterDraft(string groupId, int? level)
+    {
+        // The master slider reports the dragged G; the members show the scaled r_i until the bridge answers.
+        if (level is { } g)
+        {
+            _masterDrafts[groupId] = g;
+        }
+        else
+        {
+            _masterDrafts.Remove(groupId);
+        }
+    }
+
+    private void StartRename(GroupDto group)
+    {
+        _renaming = group.Id;
+        _renameText = group.Name;
+    }
+
+    private async Task CreateAsync()
+    {
+        var name = _newName.Trim();
+        if (name.Length == 0 || _creating)
+        {
+            return;
+        }
+
+        _creating = true;
+        try
+        {
+            if (await Commands.CreateGroupAsync(name, Lifetime) is not null)
+            {
+                _newName = string.Empty;
+            }
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    private Task RenameAsync(string groupId) => RunAsync(groupId, async ct =>
+    {
+        if (await Commands.RenameGroupAsync(groupId, _renameText.Trim(), ct))
+        {
+            _renaming = null;
+        }
+    });
+
+    private Task DeleteAsync(string groupId) => RunAsync(groupId, async ct =>
+    {
+        await Commands.DeleteGroupAsync(groupId, ct);
+        _confirmDelete = null;
+    });
+
+    private Task ActivateAsync(string groupId) => RunAsync(groupId, ct => Commands.ActivateGroupAsync(groupId, ct));
+
+    private Task DeactivateAsync(string groupId) => RunAsync(groupId, ct => Commands.ClearOutputAsync(ct));
+
+    private Task RemoveAsync(string groupId, string receiverId) => RunAsync(groupId, ct => Commands.RemoveMemberAsync(groupId, receiverId, ct));
+
+    private Task AddAsync(string groupId) => RunAsync(groupId, async ct =>
+    {
+        var receiverId = AddChoice(groupId);
+        if (receiverId.Length > 0 && await Commands.AddMemberAsync(groupId, receiverId, null, ct))
+        {
+            _addChoice.Remove(groupId);
+        }
+    });
+
+    private async Task RunAsync(string groupId, Func<CancellationToken, Task> action)
+    {
+        if (!_busy.Add(groupId))
+        {
+            return;
+        }
+
+        try
+        {
+            await action(Lifetime);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the page went away
+        }
+        finally
+        {
+            _busy.Remove(groupId);
+        }
+    }
+}

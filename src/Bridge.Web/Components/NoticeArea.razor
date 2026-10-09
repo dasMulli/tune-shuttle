@@ -1,0 +1,49 @@
+@* Banner notices (errors from the API, confirmations). Success and info notices go away after a few seconds. *@
+@inherits BridgeComponentBase
+
+@if (State.Notices.Count > 0)
+{
+    <div class="notices" aria-live="polite">
+        @foreach (var notice in State.Notices)
+        {
+            <div class="notice notice-@notice.Kind.ToString().ToLowerInvariant()" role="@(notice.Kind == NoticeKind.Error ? "alert" : "status")">
+                <span>@notice.Text</span>
+                <button type="button" class="dismiss" aria-label="Dismiss" @onclick="() => State.Dismiss(notice.Id)">×</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>How long success and info notices stay.</summary>
+    public static readonly TimeSpan AutoDismiss = TimeSpan.FromSeconds(6);
+
+    private readonly HashSet<long> _scheduled = [];
+
+    /// <inheritdoc />
+    protected override void OnAfterRender(bool firstRender)
+    {
+        foreach (var notice in State.Notices)
+        {
+            if (notice.Kind != NoticeKind.Error && _scheduled.Add(notice.Id))
+            {
+                Observe(DismissLaterAsync(notice.Id, Lifetime));
+            }
+        }
+    }
+
+    private async Task DismissLaterAsync(long id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(AutoDismiss, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        State.Dismiss(id);
+        _scheduled.Remove(id);
+    }
+}

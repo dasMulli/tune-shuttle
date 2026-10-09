@@ -1,0 +1,236 @@
+@page "/diagnostics"
+@inherits BridgeComponentBase
+@inject BridgeEventClient Events
+
+<PageTitle>Diagnostics · AirPlay Bridge</PageTitle>
+
+<h1>Diagnostics</h1>
+
+<div class="cards">
+    <section class="card">
+        <h2>Status</h2>
+        @if (State.Status is { } status)
+        {
+            <dl class="facts">
+                <dt>Version</dt><dd>@status.Version</dd>
+                <dt>Running since</dt><dd>@status.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)</dd>
+                <dt>Spotify</dt><dd>@(status.SpotifyConnected ? "connected" + (status.SpotifyUser is { } user ? " as " + user : string.Empty) : "not connected")</dd>
+                <dt>Device name</dt><dd>@status.DeviceName</dd>
+                <dt>Output</dt><dd>@(status.OutputConnected ? "connected" : "not connected")</dd>
+                <dt>Receivers on the network</dt><dd>@status.Receivers</dd>
+                <dt>Live updates</dt><dd>@State.Connection.ToString().ToLowerInvariant() (@Events.Connections connection(s), @Events.EventsReceived events)</dd>
+            </dl>
+        }
+        else
+        {
+            <p class="muted">Loading…</p>
+        }
+    </section>
+
+    <section class="card">
+        <h2>Network and statistics</h2>
+        @if (_diagnostics is { } d)
+        {
+            <dl class="facts">
+                <dt>Timing port (UDP)</dt><dd>@Port(d.TimingPort)</dd>
+                <dt>Control port (UDP)</dt><dd>@Port(d.ControlPort)</dd>
+                <dt>Packets sent</dt><dd>@d.PacketsSent.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</dd>
+                <dt>Retransmit requests</dt><dd>@d.RetransmitRequests.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</dd>
+                <dt>Late pacer wake-ups</dt><dd>@d.LateWakeups.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</dd>
+            </dl>
+            <h3>Local addresses</h3>
+            @if (d.LocalAddresses.Count == 0)
+            {
+                <p class="muted">None reported.</p>
+            }
+            else
+            {
+                var ordered = OrderAddresses(d.LocalAddresses);
+                <ul class="plain addresses">
+                    @foreach (var address in ordered.Take(ShownAddresses))
+                    {
+                        <li><code>@address</code></li>
+                    }
+                </ul>
+                @if (ordered.Count > ShownAddresses)
+                {
+                    <details>
+                        <summary>@(ordered.Count - ShownAddresses) more</summary>
+                        <ul class="plain addresses">
+                            @foreach (var address in ordered.Skip(ShownAddresses))
+                            {
+                                <li><code>@address</code></li>
+                            }
+                        </ul>
+                    </details>
+                }
+            }
+            <p class="muted small">Updated @_updated?.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)</p>
+        }
+        else
+        {
+            <p class="muted">@(_error ?? "Loading…")</p>
+        }
+    </section>
+
+    <section class="card">
+        <h2>Pending probes</h2>
+        @if (_diagnostics is { OpenQuestionsPending.Count: > 0 } pending)
+        {
+            <ul>
+                @foreach (var probe in pending.OpenQuestionsPending)
+                {
+                    <li>@probe</li>
+                }
+            </ul>
+        }
+        else
+        {
+            <p class="muted">None.</p>
+        }
+    </section>
+</div>
+
+<section class="card log">
+    <header class="card-header">
+        <h2>Live log</h2>
+        <div class="log-controls">
+            <label for="log-level">Level</label>
+            <select id="log-level" @bind="_minimumLevel">
+                <option value="0">All</option>
+                <option value="2">Information</option>
+                <option value="3">Warning</option>
+                <option value="4">Error</option>
+            </select>
+            <button type="button" class="subtle" @onclick="() => _paused = !_paused">@(_paused ? "Resume" : "Pause")</button>
+            <button type="button" class="subtle" @onclick="State.ClearLog">Clear</button>
+        </div>
+    </header>
+    @{
+        var lines = Lines();
+    }
+    @if (lines.Count == 0)
+    {
+        @if (_diagnostics is { RecentLog.Count: > 0 } recent && State.Log.Count == 0)
+        {
+            <div class="log-lines" role="log">
+                @foreach (var text in recent.RecentLog)
+                {
+                    <div class="log-line">@text</div>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="muted">No log lines yet.</p>
+        }
+    }
+    else
+    {
+        <div class="log-lines" role="log">
+            @foreach (var line in lines)
+            {
+                <div class="log-line level-@line.Level.ToLowerInvariant()">@line.At.ToLocalTime().ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) @line.Level @line.Category: @line.Message</div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    /// <summary>How often the statistics refresh.</summary>
+    public static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
+
+    private DiagnosticsDto? _diagnostics;
+    private DateTimeOffset? _updated;
+    private string? _error;
+    private int _minimumLevel;
+    private bool _paused;
+    private IReadOnlyList<BridgeEvent.LogLine> _frozen = [];
+    private bool _subscribed;
+
+    /// <summary>
+    /// Severity rank of a log level name: the service writes the console's short forms (trce, dbug, info, warn, fail,
+    /// crit; Bridge.Service LogBuffer.LevelName); the full Microsoft.Extensions.Logging names are accepted as well.
+    /// </summary>
+    public static int Rank(string level) => level.ToLowerInvariant() switch
+    {
+        "trce" or "trace" => 0,
+        "dbug" or "debug" => 1,
+        "info" or "information" => 2,
+        "warn" or "warning" => 3,
+        "fail" or "error" => 4,
+        "crit" or "critical" => 5,
+        _ => 2,
+    };
+
+    /// <summary>Addresses listed before the rest is folded away.</summary>
+    public const int ShownAddresses = 4;
+
+    /// <summary>
+    /// IPv4 first (what receivers on a home LAN use), then the rest in the service's order. Entries read
+    /// "interface: address" (Bridge.Service BridgeController.LocalAddresses); one that does not parse goes last.
+    /// </summary>
+    public static IReadOnlyList<string> OrderAddresses(IReadOnlyList<string> addresses) =>
+        [.. addresses.OrderBy(AddressRank)];
+
+    private static int AddressRank(string entry)
+    {
+        var separator = entry.LastIndexOf(": ", StringComparison.Ordinal);
+        var address = separator < 0 ? entry : entry[(separator + 2)..];
+        if (!System.Net.IPAddress.TryParse(address, out var parsed))
+        {
+            return 2;
+        }
+
+        return parsed.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 0 : 1;
+    }
+
+    private static string Port(int port) => port == 0 ? "not bound yet" : port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <inheritdoc />
+    protected override async Task OnInitializedAsync()
+    {
+        _subscribed = true;
+        await Events.SetLogSubscriptionAsync(true, Lifetime);
+        await RefreshAsync(Lifetime);
+        Every(RefreshInterval, async ct =>
+        {
+            await RefreshAsync(ct);
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && _subscribed)
+        {
+            _subscribed = false;
+            Observe(Events.SetLogSubscriptionAsync(false, CancellationToken.None));
+        }
+    }
+
+    private IReadOnlyList<BridgeEvent.LogLine> Lines()
+    {
+        if (!_paused)
+        {
+            _frozen = State.Log;
+        }
+
+        return _minimumLevel == 0 ? _frozen : [.. _frozen.Where(l => Rank(l.Level) >= _minimumLevel)];
+    }
+
+    private async Task RefreshAsync(CancellationToken ct)
+    {
+        try
+        {
+            _diagnostics = await Commands.Api.GetDiagnosticsAsync(ct);
+            _updated = DateTimeOffset.Now;
+            _error = null;
+        }
+        catch (Exception ex) when (ex is BridgeApiException or HttpRequestException or System.Text.Json.JsonException)
+        {
+            _error = "Diagnostics unavailable. " + BridgeCommands.Describe(ex);
+        }
+    }
+}
