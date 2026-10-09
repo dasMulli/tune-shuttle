@@ -48,78 +48,21 @@ public interface IStreamTransport : IAsyncDisposable
     /// Sends one encoded frame with the given sequence/timestamp to every receiver (encrypt per receiver, store in each
     /// history), and sends sync packets when due. Called by the pacer at 352-frame cadence.
     /// </summary>
+    /// <param name="sequence">RTP sequence number of the packet.</param>
+    /// <param name="timestamp">RTP timestamp of the packet's first frame.</param>
+    /// <param name="alacFrame">The encoded frame (encrypted per receiver by the transport).</param>
+    /// <param name="ntpNow">
+    /// The instant the packet is <b>due</b> (the pacer's deadline as an NTP timestamp), not the instant of the call: it is
+    /// the <c>T</c> of any sync sent with this packet, so <c>now_frame</c> and <c>T</c> advance in lock-step
+    /// (SPEC-audio.md 2.3). The name is historical.
+    /// </param>
     void Send(ushort sequence, uint timestamp, ReadOnlySpan<byte> alacFrame, ulong ntpNow);
 
     /// <summary>Sends sync packets to every receiver now (resume / re-anchor).</summary>
     void SendSync(uint nextTimestamp, ulong ntpNow, bool first);
 }
 
-/// <summary>
-/// Type 96 over UDP (SPEC-audio.md 1-3). Timing is pluggable (SPEC.md D1): with <see cref="Ptp"/> null the session is
-/// NTP-timed (0xD4 syncs, the timing responder answers 0xD2); with an <see cref="IPtpMaster"/> the session is PTP-timed
-/// and the syncs are the 28-byte 0xD7 <see cref="PtpSyncPacket"/> carrying <c>Clock.PtpNowNanos</c> and the master's
-/// clock id (SPEC-audio.md 4.4). Which one the SpeakerA needs is decided by probe P1 in wave 3.
-/// </summary>
-public sealed class RealtimeStreamTransport : IStreamTransport
-{
-    /// <summary>Creates the transport over the shared sockets.</summary>
-    public RealtimeStreamTransport(IMasterClock clock, ITimingResponder timing, IControlPort control, int latencyFrames = RealtimeStreamConstants.DefaultLatencyFrames, IPtpMaster? ptp = null)
-    {
-        Clock = clock;
-        Timing = timing;
-        Control = control;
-        LatencyFrames = latencyFrames;
-        Ptp = ptp;
-    }
-
-    /// <inheritdoc />
-    public IMasterClock Clock { get; }
-
-    /// <summary>The timing responder (used when <see cref="Ptp"/> is null).</summary>
-    public ITimingResponder Timing { get; }
-
-    /// <summary>The control port.</summary>
-    public IControlPort Control { get; }
-
-    /// <summary>L in frames.</summary>
-    public int LatencyFrames { get; }
-
-    /// <summary>The PTP grandmaster when the realtime stream runs under PTP; null for NTP timing.</summary>
-    public IPtpMaster? Ptp { get; }
-
-    /// <inheritdoc />
-    public StreamType Type => StreamType.Realtime;
-
-    /// <inheritdoc />
-    public TimingProtocol TimingProtocol => Ptp is null ? TimingProtocol.Ntp : TimingProtocol.Ptp;
-
-    /// <inheritdoc />
-    public int ControlPort => Control.Port;
-
-    /// <inheritdoc />
-    public int TimingPort => Ptp is null ? Timing.Port : 0;
-
-    /// <inheritdoc />
-    public Task StartAsync(CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: audio-pipeline-group-sync)");
-
-    /// <inheritdoc />
-    public void AddReceiver(string receiverId, ReceiverStreamEndpoint endpoint) => throw new NotImplementedException("TODO(impl: audio-pipeline-group-sync)");
-
-    /// <inheritdoc />
-    public void RemoveReceiver(string receiverId) => throw new NotImplementedException("TODO(impl: audio-pipeline-group-sync)");
-
-    /// <inheritdoc />
-    public void Resync(string receiverId) => throw new NotImplementedException("TODO(impl: audio-pipeline-group-sync)");
-
-    /// <inheritdoc />
-    public void Send(ushort sequence, uint timestamp, ReadOnlySpan<byte> alacFrame, ulong ntpNow) => throw new NotImplementedException("TODO(impl: audio-pipeline-group-sync)");
-
-    /// <inheritdoc />
-    public void SendSync(uint nextTimestamp, ulong ntpNow, bool first) => throw new NotImplementedException("TODO(impl: audio-pipeline-group-sync)");
-
-    /// <inheritdoc />
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-}
+// RealtimeStreamTransport (type 96, NTP and PTP syncs) lives in RealtimeStreamTransport.cs (package audio-pipeline-group-sync).
 
 /// <summary>The PTP grandmaster the buffered stream (and the realtime stream under PTP) needs (SPEC-audio.md 4.4). Package ptp-master.</summary>
 public interface IPtpMaster : IAsyncDisposable

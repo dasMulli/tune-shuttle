@@ -226,11 +226,26 @@ public sealed class RtspServerConnection : IAsyncDisposable
     public long SentFrames => Interlocked.Read(ref _sentFrames);
 
     /// <summary>Starts serving an accepted socket.</summary>
-    public static RtspServerConnection Start(Socket socket, RtspRequestHandler handler, RtspServerConnectionOptions? options = null, ILogger? logger = null)
+    /// <param name="socket">The connected socket.</param>
+    /// <param name="handler">Serves incoming requests.</param>
+    /// <param name="options">Connection options.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="keys">
+    /// When set, HAP encryption is on before the read loop starts (server's view, as for <see cref="EnableEncryption"/>).
+    /// Use it for a channel that is encrypted from its first byte and whose peer may send at once: switching with
+    /// <see cref="EnableEncryption"/> after <c>Start</c> races the read loop, which may already have taken the first
+    /// ciphertext as plaintext and then waits for more bytes instead of serving the request.
+    /// </param>
+    public static RtspServerConnection Start(Socket socket, RtspRequestHandler handler, RtspServerConnectionOptions? options = null, ILogger? logger = null, HapChannelKeys? keys = null)
     {
         ArgumentNullException.ThrowIfNull(socket);
         ArgumentNullException.ThrowIfNull(handler);
         var connection = new RtspServerConnection(socket, handler, options ?? new RtspServerConnectionOptions(), logger ?? NullLogger.Instance);
+        if (keys is not null)
+        {
+            connection.EnableEncryptionCore(keys);
+        }
+
         connection._readLoop = connection.ReadLoopAsync();
         return connection;
     }

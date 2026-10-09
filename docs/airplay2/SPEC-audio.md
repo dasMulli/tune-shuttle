@@ -438,6 +438,11 @@ them).
 Unknown control packets: `[sps]` logs and ignores anything other than 0xD4/0xD6 (AirPlay 1) or 0xD7/0xD6
 (AirPlay 2) on its control port; log and ignore anything other than 0xD5 on ours.
 
+**Note (2026-10-09, `audio-pipeline-group-sync`, live against the Test Speaker ABCD, quiet tone):** (probe P14) with every
+50th packet withheld, the SpeakerA sent an 8-byte 0xD5 request (`80 D5`, from its announced control port) for each of the
+13 missing packets and accepted the wrapped 0xD6 answer from our control port: none was requested twice. During a
+normal 3 s tone it also asked for 3 real Wi-Fi losses. Form 1 (the default of D8) is right for the SpeakerA.
+
 ## 3. Multi-receiver (group) playback with the realtime stream
 
 This section describes how `[ot]` keeps N receivers in sync (`outputs/airplay.c`, GPL: described, not
@@ -510,6 +515,13 @@ positive `offset_frames` for a receiver whose output chain is faster than the ot
 `audioLatencies.outputLatencyMicros` when published (Section 1.5) plus a user trim stored per receiver in the
 `receivers` table. The audio packets themselves are identical for all receivers; only the sync packet differs.
 
+**Note (2026-10-09, `audio-pipeline-group-sync`, not live):** 1.5 says to treat a published output latency as an offset
+"to subtract from that receiver's `now_frame`", while this section says subtracting `d` makes the receiver play `d`
+frames **later**. A receiver whose output lags by `d` frames must play earlier, so the group player sets
+`offset_frames = configured offset - Audio-Latency` (i.e. it *adds* the published latency to `now_frame`); the user trim
+keeps the meaning of this section (positive = later). Untested on a device that publishes a latency (the SpeakerA
+publishes none: P7 fields, SPEC.md section 4).
+
 ### 3.4 The hard parts
 
 - Clock drift: each receiver measures our clock against its own (NTP: `[sps] rtp.c:893-968`, least-squares
@@ -543,6 +555,11 @@ positive `offset_frames` for a receiver whose output chain is faster than the ot
   Section 9, Q3. **Resolution** (SPEC.md D1): NTP first as PLAN.md says, gated by probe P1; the timing protocol is
   a pluggable part of the stream layer, so a refusal moves the realtime stream to PTP (0xD7 syncs, Section 4.4)
   without touching the ALAC/RTP/group code.
+
+**Note (2026-10-09, `audio-pipeline-group-sync`, live against the Test Speaker ABCD, quiet tone):** (probe P12, one
+receiver) after a session SETUP with our `groupUUID` and `groupContainsGroupLeader: false`, the SpeakerA's mDNS record
+kept `gid=<its device id>` and `gcgl=0` while streaming; unlike `[sps]` it does not republish the sender's group id.
+Nothing in the audio plane depends on it.
 
 ## 4. The buffered stream (type 103) and the PTP master
 
@@ -685,6 +702,29 @@ control.py:44-52, 79-85`):
 | 20 | 8 | the grandmaster clock identity, BE |
 
 `[sps]` anchors `now_frame - 11025` at T (`rtp.c:1728`) and does not need 0xD2/0xD3 timing in this mode.
+
+**Note (2026-10-09, `ptp-master`, probe P17; logs `artifacts/live/2026-10-09-P17-ptp-capture.log`,
+`-ptp-shairport*.log`).** What the two slaves actually send back to our grandmaster (`PtpMaster`, the layouts above,
+unchanged and accepted by both):
+
+- **nqptp (shairport-sync 5.5.2, Docker VM)**: exactly **two Announces** (its own EUI-64 clock, `logMessageInterval -2`,
+  both sequence 0, ~150 ms apart) right after the stream SETUP, then **nothing** for the rest of the session: no
+  Delay_Req, no Signaling, no Pdelay_Req. It nevertheless follows our clock (`NQPTP master clock ffff...` = our
+  `ClockID`, `set_ptp_anchor_info` with it) and the realtime stream plays from our 0xD7 syncs (20 s of silence into the
+  dummy backend: no missing/late packets). Consequence: libairptp's "peer dropped after 15 s without any packet" would
+  stop our Syncs to every shairport-sync receiver 15 s into the session (observed: dropped at 15.0 s with the rule
+  on). **Our grandmaster therefore keeps a silent peer** and only reports it (Warning, `PtpMasterEvent.PeerSilent`);
+  the peer leaves on `RemovePeer` (TEARDOWN). libairptp's drop is available as `PtpMasterOptions.DropSilentPeers`.
+- **Test Speaker ABCD (Apple SDK `PTPInfo AirPlay;2.0.10`)**: after `SETPEERS` one **Signaling** (port number 0x8000,
+  `logMessageInterval 127`, an 802.1AS message-interval-request TLV `00-80-C2/00-00-02` with linkDelay 0,
+  timeSync -3, announce -128); after the stream SETUP about **1 s of its own two-step Sync/Follow_Up (-3) and one
+  Announce (0)** with its own clock `02:1A:2B:FF:FE:3C:4D:5E`; then it yields to our Announce (class 6, priority 128)
+  and sends **Delay_Req about 8 per second** (125 ms, `logMessageInterval 0`) for the whole session, each answered by
+  our Delay_Resp (154 in 20 s), plus a Signaling about every 1 s at first. So A-Q8: the SpeakerA does send Delay_Req and
+  uses Delay_Resp; nqptp does not. Whether the SpeakerA holds sync without Delay_Resp was not tested (no audio in this
+  probe).
+- Both slaves first announce themselves; ignoring their Announces (we "always expect to become master") is right: both
+  ended up following us.
 
 ### 4.5 Pause, seek and flush on the buffered stream
 
@@ -971,6 +1011,15 @@ silence has been sent for longer than a threshold (for example 5 s) treat it as 
 pacer, and re-anchor on resume. Never let the timeline stall without a flush: a receiver that stops getting
 packets drains its buffer and `[sps]` resets its anchor after 7 s without control packets (`rtp.c:1757-1766`).
 
+**Note (2026-10-09, `audio-pipeline-group-sync`, sender-side stalls):** a deliberate deviation from "flush and
+re-anchor for every discontinuity" (3.4). When the pacer itself wakes more than `GroupPlayerOptions.StallThreshold`
+(default 1 s) after a deadline (GC pause, suspended VM), it neither sends the missed packets back to back (8.2: they
+would arrive after their play time and be dropped, 1.5) nor flushes: it advances the timestamp by the missed whole
+packets and keeps the anchor and the sequence counter. The `(now_frame, T)` relation stays valid, so the next periodic
+sync is unchanged and the receivers see a positive timestamp gap without a sequence gap; `[sps]` fills such a gap with
+silence when the packet after it is early relative to its play time (`player.c:4378-4440`). Shorter lateness is still
+caught up by back-to-back sends. Not yet observed on Apple-SDK receivers; counted as `GroupPlayer.Stalls` and logged.
+
 ### 8.4 Pause, seek, skip and track change
 
 | Spotify event | Sink/bridge action on the realtime stream |
@@ -983,6 +1032,12 @@ packets drains its buffer and `[sps]` resets its anchor after 7 s without contro
 | Volume | `SET_PARAMETER volume` per receiver with the group model's `r_i` (Section 6). |
 
 The buffered-stream equivalents are in Section 4.5.
+
+**Note (2026-10-09, `audio-pipeline-group-sync`):** implemented as written, with three details the table leaves open.
+(1) A pause drops the ring and the audio already sent, so playback resumes about `L + ring` later in the track than
+where it was heard; the metadata start is shifted by the dropped frames so progress stays consistent. (2) `Seeked`
+keeps the frames written after the bridge's call (the mark is taken when `FlushAsync` is entered). (3) The SpeakerA
+answers `FLUSH` after 2-3 s (SPEC-control.md 4.8 note); the pacer stays stopped until every member has answered.
 
 ### 8.5 Threads and clocks
 

@@ -143,8 +143,52 @@ are the working assumptions and the code keeps both branches where the parts nam
 - P21 Result (2026-10-09, SpeakerA): a `GET /info` sent as **one 2048-byte HAP frame** makes the SpeakerA **close the
   connection** without an answer; in normal sessions its own frames never exceed 1024 bytes. The 1024-byte send cap is
   required for the SpeakerA; the receive rule stays. Log: `-P21-large-frame.log`.
+- **P17** Result (2026-10-09, `ptp-master`; SpeakerA: P1-PTP control probe without audio, 20 s; shairport-sync 5.5.2 in
+  the Docker VM with 3-25 s of silence): the SpeakerA's slave sends a Signaling (802.1AS interval request: timeSync -3)
+  after SETPEERS, ~1 s of its own Sync/Follow_Up/Announce after the stream SETUP, then **Delay_Req ~8/s for the whole
+  session**, all answered by our Delay_Resp. **nqptp sends only two Announces at the start and nothing after (no
+  Delay_Req)**, yet follows our clock and plays the 0xD7-synced realtime stream (also through `RealtimeStreamTransport`
+  with `PtpMaster`). Because of nqptp, `PtpMaster` keeps silent peers (reported after 15 s) instead of libairptp's 15 s
+  drop (`PtpMasterOptions.DropSilentPeers` restores it). Details: SPEC-audio.md 4.4 note. Logs:
+  `artifacts/live/2026-10-09-P17-ptp-capture.log`, `-ptp-shairport.log`, `-ptp-shairport-transport.log`,
+  `-ptp-shairport-droprule-25s.log`, `-ptp-shairport-silent-peer-20s.log`.
+- **P1 (audio confirmation)** with P14, P9 (audio half), P12 (gid) and P7 (latency fields) Result (2026-10-09,
+  `audio-pipeline-group-sync`, SpeakerA, 3 s tone at -24 dBFS, level 15 = -25.5 dB, through `GroupPlayer` +
+  `RealtimeStreamTransport` under NTP; the CLI `play` of wave 5 does not exist yet, so the SpeakerALive test
+  `PlaybackLiveTests.SpeakerA_tone_3s_P1_P14` stood in for `airplay2 play tone:3 ... --i-know`): the initial `0x90` sync +
+  marker packet started the stream, timing requests kept coming (5 in the session), feedback and `GET_PARAMETER volume`
+  (-25.5) answered 200. **P14: every one of the 13 withheld packets (every 50th) was requested with an 8-byte 0xD5 from
+  the SpeakerA's announced control port and none was re-requested after our wrapped 0xD6 answer**: D8's default form works
+  on the SpeakerA; nothing else arrived on the control port. P9: DMAP is answered **500 also while audio flows**, artwork
+  and progress 200. P12: the SpeakerA's mDNS `gid` stayed its device id (`gcgl=0`) during the session, it does not
+  republish our `groupUUID` (single receiver; the two-member case is final integration). P7: the session SETUP answer
+  has only `eventPort`/`timingPort`, RECORD `Audio-Latency` is absent (0): no latency is published, the output delay
+  needs the microphone measurement. Audibility was not checked by a listener. Log: `-P1-audio-tone.log`.
+- P19 Result (2026-10-09, SpeakerA, 0.7 s of tone in total): pause = pacer stopped + `FLUSH` with the next seq/rtptime,
+  answered `200` **after 2.0 s**; resume after 2 s with a new `0x90` sync + marker packet at the announced values and
+  **no new RECORD** was accepted (timing, feedback, volume carried on; no retransmit requests); a seek-style `FLUSH`
+  while streaming was answered `200` **after 3.0 s**, then `0x90` + marker again. Stale audio after the flush needs a
+  listener. The SpeakerA's slow FLUSH answer makes a seek/skip cost FLUSH time + L before new audio is heard
+  (SPEC-control.md 4.8 note). Log: `-P19-pause-resume.log`.
+- P15 (audio part) Result (2026-10-09, SpeakerA, 2 s tone): with **32 random bytes as `shk`** the stream is accepted and
+  runs like the shared-secret key (no error, no retransmit request, session normal); the receiver gives no decrypt
+  feedback, so "plays in both cases" needs a listener. D4 unchanged. Log: `-P15-audio-random-key.log`.
+- P18 Result (2026-10-09, SpeakerA, 3 s tone): periodic syncs stopped for 2 s mid-tone (the 3-second audio rule allows no
+  longer gap with sound): no reaction on the wire, timing requests continued, the stream went on; 3 genuine Wi-Fi
+  losses were requested and answered meanwhile. The 3/6/10 s gaps and the audible effect remain for a session with the
+  user present. Log: `-P18-sync-gap.log`.
 - Timeouts (no P id, `session-streams`, SpeakerA on Wi-Fi): pair-setup answers took up to 7.9 s, RECORD once 9.9 s, and one
   M2 did not come within 10 s: D6's 10 s request timeout is too tight; the probes use 30 s (SPEC-control 2.1 note).
+- Wave 4 gate re-run (2026-10-09, after the review fixes; SpeakerA on a degraded Wi-Fi day: ICMP dropped, RTSP answers
+  1-9 s): `SpeakerA_tone_3s_P1_P14` passed (3 s tone, 64 withheld packets all requested and re-sent, 626 retransmit
+  requests in total, 0 send errors); SET_PARAMETER metadata answers were so slow that the session streamed ~22 s of
+  silence after the tone, and **TEARDOWN got no answer within `GroupPlayerOptions.TeardownTimeout` (10 s)**, so the
+  connection was closed instead. `SpeakerA_P19_pause_resume` passed: the pause FLUSH was answered after **16.7 s**, the
+  seek-style FLUSH **not within the 30 s RTSP timeout**; the group re-anchored anyway (`0x90` + marker, Streaming), as the
+  fixed resume path intends, and TEARDOWN was answered 200. The FLUSH answer time is not bounded by the SpeakerA (2-3 s on a
+  good day, see P19). P17 control probe repeated: 166 Delay_Resp (now domain 0 / correction 0 as libairptp) answered,
+  Delay_Req kept coming at the same rate, TEARDOWN 200. PTP ShairportLive tests (bridge-network script
+  `docker/shairport-sync/run-ptp-live-tests-in-vm.ps1`): 2/2 passed, nqptp took our clock as master.
 
 ## 5. Glossary of the names used in code
 

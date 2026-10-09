@@ -347,6 +347,30 @@ receiver-reported change leaves others alone); live (allowed from this wave, 3 s
 `airplay2 play tone:3 --to "Test Speaker ABCD" --level 15 --i-know` and the probes P1 (audio confirmation), P7, P12,
 P14, P15, P18, P19.
 
+Contract changes (recorded 2026-10-09 by audio-pipeline-group-sync; sender-api-cli and bridge-service build on them):
+- `GroupPlayer(transport, sessionFactory, options, logger)`: the factory returns a **paired** `IReceiverSession`
+  (GET /info and pairing are the factory's, as `AirplaySender.ConnectAsync` does them); `AddReceiverAsync` runs the
+  rest of D5 and throws `InvalidOperationException` for an unpaired session. Join-time metadata is sent in the
+  background (best effort), so `AddReceiverAsync` returns once the member is registered.
+- Ownership: the player owns and disposes the transport; it never disposes the shared clock, timing responder,
+  control port or PTP master (the host does).
+- `GroupPlayerEvent.MemberStateChanged(id, Lost, "removed")` is also published by `RemoveReceiverAsync`; a member whose
+  FLUSH did not complete is re-anchored on resume anyway (published as `Connected`).
+- `IStreamTransport.Send(..., ntpNow)`: `ntpNow` is the instant the packet is **due** (the pacer's deadline, the sync's
+  `T`), not the instant of the call.
+- `Timeline.Skip` keeps the anchor and the sequence (sender-side stall recovery, SPEC-audio 8.3 note); `Timeline`
+  keeps a 64-bit frame distance to its anchor, so deadlines stay monotonic past 2^32 frames.
+- `GroupVolumeModel.Levels` is an immutable snapshot replaced on each change (safe to iterate on any thread).
+- `IGroupPlayer.FlushAsync` does not re-send progress: after a seek the caller sends `SetNowPlayingAsync` with the new
+  elapsed time. Pause/flush cancellation bounds only the wait for the player; the FLUSH fan-out always completes.
+- New members: `GroupPlayerOptions.PrefillTimeout`, `StatisticsInterval`, `TeardownTimeout`, `StallThreshold`,
+  `VolumeMinInterval`, `RandomStreamKey`, `GroupContainsGroupLeader`, `IsMultiSelectAirPlay`, `Sender` (hosts supply a
+  stable `SenderIdentity`; the default is a test placeholder); `GroupPlayer.IsFaulted` (pacer thread failed: `Write`
+  discards, `StartAsync` throws, the host rebuilds the player), `Stalls`, `FramesDiscarded`; `RealtimeStreamTransport`
+  `AddTimingPeer`/`RemoveTimingPeer` (reference-counted PTP peers), `LatencyFrames`, statistics and probe switches.
+- Under PTP the grandmaster peer comes from the receiver's `timingPeerInfo.Addresses` in the SETUP answer
+  (`PtpSessionWiring.SelectPeerAddress`), falling back to the RTSP address.
+
 ### `ptp-master` (wave 4) — depends on: rtp-timing-control, session-streams (for the ShairportLive session) — size: ~1,600
 
 Delivers `PtpMaster : IPtpMaster` (SPEC-audio 4.4: UDP 319/320, Announce/Sync/Follow_Up/Delay_Resp/Signaling with

@@ -186,14 +186,17 @@ internal sealed class EventSide : IAsyncDisposable
         var side = new EventSide();
         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         await socket.ConnectAsync(new IPEndPoint(IPAddress.Loopback, port));
-        side.Server = RtspServerConnection.Start(socket, (_, request, _) =>
-        {
-            side._requests.Writer.TryWrite(request);
-            return ValueTask.FromResult(answer
-                ? RtspServerResponse.Ok() with { Headers = new Dictionary<string, string> { [RtspHeaders.AudioLatency] = "0" } }
-                : RtspServerResponse.None());
-        });
-        side.Server.EnableEncryption(keys);
+        // Encrypted before the read loop starts: the fake receiver may send updateInfo the moment it accepts.
+        side.Server = RtspServerConnection.Start(
+            socket,
+            (_, request, _) =>
+            {
+                side._requests.Writer.TryWrite(request);
+                return ValueTask.FromResult(answer
+                    ? RtspServerResponse.Ok() with { Headers = new Dictionary<string, string> { [RtspHeaders.AudioLatency] = "0" } }
+                    : RtspServerResponse.None());
+            },
+            keys: keys);
         return side;
     }
 

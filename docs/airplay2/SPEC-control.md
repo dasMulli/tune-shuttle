@@ -1063,6 +1063,12 @@ the track-change / seek / pause mechanism for realtime streams: flush, then resu
 arrived yet [sps:rtsp.c:1294-1395; ap2r:ap2-receiver.py:463-488]. shairport masks the sequence numbers with
 `0x7fffff` [sps:rtsp.c:1312, 1349, 1376-1378]. Response 200.
 
+**Note (2026-10-09, `audio-pipeline-group-sync`, live against the Test Speaker ABCD, quiet tone):** (probe P19) `FLUSH`
+with `RTP-Info: seq=<next>;rtptime=<next>` is answered `200`, but only **after 2.0 s** (pause: the pacer had stopped) and
+**3.0 s** (seek while streaming); a new `0x90` sync + marker packet at the announced values resumes the stream without a
+new `RECORD`. The group player waits for the answers before it re-anchors (this section and 6.3 order: FLUSH, 200, then
+sync and RTP), so on the SpeakerA a seek or skip is silent for the FLUSH round trip plus `L`.
+
 ### 4.9 `TEARDOWN`
 
 Two forms, both `TEARDOWN rtsp://…/… RTSP/1.0` with a bplist body:
@@ -1232,6 +1238,10 @@ audio** the SpeakerA answers every DMAP item with **`500 Internal Server Error`*
 D12 form `mlit{minm, asar, asal, astm}`, pyatv's minimal `mlit{minm, asar, asal}`, and the latter with `RTP-Info:
 seq=0;rtptime=`. Artwork (634-byte JPEG) and progress are answered `200`. Whether DMAP is accepted while audio plays is
 for wave 4; the session sends metadata best-effort (non-2xx logged, not thrown).
+
+**Note (2026-10-09, `audio-pipeline-group-sync`, live against the Test Speaker ABCD, quiet tone):** (probe P9, audio half)
+DMAP (`mlit{minm, asar, asal, astm}`) is answered **`500` also while audio is streaming**; artwork and progress `200`.
+The SpeakerA does not take DMAP text in this form; the group player keeps sending it best effort.
 
 ### 5.3 Artwork
 

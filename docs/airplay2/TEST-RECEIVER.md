@@ -46,6 +46,15 @@ docker compose -f docker/shairport-sync/compose.yaml down
 ./docker/shairport-sync/run-live-tests-in-vm.ps1 -Filter "FullyQualifiedName~Pairing"
 ```
 
+Correction (2026-10-09, wave 4 gate, from `ptp-master`'s live runs): row "Realtime stream under PTP" holds only when our
+grandmaster is **not** in the receiver's namespace. With `--net host` (`run-live-tests-in-vm.ps1`) nqptp already owns UDP
+319/320, so `PtpMaster` cannot bind them (`PtpMasterException`). The PTP tests run in a bridge-networked SDK container
+that reaches shairport-sync at the bridge gateway (`SPS_HOST=172.17.0.1`):
+`./docker/shairport-sync/run-ptp-live-tests-in-vm.ps1` (default filter `FullyQualifiedName~PtpLiveTests&Category=ShairportLive`).
+Known limitation of both VM scripts: the build output lives in the container (`/tmp/artifacts`), so `SessionLiveLog` does
+not find the repository root and the `artifacts/live/*.log` files of those runs stay in the container; the test output
+and `docker logs sps-test` are the record.
+
 Tests that target it read `SPS_HOST` (127.0.0.1) and `SPS_PORT` (7000), return early unless `AIRPLAY_LIVE=1` (the VM script sets it), carry `[Trait("Category", "ShairportLive")]`
 and are skipped in the normal `dotnet test` run. A password-protected variant for the 470/PIN path:
 `command: -a SPS-Test -o dummy --password 1234` in a second compose service.
