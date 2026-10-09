@@ -33,6 +33,20 @@ Not ported, by design:
 * FLAC decoding, which upstream only uses for local files;
 * `util.rs`' `keep_flushing`, which is not needed with `ClientWebSocket`.
 
+Verified end to end on 2026-10-09: the CLI in discovery mode was picked from the Spotify app, logged in via the
+Zeroconf credential handoff, and played through WASAPI, with pause, volume, seek, skip, shuffle, repeat and transfer
+all handled.
+
+Known issue:
+
+* `VorbisDecoder` asks NVorbis for `TotalSamples` on every seek and on load. NVorbis answers that by reading every
+  remaining Ogg page of the stream (verified with a counting stream), which upstream's symphonia avoids by reading only
+  the last page. On a streamed track in random-access mode this turns into one 64 KiB CDN request per page run, so a
+  burst of rapid track changes can exhaust the local 300-requests-per-30-s rate limiter for `scdn.co`; the fetch task
+  then dies and the load times out ("wait timeout exceeded"), and the player skips to the next track. Fix: find the
+  final granule position by reading the last Ogg page (the parser in `Decoder/Ogg.cs` can do this) instead of calling
+  `TotalSamples`, and only touch NVorbis' page index lazily.
+
 Tests: `dotnet test Librespot.sln` runs 819 tests, 809 pass and 10 are skipped (tests that need the network or an
 audio device). Set `LIBRESPOT_LIVE_TESTS=1` (plus `LIBRESPOT_ACCESS_TOKEN` for the Spotify ones) to run the live tests.
 The build treats warnings as errors.
