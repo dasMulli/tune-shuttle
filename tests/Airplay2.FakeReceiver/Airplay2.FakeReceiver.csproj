@@ -15,4 +15,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The SpeakerA's recorded GET /info body (SPEC-control.md 1.8), served with the fake's name and identity substituted. -->
+    <EmbeddedResource Include="..\..\docs\airplay2\test-vectors\SpeakerA-info-response.bplist" LogicalName="Airplay2.FakeReceiver.SpeakerA-info-response.bplist" />
+  </ItemGroup>
+
 </Project>
