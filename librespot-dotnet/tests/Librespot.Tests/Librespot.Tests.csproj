@@ -26,6 +26,8 @@
     <ProjectReference Include="..\..\src\Librespot.Playback\Librespot.Playback.csproj" />
     <ProjectReference Include="..\..\src\Librespot.Connect\Librespot.Connect.csproj" />
     <ProjectReference Include="..\..\src\Librespot.Discovery\Librespot.Discovery.csproj" />
+    <ProjectReference Include="..\..\src\Librespot.Cli\Librespot.Cli.csproj" />
+    <ProjectReference Include="..\..\examples\Librespot.Examples\Librespot.Examples.csproj" />
   </ItemGroup>
 
 </Project>

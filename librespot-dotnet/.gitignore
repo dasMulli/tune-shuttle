@@ -3,3 +3,6 @@ obj/
 *.user
 .vs/
 TestResults/
+
+# Credential/audio cache written by the get-creds and play-connect examples (never commit)
+.cache/
