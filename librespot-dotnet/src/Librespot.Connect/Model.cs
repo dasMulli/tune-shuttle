@@ -101,3 +101,29 @@ public abstract record PlayingTrack
     /// <summary>An internal Spotify identifier (not the id in the uri); used by official clients for sorting/skipping.</summary>
     public sealed record Uid(string Value) : PlayingTrack;
 }
+
+/// <summary>
+/// The playback status as tracked by spirc (upstream <c>SpircPlayStatus</c>, model.rs). Added by package
+/// <c>connect-state</c> because <c>ConnectState.SetStatus</c> consumes it.
+/// </summary>
+internal abstract record SpircPlayStatus
+{
+    private SpircPlayStatus()
+    {
+    }
+
+    /// <summary>Nothing is loaded.</summary>
+    public sealed record Stopped : SpircPlayStatus;
+
+    /// <summary>A track is loading and will start playing at <paramref name="PositionMs"/>.</summary>
+    public sealed record LoadingPlay(uint PositionMs) : SpircPlayStatus;
+
+    /// <summary>A track is loading and will be paused at <paramref name="PositionMs"/>.</summary>
+    public sealed record LoadingPause(uint PositionMs) : SpircPlayStatus;
+
+    /// <summary>Playing since <paramref name="NominalStartTime"/> (ms timestamp of position 0).</summary>
+    public sealed record Playing(long NominalStartTime, bool PreloadingOfNextTrackTriggered) : SpircPlayStatus;
+
+    /// <summary>Paused at <paramref name="PositionMs"/>.</summary>
+    public sealed record Paused(uint PositionMs, bool PreloadingOfNextTrackTriggered) : SpircPlayStatus;
+}

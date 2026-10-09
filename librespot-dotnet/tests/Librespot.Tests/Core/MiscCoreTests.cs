@@ -74,7 +74,7 @@ public class MiscCoreTests
         Assert.False(session.IsInvalid);
         session.Shutdown();
         Assert.True(session.IsInvalid);
-        Assert.Throws<NotImplementedException>(() => session.SendPacket(PacketType.Pong, new byte[4]));
+        Assert.Throws<SessionException>(() => session.SendPacket(PacketType.Pong, new byte[4]));
     }
 
     [Fact]
