@@ -25,6 +25,21 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Dapper" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+  </ItemGroup>
+
+  <!--
+    Development switch Bridge:FakeReceivers (WORK-PLAN.md web-app): Debug builds from the full repository reference the
+    in-process fake receiver. The container build copies src/ only (tests/ is in .dockerignore) and Release builds never
+    reference it, so neither ships test code.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' And Exists('..\..\tests\Airplay2.FakeReceiver\Airplay2.FakeReceiver.csproj')">
+    <DefineConstants>$(DefineConstants);BRIDGE_FAKE_RECEIVERS</DefineConstants>
+    <BridgeFakeReceivers>true</BridgeFakeReceivers>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(BridgeFakeReceivers)' == 'true'">
+    <ProjectReference Include="..\..\tests\Airplay2.FakeReceiver\Airplay2.FakeReceiver.csproj" />
   </ItemGroup>
 
   <ItemGroup>

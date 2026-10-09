@@ -3,8 +3,8 @@ using Bridge.Contracts;
 namespace Bridge.Service.Api;
 
 /// <summary>
-/// The REST + WebSocket surface (docs/airplay2/WORK-PLAN.md "Bridge API"). Every handler delegates to
-/// <see cref="BridgeController"/>; this file only maps routes and status codes.
+/// The REST + WebSocket surface (docs/airplay2/WORK-PLAN.md section 7 "Bridge API surface"). Every handler delegates to
+/// <see cref="BridgeController"/>; this file only maps routes.
 /// </summary>
 public static class Endpoints
 {
@@ -43,7 +43,7 @@ public static class Endpoints
         api.MapGet("/diagnostics", (BridgeController c, CancellationToken ct) => c.GetDiagnosticsAsync(ct));
         api.MapDelete("/spotify", (BridgeController c, CancellationToken ct) => c.ForgetSpotifyAsync(ct));
 
-        app.Map(ApiRoutes.Events, async (HttpContext http, EventHub hub, CancellationToken ct) =>
+        app.Map(ApiRoutes.Events, async (HttpContext http, EventHub hub, BridgeController c, CancellationToken ct) =>
         {
             if (!http.WebSockets.IsWebSocketRequest)
             {
@@ -52,84 +52,9 @@ public static class Endpoints
             }
 
             using var socket = await http.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
-            await hub.ServeAsync(socket, ct).ConfigureAwait(false);
+            await hub.ServeAsync(socket, c.GetSnapshotAsync, ct).ConfigureAwait(false);
         });
 
         return app;
     }
-}
-
-/// <summary>Application logic behind the routes; one instance per process (singleton), async and thread-safe.</summary>
-public sealed class BridgeController
-{
-    private static Task<IResult> NotImplemented() => Task.FromResult(Results.StatusCode(StatusCodes.Status501NotImplemented));
-
-    public Task<IResult> GetReceiversAsync(CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> GetReceiverAsync(string id, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> StartPairingAsync(string id, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> FinishPairingAsync(string id, PairingPinRequest body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> DeletePairingAsync(string id, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> ConnectReceiverAsync(string id, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> DisconnectReceiverAsync(string id, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> SetReceiverVolumeAsync(string id, VolumeRequest body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> SetReceiverOffsetAsync(string id, OffsetRequest body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> GetGroupsAsync(CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> CreateGroupAsync(GroupRequest body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> GetGroupAsync(string id, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> RenameGroupAsync(string id, GroupRequest body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> DeleteGroupAsync(string id, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> AddGroupMemberAsync(string id, GroupMemberRequest body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> RemoveGroupMemberAsync(string id, string receiverId, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> SetGroupVolumeAsync(string id, VolumeRequest body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> ActivateGroupAsync(string id, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> GetOutputAsync(CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> SetOutputAsync(OutputRequest body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> GetPlaybackAsync(CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> PlaybackCommandAsync(PlaybackCommandRequest body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> GetSettingsAsync(CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> SetSettingsAsync(SettingsDto body, CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> GetStatusAsync(CancellationToken ct) => Task.FromResult(Results.Ok(new StatusDto(
-        typeof(BridgeController).Assembly.GetName().Version?.ToString() ?? "0", false, null, "airplay2-bridge", false, 0, Program.StartedAt)));
-
-    public Task<IResult> GetDiagnosticsAsync(CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-
-    public Task<IResult> ForgetSpotifyAsync(CancellationToken ct) => NotImplemented(); // TODO(impl: bridge-service)
-}
-
-/// <summary>Fans <see cref="BridgeEvent"/>s out to every connected WebSocket as JSON (one message per event).</summary>
-public sealed class EventHub
-{
-    /// <summary>Publishes an event to all clients.</summary>
-    public void Publish(BridgeEvent bridgeEvent)
-    {
-        // TODO(impl: bridge-service)
-    }
-
-    /// <summary>Serves one client until it disconnects.</summary>
-    public Task ServeAsync(System.Net.WebSockets.WebSocket socket, CancellationToken cancellationToken) =>
-        throw new NotImplementedException("TODO(impl: bridge-service)");
 }

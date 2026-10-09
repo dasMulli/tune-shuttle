@@ -1069,6 +1069,21 @@ where it was heard; the metadata start is shifted by the dropped frames so progr
 keeps the frames written after the bridge's call (the mark is taken when `FlushAsync` is entered). (3) The SpeakerA
 answers `FLUSH` after 2-3 s (SPEC-control.md 4.8 note); the pacer stays stopped until every member has answered.
 
+**Note (2026-10-09, `bridge-service`, the `PlayerEvent` mapping, from the librespot-dotnet source; not observable live
+without a Spotify login):** the table's event names differ from the port, and one assumption does not hold there.
+(1) There is no `Changed`/`Started`: a track change is `PlayRequestIdChanged` -> `Loading(id, track, pos)` (absent when
+the track was preloaded) -> `TrackChanged(AudioItem)` -> `Playing(pos)` or `Paused(pos)` (`Player.cs` `StartPlayback`,
+`HandleCommandLoad`); the start position is only in the `Playing`/`Paused` that follows, so the bridge sends the
+now-playing on that event, with the elapsed time advanced by the frames the sink took since `TrackChanged`. (2) With
+`PlayerConfig.Gapless = true` (the default and what the bridge uses) the sink is **not** stopped around a load
+(`EnsureSinkStopped` only when `!Gapless`), so a manual skip arrives without `Stop()`/`Start()`. The bridge therefore
+treats a `Loading` while a track is playing and no `EndOfTrack` came first as the skip and flushes on it (before the new
+track's samples arrive); after `EndOfTrack` the timeline stays continuous. (3) A `Seeked` while paused needs no FLUSH
+(the pause emptied the ring and the receivers); only the now-playing is re-sent with the new position. (4) `Stopped`
+keeps the sessions (the sink's `Stop()` pauses the player; TEARDOWN only on a user disconnect). (5) The Spotify volume
+(`VolumeChanged`, 0..65535) becomes G as `round(v * 100 / 65535)`, coalesced to the latest value; levels changed in the
+web app or on a single receiver are pushed back to Spirc with `round(G * 65535 / 100)`, which maps back to the same G.
+
 ### 8.5 Threads and clocks
 
 - One master clock per process (`MasterClock`): monotonic, returns nanoseconds; the NTP timing responder,

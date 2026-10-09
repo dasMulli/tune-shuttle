@@ -135,6 +135,7 @@ public sealed record DiagnosticsDto(IReadOnlyList<string> RecentLog, IReadOnlyLi
 [JsonDerivedType(typeof(PairingRequired), "pairingRequired")]
 [JsonDerivedType(typeof(StatusChanged), "statusChanged")]
 [JsonDerivedType(typeof(LogLine), "log")]
+[JsonDerivedType(typeof(Pong), "pong")]
 public abstract record BridgeEvent
 {
     public sealed record ReceiverChanged(ReceiverDto Receiver) : BridgeEvent;
@@ -158,6 +159,9 @@ public abstract record BridgeEvent
     public sealed record StatusChanged(StatusDto Status) : BridgeEvent;
 
     public sealed record LogLine(DateTimeOffset At, string Level, string Category, string Message) : BridgeEvent;
+
+    /// <summary>The answer to a client's <see cref="BridgeClientMessage.Ping"/> (added by bridge-service).</summary>
+    public sealed record Pong(DateTimeOffset At) : BridgeEvent;
 }
 
 /// <summary>Messages from the web app to the service over the same WebSocket (subscription control only; actions use REST).</summary>

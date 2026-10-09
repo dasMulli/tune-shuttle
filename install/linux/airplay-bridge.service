@@ -11,7 +11,9 @@ User=airplay-bridge
 WorkingDirectory=/opt/airplay-bridge
 ExecStart=/opt/airplay-bridge/bridge
 Environment=BRIDGE_DataDirectory=/var/lib/airplay-bridge
-Environment=ASPNETCORE_URLS=http://0.0.0.0:8080
+# The web endpoint goes through the bridge's own configuration: appsettings.json has a Kestrel:Endpoints entry, which
+# overrides ASPNETCORE_URLS, so the port is set with the same key (BRIDGE_ prefix, __ as separator).
+Environment=BRIDGE_Kestrel__Endpoints__Http__Url=http://0.0.0.0:8080
 Restart=on-failure
 RestartSec=5
 # The pacer wants a real-time-ish scheduling class; allow it to raise its priority.
