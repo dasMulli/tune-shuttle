@@ -61,7 +61,10 @@ public enum PairingFailure
     /// <summary>Pair-verify rejected: persisted credentials are stale; delete and re-pair.</summary>
     CredentialsRejected,
 
-    /// <summary>Proof mismatch, bad signature or malformed TLV.</summary>
+    /// <summary>
+    /// Proof mismatch, bad signature, malformed TLV, an unexpected HTTP status, or any other TLV error the receiver sent
+    /// in regular pair-setup (<c>Unknown</c>, <c>MaxPeers</c>, <c>Unavailable</c>; see <see cref="PairingException.TlvError"/>).
+    /// </summary>
     Protocol,
 }
 
@@ -73,17 +76,26 @@ public sealed class PairingException(PairingFailure failure, string message, Exc
 
     /// <summary>The TLV error code when the receiver sent one.</summary>
     public TlvError? TlvError { get; init; }
+
+    /// <summary>The HTTP status when the receiver answered a pairing POST with a non-2xx status (e.g. 470).</summary>
+    public int? StatusCode { get; init; }
+
+    /// <summary>The receiver's <c>RetryDelay</c> item (TLV 0x08) when it sent one with <c>BackOff</c>.</summary>
+    public TimeSpan? RetryAfter { get; init; }
 }
 
 /// <summary>State between M2 and M3 of a PIN pairing while the web app asks the user for the PIN.</summary>
 public sealed class PinPairingInProgress
 {
-    internal PinPairingInProgress(IRtspConnection connection, ControllerIdentity controller, byte[] salt, byte[] serverPublicKey)
+    private int _finished;
+
+    internal PinPairingInProgress(IRtspConnection connection, ControllerIdentity controller, byte[] salt, byte[] serverPublicKey, TlvMethod method = TlvMethod.PairSetup)
     {
         Connection = connection;
         Controller = controller;
         Salt = salt;
         ServerPublicKey = serverPublicKey;
+        Method = method;
     }
 
     /// <summary>The connection the pairing runs on; must stay open until <see cref="IPairingClient.FinishPinPairingAsync"/>.</summary>
@@ -97,6 +109,16 @@ public sealed class PinPairingInProgress
 
     /// <summary>SRP B from M2.</summary>
     public byte[] ServerPublicKey { get; }
+
+    /// <summary>The method byte that was sent in M1 (open question C-7.6 / probe P6).</summary>
+    public TlvMethod Method { get; }
+
+    /// <summary>
+    /// Marks the state as consumed. The receiver's SRP session accepts exactly one M3, so a second
+    /// <see cref="IPairingClient.FinishPinPairingAsync"/> on the same state must start over with
+    /// <see cref="IPairingClient.StartPinPairingAsync"/>. Returns false when it was already consumed.
+    /// </summary>
+    internal bool TryConsume() => Interlocked.Exchange(ref _finished, 1) == 0;
 }
 
 /// <summary>HomeKit pairing procedures over an <see cref="IRtspConnection"/> (SPEC-control.md 3).</summary>
@@ -142,26 +164,4 @@ public interface IPairingStore
 
     /// <summary>Deletes a pairing (after a pair-verify failure or on user request).</summary>
     Task DeleteAsync(string receiverId, CancellationToken cancellationToken);
-}
-
-/// <summary>Implementation of the three HAP procedures with <see cref="SrpClient"/>, <see cref="X25519KeyPair"/>, <see cref="Ed25519KeyPair"/> and <see cref="Tlv8Document"/>.</summary>
-public sealed class HapPairingClient(ILogger<HapPairingClient> logger) : IPairingClient
-{
-    private ILogger Logger { get; } = logger;
-
-    /// <inheritdoc />
-    public Task<PairingSession> PairTransientAsync(IRtspConnection connection, CancellationToken cancellationToken) =>
-        throw new NotImplementedException("TODO(impl: pairing)");
-
-    /// <inheritdoc />
-    public Task<PinPairingInProgress> StartPinPairingAsync(IRtspConnection connection, ControllerIdentity controller, TlvMethod method, CancellationToken cancellationToken) =>
-        throw new NotImplementedException("TODO(impl: pairing)");
-
-    /// <inheritdoc />
-    public Task<PairingCredentials> FinishPinPairingAsync(PinPairingInProgress pairing, string pin, CancellationToken cancellationToken) =>
-        throw new NotImplementedException("TODO(impl: pairing)");
-
-    /// <inheritdoc />
-    public Task<PairingSession> VerifyAsync(IRtspConnection connection, PairingCredentials credentials, CancellationToken cancellationToken) =>
-        throw new NotImplementedException("TODO(impl: pairing)");
 }

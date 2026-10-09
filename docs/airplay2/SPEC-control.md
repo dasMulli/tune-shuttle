@@ -68,6 +68,20 @@ query for both service types and a cache keyed by instance name. mDNS answers ma
 (on our LAN every answer came from 203.0.113.1 even though the receivers live on 192.0.2.x and
 198.51.100.x [probe]); the sender must take the address from the A/AAAA records, never from the UDP source.
 
+**Note (2026-10-09, mdns-browser live run).** What the reflector actually sends, which the section above did not
+cover: a PTR query sent *from port 5353* is answered by multicast with normal TTLs (PTR and TXT 4500 s, SRV/A/AAAA
+120 s on the SpeakerA; 4500 s for everything on the HomePod), the cache-flush bit on the unique records, all records in
+the answer section, plus NSEC (type 47) records. The same query sent *from an ephemeral port* (what
+`probes/mdns_browse.py` does) is a legacy unicast query (RFC 6762 6.7): the reflector answers by unicast with every TTL
+capped at **10 s**, records in the additional section, and no cache-flush bits; in that run the SpeakerA did not answer
+the ephemeral-port query at all while the LG TV and the HomePod did. Consequences in `MdnsReceiverBrowser`: it sends
+every query both ways (5353 multicast socket plus one ephemeral socket per interface), raises the TTL of
+legacy-unicast records to two query intervals so they do not expire between browses, and treats a goodbye (TTL 0) as
+"expires in one second" (RFC 6762 10.1) because a responder that announces on several interfaces/families can deliver
+a stale answer after its first goodbye. The live browse also returned a third SpeakerA AAAA address
+(`2001:db8:2:4235:1a2b:3cff:fe4d:5e01`) and the TV's name decodes as `Living room TV` (U+2019, valid UTF-8 in
+the label; the `�` in `probes/browse.json` comes from how the probe output was saved, not from the receiver).
+
 ### 1.2 `_airplay._tcp` TXT keys
 
 Observed on the LAN [probe], documented by pyatv [pyatv:docs/documentation/protocols.md:1218-1238] and
@@ -696,6 +710,19 @@ Requires persisted `LTSK`, `ourId`, `accessoryLTPK`, `accessoryId`. Headers `X-A
    [pyatv:hap.py:136-138]); do check for `Error`, and treat HTTP 470 as "pairing lost → delete persisted keys and
    re-pair" (owntone clears `auth_key` on any pair-verify failure [owntone:airplay.c:3522-3545, 3575-3586]).
 6. `SS = shared` (32 bytes). Derive control keys (2.5); encrypt from the next request on.
+
+**Note (2026-10-09, `pairing` package, live against shairport-sync 5.5.2 in Docker, not the SpeakerA):** transient
+M1-M4 followed by an encrypted `GET /info` works as in 3.5. With `--password 1234`, transient M3 is answered with
+`Error = 2` (pair_ap builds the transient SRP verifier from the password as well [sps:rtsp.c:1793-1794;
+sps:pair_ap/pair_homekit.c:2015-2023], so "TLV error on transient" includes M4, not only M2); regular M1-M6 with
+method 0 and the password succeeds and the M6 accessory signature verifies; pair-verify M1-M4 completes on the
+pairing connection and on a new one. **But shairport-sync does not switch the connection to encryption after
+pair-verify**: the cipher set-up in `handle_pair_verify` is commented out [sps:rtsp.c:1725-1741] (only transient M4
+activates it, [sps:rtsp.c:1810-1833]); an encrypted request after verify gets no answer ("can't find an RTSP
+header") while plaintext requests keep working. This is a receiver gap, not a protocol change: Apple receivers per
+pyatv and owntone encrypt after verify, and the sender keeps step 6. Consequence for testing: shairport-sync covers the
+encrypted channel only after transient pairing; PIN pairing plus pair-verify plus encryption is exercised by the fake
+receiver (and later the SpeakerA), not by shairport-sync.
 
 ### 3.8 Persistence and reuse
 

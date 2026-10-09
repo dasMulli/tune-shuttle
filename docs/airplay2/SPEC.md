@@ -96,6 +96,20 @@ implemented by the package named in the last column, and its outcome is recorded
 Outcomes are to be appended to this table as "Result (date): ..." when a probe runs; until then the decisions above
 are the working assumptions and the code keeps both branches where the parts name one (NTP/PTP, event/poll, wrapped/raw).
 
+- Discovery (no P id, `mdns-browser`) Result (2026-10-09): `MdnsReceiverBrowser` found the SpeakerA (192.0.2.26, port
+  7000, two ULA and one link-local AAAA), the HomePod "Office" and the LG TV, all via the reflector 203.0.113.1, the
+  first two with their `_raop` record merged (none for the TV in that run); addresses taken from A/AAAA records only. Port-5353 queries get multicast answers with
+  normal TTLs, ephemeral-port queries get legacy unicast answers with TTL 10 (the SpeakerA answered only the former).
+  Details in SPEC-control 1.1 (note) and `artifacts/live/2026-10-09-discover.log`.
+- `GET /info` (no P id, `rtsp-transport`) Result (2026-10-09): bare and with the `txtAirPlay` qualifier body against the
+  SpeakerA, both `RTSP/1.0 200`, `Server: AirTunes/366.0`; the bodies equal `SpeakerA-info-response.bplist` (525 bytes) and
+  `SpeakerA-info-response-stage1.bplist` (909 bytes) byte for byte. Re-run at the wave 1 checkpoint with the same result.
+  Log: `artifacts/live/2026-10-09-rtsp-get-info-SpeakerA.log`.
+- Pairing against shairport-sync 5.5.2 (no P id, `pairing`, Docker VM) Result (2026-10-09): transient M1-M4 succeeds and
+  an encrypted `GET /info` answers 200; with `--password` transient is refused in M4 (TLV Error 2), PIN pair-setup M1-M6
+  and pair-verify succeed, but shairport-sync does not switch to encryption after pair-verify (SPEC-control 3.7 note).
+  P2, P6 and P11 against the SpeakerA have not run yet (live pairing on the SpeakerA is held back to wave 3).
+
 ## 5. Glossary of the names used in code
 
 | Spec term | Code |

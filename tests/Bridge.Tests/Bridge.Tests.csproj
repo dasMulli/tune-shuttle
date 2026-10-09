@@ -15,6 +15,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Bridge.Service\Bridge.Service.csproj" />
     <ProjectReference Include="..\..\src\Bridge.Contracts\Bridge.Contracts.csproj" />
+    <!-- JsonFilePairingStore (owned by bridge-store) lives in the CLI; its tests sit next to the SQLite store's. -->
+    <ProjectReference Include="..\..\src\Airplay2.Sender.Cli\Airplay2.Sender.Cli.csproj" />
     <ProjectReference Include="..\Airplay2.FakeReceiver\Airplay2.FakeReceiver.csproj" />
   </ItemGroup>
 

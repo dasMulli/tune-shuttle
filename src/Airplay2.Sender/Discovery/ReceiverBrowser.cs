@@ -1,6 +1,5 @@
 using System.Net;
 using System.Threading.Channels;
-using Microsoft.Extensions.Logging;
 
 namespace Airplay2.Sender.Discovery;
 
@@ -31,7 +30,7 @@ public sealed record DiscoveredReceiver(
 /// <summary>Browser notifications.</summary>
 public abstract record ReceiverEvent(DiscoveredReceiver Receiver)
 {
-    /// <summary>A receiver appeared (both records resolved, or one of them plus addresses).</summary>
+    /// <summary>A receiver appeared: its <c>_airplay._tcp</c> instance resolved (SRV, TXT and at least one A/AAAA address); the <c>_raop._tcp</c> record is merged in when seen (an <see cref="Updated"/> follows if it arrives later).</summary>
     public sealed record Found(DiscoveredReceiver Receiver) : ReceiverEvent(Receiver);
 
     /// <summary>A TXT record or address of a known receiver changed (for example <c>gid</c> after a group SETUP, or <c>pk</c> after a reset).</summary>
@@ -55,6 +54,14 @@ public sealed record ReceiverBrowserOptions
 
     /// <summary>Grace period after a record's TTL before <see cref="ReceiverEvent.Lost"/> is raised.</summary>
     public TimeSpan ExpiryGrace { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Also send every query from an ephemeral port per interface (a legacy unicast query, RFC 6762 section 6.7), whose
+    /// answers come back by unicast. Fallback for networks where an mDNS reflector or proxy answers on behalf of the
+    /// receivers (SPEC-control.md 1.1) and for hosts where port 5353 cannot be bound. Such answers carry TTLs of at most
+    /// 10 s; the browser keeps them for at least two <see cref="QueryInterval"/>s.
+    /// </summary>
+    public bool UseLegacyUnicastQueries { get; init; } = true;
 }
 
 /// <summary>
@@ -75,57 +82,16 @@ public interface IReceiverBrowser : IAsyncDisposable
     /// <summary>Sends PTR queries now (for a "refresh" button) and waits up to <paramref name="settle"/> for answers.</summary>
     Task RefreshAsync(TimeSpan settle, CancellationToken cancellationToken);
 
-    /// <summary>Resolves one receiver by id, waiting up to <paramref name="timeout"/> for it to appear.</summary>
+    /// <summary>Resolves one receiver by id (the <c>deviceid</c>, with or without colons) or, failing that, by its name (case-insensitive), waiting up to <paramref name="timeout"/> for it to appear; null on timeout. Starts the browser if needed.</summary>
     Task<DiscoveredReceiver?> FindAsync(string id, TimeSpan timeout, CancellationToken cancellationToken);
 }
 
 /// <summary>Service type names.</summary>
 public static class AirplayServiceTypes
 {
+    /// <summary>The AirPlay 2 service (HAP pairing, bplist SETUP).</summary>
     public const string Airplay = "_airplay._tcp.local";
+
+    /// <summary>The RAOP (AirPlay 1) service; its TXT carries the audio keys merged into the receiver.</summary>
     public const string Raop = "_raop._tcp.local";
-}
-
-/// <summary>
-/// mDNS implementation of <see cref="IReceiverBrowser"/> on top of <c>Librespot.Discovery.Mdns.DnsMessage</c>
-/// (PTR/SRV/TXT/A/AAAA parsing already exists there). One socket per interface and address family, multicast group
-/// 224.0.0.251 / ff02::fb, port 5353, with unicast-response queries as a fallback for reflectors.
-/// </summary>
-public sealed class MdnsReceiverBrowser : IReceiverBrowser
-{
-    private readonly Channel<ReceiverEvent> _events = Channel.CreateBounded<ReceiverEvent>(new BoundedChannelOptions(256) { FullMode = BoundedChannelFullMode.DropOldest });
-
-    /// <summary>Creates a browser.</summary>
-    public MdnsReceiverBrowser(ReceiverBrowserOptions options, ILogger<MdnsReceiverBrowser> logger)
-    {
-        Options = options ?? throw new ArgumentNullException(nameof(options));
-        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
-
-    /// <summary>The options.</summary>
-    public ReceiverBrowserOptions Options { get; }
-
-    private ILogger Logger { get; }
-
-    /// <inheritdoc />
-    public ChannelReader<ReceiverEvent> Events => _events.Reader;
-
-    /// <inheritdoc />
-    public IReadOnlyList<DiscoveredReceiver> Snapshot() => []; // TODO(impl: mdns-browser)
-
-    /// <inheritdoc />
-    public Task StartAsync(CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: mdns-browser)");
-
-    /// <inheritdoc />
-    public Task RefreshAsync(TimeSpan settle, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: mdns-browser)");
-
-    /// <inheritdoc />
-    public Task<DiscoveredReceiver?> FindAsync(string id, TimeSpan timeout, CancellationToken cancellationToken) => throw new NotImplementedException("TODO(impl: mdns-browser)");
-
-    /// <inheritdoc />
-    public ValueTask DisposeAsync()
-    {
-        _events.Writer.TryComplete();
-        return ValueTask.CompletedTask;
-    }
 }
