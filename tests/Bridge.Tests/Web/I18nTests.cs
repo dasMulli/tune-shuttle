@@ -19,10 +19,24 @@ namespace Bridge.Tests.Web;
 [Collection(ProcessCultureCollection.Name)]
 public sealed partial class I18nTests
 {
-    private static readonly string[] CatalogLanguages = ["de", "en"];
+    /// <summary>Every language has its own catalog since i18n-fill.</summary>
+    private static readonly string[] CatalogLanguages = I18n.SupportedCultures;
+
+    /// <summary>The plural keys of UI-SPEC 10 (base keys).</summary>
+    private static readonly string[] PluralBases = ["diagnostics.liveUpdatesValue", "diagnostics.more", "player.receiversOnline"];
 
     [GeneratedRegex(@"\{\{(\w+)\}\}")]
     private static partial Regex Placeholder();
+
+    [GeneratedRegex(@"_(one|few|many|other)$")]
+    private static partial Regex PluralSuffix();
+
+    [GeneratedRegex(@"\p{L}'\p{L}")]
+    private static partial Regex AsciiApostrophe();
+
+    public static TheoryData<string> Translations => new(I18n.SupportedCultures.Where(code => code != I18n.SourceCulture));
+
+    public static TheoryData<string> AllLanguages => new(I18n.SupportedCultures);
 
     [Fact]
     public void Languages_are_the_seven_of_the_spec_in_picker_order()
@@ -45,6 +59,88 @@ public sealed partial class I18nTests
         Assert.All(de, pair => Assert.False(string.IsNullOrWhiteSpace(pair.Value), pair.Key));
         Assert.All(en, pair => Assert.False(string.IsNullOrWhiteSpace(pair.Value), pair.Key));
         Assert.Empty(l.Keys("xx"));
+    }
+
+    [Theory]
+    [MemberData(nameof(Translations))]
+    public void Every_catalog_has_the_german_key_set_with_its_own_plural_forms(string code)
+    {
+        var l = new I18n();
+        var de = l.Keys(I18n.SourceCulture);
+        var catalog = l.Keys(code);
+        Assert.NotEmpty(catalog);
+
+        // Plain keys: exactly the German ones.
+        var dePlain = de.Keys.Where(k => !PluralSuffix().IsMatch(k)).ToHashSet(StringComparer.Ordinal);
+        var plain = catalog.Keys.Where(k => !PluralSuffix().IsMatch(k)).ToHashSet(StringComparer.Ordinal);
+        Assert.True(dePlain.SetEquals(plain), $"{code}: missing [{string.Join(", ", dePlain.Except(plain))}], extra [{string.Join(", ", plain.Except(dePlain))}]");
+
+        // Plural keys: every German base with exactly the forms the language's categories need.
+        var forms = catalog.Keys.Where(k => PluralSuffix().IsMatch(k)).ToHashSet(StringComparer.Ordinal);
+        var expected = PluralBases.SelectMany(b => RequiredPluralSuffixes(code).Select(s => b + s)).ToHashSet(StringComparer.Ordinal);
+        Assert.True(expected.SetEquals(forms), $"{code}: missing [{string.Join(", ", expected.Except(forms))}], extra [{string.Join(", ", forms.Except(expected))}]");
+
+        Assert.All(catalog, pair =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(pair.Value), $"{code}: {pair.Key} is empty");
+            Assert.Equal(pair.Value.Trim(), pair.Value);
+        });
+    }
+
+    [Theory]
+    [MemberData(nameof(AllLanguages))]
+    public void Catalog_texts_follow_the_typography_rules(string code)
+    {
+        // UI-SPEC 10: ellipses are U+2026, never three dots; placeholders are complete {{name}} pairs. In the translated
+        // catalogs apostrophes are the typographic U+2019 (fr "l’audio", uk "зв’язку"), never the ASCII one; the prime
+        // of the groups formula "G'/G" is not an apostrophe (letter, then slash), so only letter'letter is rejected.
+        // en (wave 1, the spec's own copy) keeps its ASCII possessive in groups.lead ("member's").
+        var checkApostrophes = code != "en";
+        Assert.All(new I18n().Keys(code), pair =>
+        {
+            Assert.DoesNotContain("...", pair.Value, StringComparison.Ordinal);
+            Assert.False(checkApostrophes && AsciiApostrophe().IsMatch(pair.Value), $"{code}: {pair.Key} uses the ASCII apostrophe instead of U+2019: {pair.Value}");
+            var withoutPlaceholders = Placeholder().Replace(pair.Value, string.Empty);
+            Assert.False(withoutPlaceholders.Contains('{', StringComparison.Ordinal) || withoutPlaceholders.Contains('}', StringComparison.Ordinal), $"{code}: {pair.Key} has a broken placeholder: {pair.Value}");
+            Assert.False(pair.Value.Contains("  ", StringComparison.Ordinal), $"{code}: {pair.Key} has a double space");
+        });
+    }
+
+    [Theory]
+    [InlineData("fr", "nav.receivers", "Récepteurs")]
+    [InlineData("fr", "player.selectDevice", "Choisissez « {{device}} » comme appareil dans une app Spotify.")]
+    [InlineData("fr", "settings.title", "Réglages")]
+    [InlineData("fr", "app.notFound", "Il n’y a rien à cette adresse.")]
+    [InlineData("es", "nav.receivers", "Receptores")]
+    [InlineData("es", "player.liveUpdates", "Tiempo real")]
+    [InlineData("es", "notices.failed", "Error al {{what}}. {{detail}}")]
+    [InlineData("es", "settings.title", "Ajustes")]
+    [InlineData("pt", "nav.settings", "Ajustes")]
+    [InlineData("pt", "player.selectDevice", "Selecione “{{device}}” como dispositivo em um app do Spotify.")]
+    [InlineData("ru", "nav.receivers", "Приёмники")]
+    [InlineData("ru", "pills.pinNeeded", "нужен PIN")]
+    [InlineData("ru", "status.live", "онлайн")]
+    [InlineData("ru", "diagnostics.liveUpdatesValue_many", "{{state}} ({{count}} подключений, событий: {{events}})")]
+    [InlineData("uk", "nav.settings", "Параметри")]
+    [InlineData("uk", "status.live", "в ефірі")]
+    [InlineData("uk", "diagnostics.liveUpdatesValue_many", "{{state}} ({{count}} підключень, подій: {{events}})")]
+    public void Translations_hold_their_own_language(string code, string key, string text) =>
+        Assert.Equal(text, new I18n().Keys(code)[key]);
+
+    [Theory]
+    [MemberData(nameof(Translations))]
+    public void Translations_are_not_copies_of_another_catalog(string code)
+    {
+        // A copied catalog (another language under a new file name) passes the key parity; it does not pass this. Close
+        // languages share real words (es and pt: 18 %), so the bar is a quarter, far below a copy.
+        var l = new I18n();
+        var catalog = l.Keys(code);
+        foreach (var other in I18n.SupportedCultures.Where(c => c != code))
+        {
+            var reference = l.Keys(other);
+            var same = catalog.Count(pair => reference.TryGetValue(pair.Key, out var text) && text == pair.Value && Placeholder().Replace(pair.Value, string.Empty).Any(char.IsLower));
+            Assert.True(same < catalog.Count / 4, $"{code}: {same} of {catalog.Count} texts are identical to {other}");
+        }
     }
 
     [Theory]
@@ -94,34 +190,89 @@ public sealed partial class I18nTests
         Assert.DoesNotContain(l.Keys("de").Keys, k => k.StartsWith("units.", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public void Every_placeholder_of_a_german_text_appears_in_the_english_one_and_no_other()
+    [Theory]
+    [MemberData(nameof(Translations))]
+    public void Every_placeholder_of_a_german_text_appears_in_the_translation_and_no_other(string code)
     {
         var l = new I18n();
-        var en = l.Keys("en");
-        Assert.All(l.Keys("de"), pair =>
+        var de = l.Keys(I18n.SourceCulture);
+        Assert.All(l.Keys(code), pair =>
         {
-            var expected = Placeholders(pair.Value);
-            Assert.True(expected.SetEquals(Placeholders(en[pair.Key])), $"{pair.Key}: de {{{string.Join(",", expected)}}} en {en[pair.Key]}");
+            // _few/_many exist only in ru/uk; they carry the placeholders of the German _other form.
+            var germanKey = PluralSuffix().Replace(pair.Key, m => m.Groups[1].Value is "few" or "many" ? "_other" : m.Value);
+            var expected = Placeholders(de[germanKey]);
+            Assert.True(expected.SetEquals(Placeholders(pair.Value)), $"{code}: {pair.Key}: de {{{string.Join(",", expected)}}} {code} \"{pair.Value}\"");
         });
     }
 
     [Fact]
-    public void Plural_keys_have_one_and_other_in_de_and_en()
+    public void Plural_keys_have_the_forms_of_each_languages_categories()
     {
         var l = new I18n();
-        var bases = l.Keys("de").Keys.Where(k => k.EndsWith("_one", StringComparison.Ordinal) || k.EndsWith("_other", StringComparison.Ordinal))
-            .Select(k => k[..k.LastIndexOf('_')]).Distinct().ToList();
-        Assert.Equal(["diagnostics.liveUpdatesValue", "diagnostics.more", "player.receiversOnline"], bases.Order(StringComparer.Ordinal));
+        var bases = l.Keys("de").Keys.Where(k => PluralSuffix().IsMatch(k)).Select(k => PluralSuffix().Replace(k, string.Empty)).Distinct();
+        Assert.Equal(PluralBases, bases.Order(StringComparer.Ordinal));
         foreach (var code in CatalogLanguages)
         {
-            foreach (var key in bases)
+            foreach (var key in PluralBases)
             {
-                Assert.True(l.Keys(code).ContainsKey(key + "_one"), $"{code}: {key}_one");
-                Assert.True(l.Keys(code).ContainsKey(key + "_other"), $"{code}: {key}_other");
+                foreach (var suffix in RequiredPluralSuffixes(code))
+                {
+                    Assert.True(l.Keys(code).ContainsKey(key + suffix), $"{code}: {key}{suffix}");
+                }
+
                 Assert.False(l.Keys(code).ContainsKey(key), $"{code}: {key} (base key next to the plural forms)");
             }
         }
+
+        Assert.Equal(["_one", "_other"], RequiredPluralSuffixes("en"));
+        Assert.Equal(["_one", "_few", "_many", "_other"], RequiredPluralSuffixes("ru"));
+        Assert.Equal(["_one", "_few", "_many", "_other"], RequiredPluralSuffixes("uk"));
+    }
+
+    [Theory]
+    [InlineData("ru", 1, "онлайн (1 подключение, событий: 1 234)")]
+    [InlineData("ru", 2, "онлайн (2 подключения, событий: 1 234)")]
+    [InlineData("ru", 5, "онлайн (5 подключений, событий: 1 234)")]
+    [InlineData("ru", 11, "онлайн (11 подключений, событий: 1 234)")]
+    [InlineData("ru", 21, "онлайн (21 подключение, событий: 1 234)")]
+    [InlineData("ru", 22, "онлайн (22 подключения, событий: 1 234)")]
+    [InlineData("ru", 0, "онлайн (0 подключений, событий: 1 234)")]
+    [InlineData("uk", 1, "в ефірі (1 підключення, подій: 1 234)")]
+    [InlineData("uk", 3, "в ефірі (3 підключення, подій: 1 234)")]
+    [InlineData("uk", 12, "в ефірі (12 підключень, подій: 1 234)")]
+    [InlineData("uk", 101, "в ефірі (101 підключення, подій: 1 234)")]
+    [InlineData("fr", 0, "en direct (0 connexion, 1 234 événements)")]
+    [InlineData("fr", 1, "en direct (1 connexion, 1 234 événements)")]
+    [InlineData("fr", 2, "en direct (2 connexions, 1 234 événements)")]
+    [InlineData("pt", 0, "ao vivo (0 conexão, 1.234 eventos)")]
+    [InlineData("pt", 1, "ao vivo (1 conexão, 1.234 eventos)")]
+    [InlineData("pt", 2, "ao vivo (2 conexões, 1.234 eventos)")]
+    [InlineData("es", 0, "en directo (0 conexiones, 1.234 eventos)")]
+    [InlineData("es", 1, "en directo (1 conexión, 1.234 eventos)")]
+    [InlineData("es", 2, "en directo (2 conexiones, 1.234 eventos)")]
+    public void Plural_picks_the_form_of_the_real_catalogs(string code, long connections, string expected)
+    {
+        // The Diagnostics live-updates line (UI-SPEC 4.7), as the page composes it.
+        using var scope = new CultureScope(code);
+        var l = new I18n(code);
+        var text = l.Plural("diagnostics.liveUpdatesValue", connections, ("state", l["status.live"]), ("events", Format.Integer(1234)));
+        Assert.Equal(expected, Spaces(text));
+    }
+
+    [Theory]
+    [InlineData("fr", "1 sur 2 en ligne", "1 234 de plus", "73 sur 100")]
+    [InlineData("es", "1 de 2 en línea", "1.234 más", "73 de 100")]
+    [InlineData("pt", "1 de 2 online", "mais 1.234", "73 de 100")]
+    [InlineData("ru", "1 из 2 в сети", "ещё 1 234", "73 из 100")]
+    [InlineData("uk", "1 з 2 у мережі", "ще 1 234", "73 з 100")]
+    public void Plural_and_Format_fill_the_real_catalogs_in_the_catalog_culture(string code, string online, string more, string level)
+    {
+        using var scope = new CultureScope(code);
+        var l = new I18n(code);
+        Assert.Equal(online, l.Plural("player.receiversOnline", 1, ("total", 2)));
+        Assert.Equal(more, Spaces(l.Plural("diagnostics.more", 1234)));
+        Assert.Equal(level, l.Format("common.levelText", ("value", 73)));
+        Assert.Equal(l["nav.receivers"] + " · AirPlay Bridge", l.Format("app.pageTitle", ("page", l["nav.receivers"])));
     }
 
     [Fact]
@@ -134,7 +285,7 @@ public sealed partial class I18nTests
         Assert.Equal("a.nowhere", l["a.nowhere"]);   // missing everywhere -> the key itself
         Assert.Equal("nur deutsch", l.Format("a.deOnly"));
 
-        // A language without a catalog (fr before i18n-fill) is served from German.
+        // A language the given catalogs lack (every real language has one since i18n-fill) is served from German.
         l.SetLanguage("fr");
         try
         {
@@ -148,13 +299,20 @@ public sealed partial class I18nTests
     }
 
     [Fact]
-    public void Real_catalogs_serve_the_current_language_and_german_for_languages_without_a_catalog()
+    public void Real_catalogs_serve_the_current_language_in_every_language()
     {
         using var scope = new CultureScope("en");
         var l = new I18n("de");
         Assert.Equal("Empfänger", l["nav.receivers"]);
+        string[] expected = ["Empfänger", "Receivers", "Récepteurs", "Receptores", "Приёмники", "Приймачі", "Receptores"];
+        foreach (var (code, text) in I18n.SupportedCultures.Zip(expected))
+        {
+            l.SetLanguage(code);
+            Assert.Equal(text, l["nav.receivers"]);
+            Assert.Equal(l.Keys(code)["settings.title"], l["settings.title"]); // served from the language's own catalog
+        }
+
         l.SetLanguage("en");
-        Assert.Equal("Receivers", l["nav.receivers"]);
         Assert.Equal("no.such.key", l["no.such.key"]);
     }
 
@@ -573,6 +731,14 @@ public sealed partial class I18nTests
     }
 
     private static HashSet<string> Placeholders(string text) => [.. Placeholder().Matches(text).Select(m => m.Groups[1].Value)];
+
+    /// <summary>The plural forms a catalog of <paramref name="code"/> must carry (UI-SPEC 3.6): its CLDR integer categories.</summary>
+    private static string[] RequiredPluralSuffixes(string code) => code is "ru" or "uk"
+        ? ["_one", "_few", "_many", "_other"]
+        : ["_one", "_other"];
+
+    // ICU versions differ in the grouping and percent spaces (U+00A0, U+202F or a plain space); compare with plain spaces.
+    private static string Spaces(string text) => text.Replace(' ', ' ').Replace(' ', ' ');
 
     private static Dictionary<string, IReadOnlyDictionary<string, string>> Catalogs(params (string Code, (string Key, string Text)[] Entries)[] catalogs) =>
         catalogs.ToDictionary(c => c.Code, c => (IReadOnlyDictionary<string, string>)c.Entries.ToDictionary(e => e.Key, e => e.Text, StringComparer.Ordinal), StringComparer.Ordinal);

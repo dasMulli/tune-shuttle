@@ -1,35 +1,64 @@
-@* The PIN dialog (SPEC-control.md 3.6, WORK-PLAN.md section 7): opened by a pairingRequired event (a connect needed a
-   PIN) or by the Pair button. The receiver shows its PIN while the dialog is open; a wrong PIN or an expired token
-   consume the pairing on the service side, so the dialog offers to start again (the receiver then shows a new PIN). *@
+@* The PIN dialog (UI-SPEC 4.11): opened by a pairingRequired event (a connect needed a PIN) or by a Pair button. The
+   receiver shows its PIN while the dialog is open; a wrong PIN or an expired token consume the pairing on the service
+   side, so the dialog then offers to start again (the receiver shows a new PIN).
+
+   A modal .scrim + .dialog (role=dialog, aria-modal); on phones the stylesheet anchors it at the top as a sheet, so the
+   PIN field stays above the on-screen keyboard. Focus: on open the focused element is remembered (app.js
+   rememberActive) and the PIN field takes the focus; on close the remembered element gets it back (restore). Escape
+   cancels. Tab trap: Tab on the cancel button (the last focusable element) goes to the PIN field, Shift+Tab on the PIN
+   field (the first) goes to the cancel button. Blazor's @onkeydown:preventDefault cannot pick keys or modifiers, so
+   app.js preventKeys keeps "Tab" from doing its default on exactly those two elements, and this component moves the
+   focus for both directions there (the inner direction to the primary button, or past it while it is disabled);
+   every other Tab stays native. Service text (prompt.Message of a user-started pairing, the failure detail) is shown
+   as sent (UI-SPEC 3.5). *@
+@using Bridge.Web.Localization
 @inherits BridgeComponentBase
+@inject BrowserBridge Browser
 
 @if (State.Pairing is { } prompt)
 {
-    <div class="modal-backdrop">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pairing-title">
-            <h2 id="pairing-title">Pair with @State.NameOf(prompt.ReceiverId)</h2>
-            <p>@prompt.Message</p>
-            <form @onsubmit="SubmitAsync" @onsubmit:preventDefault>
-                <label for="pairing-pin">PIN</label>
-                <input id="pairing-pin" class="pin" type="text" inputmode="numeric" autocomplete="one-time-code"
-                       maxlength="8" placeholder="0000" @bind="_pin" @bind:event="oninput" disabled="@_busy" />
-                @if (_result is { } result && result.Outcome != PinOutcome.Paired)
+    var primaryDisabled = _busy || (!Restartable && string.IsNullOrWhiteSpace(_pin));
+    <div class="scrim">
+        @* The dialog is the form itself, so its parts are direct children of .dialog (gap) and Enter in the field submits. *@
+        <form class="dialog" role="dialog" aria-modal="true" aria-labelledby="pairing-title" aria-describedby="pairing-prompt"
+              novalidate @onsubmit="SubmitAsync" @onsubmit:preventDefault @onkeydown="OnDialogKeyDown">
+            <h2 id="pairing-title">@L.Format("pairing.title", ("name", State.NameOf(prompt.ReceiverId)))</h2>
+            @if (prompt.Origin == PairingPromptOrigin.Service)
+            {
+                <p id="pairing-prompt">@L.Format("pairing.prompt", ("name", State.NameOf(prompt.ReceiverId)))</p>
+            }
+            else
+            {
+                <p id="pairing-prompt" class="meta">@prompt.Message</p>
+            }
+            <div class="field">
+                <label for="pairing-pin" class="label">@L["pairing.pin"]</label>
+                <input id="pairing-pin" class="input pin" type="text" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="8" placeholder="0000" readonly="@_busy"
+                       aria-invalid="@(Error is null ? null : "true")"
+                       aria-describedby="@(Error is null ? null : "pairing-error")"
+                       @bind="_pin" @bind:event="oninput"
+                       @onkeydown="OnPinKeyDown" @ref="_pinInput" />
+            </div>
+            @if (Error is { } error)
+            {
+                <p id="pairing-error" class="validation-message" role="alert">@error</p>
+            }
+            <div class="dialog__actions">
+                @if (Restartable)
                 {
-                    <p class="error" role="alert">@Explain(result)</p>
+                    <button type="button" class="btn btn--primary" data-action="restart" disabled="@primaryDisabled"
+                            @onclick="RestartAsync" @ref="_primaryButton">@L["pairing.startAgain"]</button>
                 }
-                <div class="actions">
-                    @if (_result?.Outcome is PinOutcome.Rejected or PinOutcome.Expired)
-                    {
-                        <button type="button" class="primary" @onclick="RestartAsync" disabled="@_busy">Start again</button>
-                    }
-                    else
-                    {
-                        <button type="submit" class="primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_pin))">Pair</button>
-                    }
-                    <button type="button" @onclick="Cancel" disabled="@_busy">Cancel</button>
-                </div>
-            </form>
-        </div>
+                else
+                {
+                    <button type="submit" class="btn btn--primary" data-action="pair" disabled="@primaryDisabled"
+                            @ref="_primaryButton">@L["pairing.pair"]</button>
+                }
+                <button type="button" class="btn" data-action="cancel" @onclick="Cancel"
+                        @onkeydown="OnCancelKeyDown" @ref="_cancelButton">@L["common.cancel"]</button>
+            </div>
+        </form>
     </div>
 }
 
@@ -38,6 +67,50 @@
     private string _pin = string.Empty;
     private PinResult? _result;
     private bool _busy;
+
+    // Focus bookkeeping (OnAfterRenderAsync): _shown is what the last render showed, _focus the element to focus next.
+    private bool _shown;
+    private bool _opening;
+    private FocusTarget _focus;
+    private IJSObjectReference? _remembered;
+    private IAsyncDisposable? _pinKeys;
+    private IAsyncDisposable? _cancelKeys;
+    private ElementReference _pinInput;
+    private ElementReference _primaryButton;
+    private ElementReference _cancelButton;
+
+    private enum FocusTarget
+    {
+        None,
+        Pin,
+        Primary,
+        Cancel,
+    }
+
+    /// <summary>The keys app.js keeps from doing their default on the two ends of the dialog (the Tab trap).</summary>
+    private static readonly string[] TrapKeys = ["Tab"];
+
+    /// <summary>A wrong PIN or an expired token: the pairing is gone on the service side, only "Start again" helps.</summary>
+    private bool Restartable => _result?.Outcome is PinOutcome.Rejected or PinOutcome.Expired;
+
+    /// <summary>The inline error of the last attempt, or null.</summary>
+    private string? Error => ErrorText(_result, L);
+
+    /// <summary>
+    /// The inline error for a PIN result (catalog text; a failure's detail is service text, UI-SPEC 3.5): pairing.rejected,
+    /// pairing.expired, pairing.invalid, pairing.failedDetail when the failure carries a message, else pairing.failed;
+    /// null for no result or a success.
+    /// </summary>
+    internal static string? ErrorText(PinResult? result, I18n l) => result switch
+    {
+        null => null,
+        { Outcome: PinOutcome.Paired } => null,
+        { Outcome: PinOutcome.Rejected } => l["pairing.rejected"],
+        { Outcome: PinOutcome.Expired } => l["pairing.expired"],
+        { Outcome: PinOutcome.Invalid } => l["pairing.invalid"],
+        { Message: { Length: > 0 } detail } => l.Format("pairing.failedDetail", ("detail", detail)),
+        _ => l["pairing.failed"],
+    };
 
     /// <inheritdoc />
     protected override void OnInitialized()
@@ -49,20 +122,217 @@
     /// <inheritdoc />
     protected override void OnBridgeStateChanged() => Reset();
 
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var open = State.Pairing is not null;
+        if (open && !_shown)
+        {
+            // No focus move until the opener is remembered (a render in between must not focus the field first).
+            _shown = true;
+            _opening = true;
+            try
+            {
+                await OpenedAsync();
+            }
+            finally
+            {
+                _opening = false;
+            }
+
+            if (_shown)
+            {
+                _focus = FocusTarget.Pin;
+            }
+        }
+        else if (!open && _shown)
+        {
+            _shown = false;
+            _focus = FocusTarget.None;
+            await ClosedAsync();
+        }
+
+        if (!_opening && State.Pairing is not null && _shown && _focus != FocusTarget.None)
+        {
+            var target = _focus;
+            _focus = FocusTarget.None;
+            await FocusAsync(target);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        ReleaseKeys();
+        if (_remembered is { } remembered)
+        {
+            _remembered = null;
+            Observe(remembered.DisposeAsync().AsTask());
+        }
+    }
+
     private void Reset()
     {
-        // A new prompt (another receiver, or a new token after "Start again") starts with an empty field.
+        // A new prompt (another receiver, or a new token after "Start again") starts with an empty field and the focus
+        // in it (the "Start again" button it replaces is gone).
         if (State.Pairing?.Token != _token)
         {
             _token = State.Pairing?.Token;
             _pin = string.Empty;
             _result = null;
+            if (_token is not null && _shown)
+            {
+                _focus = FocusTarget.Pin;
+            }
+        }
+    }
+
+    private async Task OpenedAsync()
+    {
+        // Remember first: the focus is still on what opened the dialog (a Pair button, or wherever it was when the
+        // service announced the pairing).
+        try
+        {
+            _remembered = await Browser.RememberActiveAsync();
+        }
+        catch (JSException)
+        {
+            // no module: the focus is not returned on close
+        }
+        catch (JSDisconnectedException)
+        {
+            return; // the page is going away
+        }
+
+        if (!_shown)
+        {
+            // Closed while the call ran: hand the focus back at once.
+            await ClosedAsync();
+            return;
+        }
+
+        try
+        {
+            _pinKeys = await Browser.PreventKeysAsync(_pinInput, TrapKeys);
+            _cancelKeys = await Browser.PreventKeysAsync(_cancelButton, TrapKeys);
+        }
+        catch (JSException)
+        {
+            // A module without the export: the trap still moves the focus, the browser's Tab then moves it once more.
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+
+        if (!_shown)
+        {
+            ReleaseKeys();
+        }
+    }
+
+    private async Task ClosedAsync()
+    {
+        ReleaseKeys();
+        if (_remembered is not { } remembered)
+        {
+            return;
+        }
+
+        _remembered = null;
+        try
+        {
+            await remembered.InvokeVoidAsync("restore");
+            await remembered.DisposeAsync();
+        }
+        catch (JSException)
+        {
+            // the remembered element could not be focused; nothing else to do
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+    }
+
+    private void ReleaseKeys()
+    {
+        if (_pinKeys is { } pin)
+        {
+            _pinKeys = null;
+            Observe(pin.DisposeAsync().AsTask());
+        }
+
+        if (_cancelKeys is { } cancel)
+        {
+            _cancelKeys = null;
+            Observe(cancel.DisposeAsync().AsTask());
+        }
+    }
+
+    private async Task FocusAsync(FocusTarget target)
+    {
+        var element = target switch
+        {
+            FocusTarget.Primary => _primaryButton,
+            FocusTarget.Cancel => _cancelButton,
+            _ => _pinInput,
+        };
+        if (element.Context is null)
+        {
+            return; // not rendered (yet)
+        }
+
+        try
+        {
+            await element.FocusAsync();
+        }
+        catch (JSException)
+        {
+            // the element went away between the render and the call
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+    }
+
+    /// <summary>True while the primary button can take the focus (a disabled button cannot).</summary>
+    private bool PrimaryFocusable => !_busy && (Restartable || !string.IsNullOrWhiteSpace(_pin));
+
+    private Task OnPinKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Tab")
+        {
+            return Task.CompletedTask;
+        }
+
+        // The first element: Shift+Tab wraps to the last one; Tab goes on to the primary button (or past it).
+        return FocusAsync(e.ShiftKey ? FocusTarget.Cancel : PrimaryFocusable ? FocusTarget.Primary : FocusTarget.Cancel);
+    }
+
+    private Task OnCancelKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Tab")
+        {
+            return Task.CompletedTask;
+        }
+
+        // The last element: Tab wraps to the first one; Shift+Tab goes back to the primary button (or past it).
+        return FocusAsync(!e.ShiftKey ? FocusTarget.Pin : PrimaryFocusable ? FocusTarget.Primary : FocusTarget.Pin);
+    }
+
+    private void OnDialogKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            Cancel();
         }
     }
 
     private async Task SubmitAsync()
     {
-        if (State.Pairing is not { } prompt || _busy)
+        if (State.Pairing is not { } prompt || _busy || Restartable)
         {
             return;
         }
@@ -70,7 +340,18 @@
         _busy = true;
         try
         {
-            _result = await Commands.SubmitPinAsync(prompt, _pin, Lifetime);
+            var result = await Commands.SubmitPinAsync(prompt, _pin, Lifetime);
+            if (State.Pairing?.Token == prompt.Token)
+            {
+                _result = result;
+
+                // After a refusal only "Start again" helps; after another failure the field is where to go on.
+                _focus = Restartable ? FocusTarget.Primary : FocusTarget.Pin;
+            }
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the dialog went away
         }
         finally
         {
@@ -80,7 +361,7 @@
 
     private async Task RestartAsync()
     {
-        if (State.Pairing is not { } prompt)
+        if (State.Pairing is not { } prompt || _busy)
         {
             return;
         }
@@ -93,6 +374,10 @@
                 State.ClosePairing(prompt.Token);
             }
         }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the dialog went away
+        }
         finally
         {
             _busy = false;
@@ -104,11 +389,4 @@
         // The service closes an abandoned pairing after its timeout; nothing to call.
         State.ClosePairing(State.Pairing?.Token);
     }
-
-    private static string Explain(PinResult result) => result.Outcome switch
-    {
-        PinOutcome.Rejected => "The receiver rejected the PIN. Start again; it then shows a new PIN.",
-        PinOutcome.Expired => "This pairing expired. Start again; the receiver then shows a new PIN.",
-        _ => result.Message ?? "The pairing failed.",
-    };
 }

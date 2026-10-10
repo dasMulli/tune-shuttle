@@ -119,13 +119,57 @@ Open `http://<host>:8080`. Then:
    SQLite, so after a restart the device comes back without a new handoff.
 2. **Receivers** lists everything mDNS finds. *Connect* makes a receiver the output. A receiver that needs a PIN shows
    one on its screen, and the web app opens a PIN dialog for it.
-3. **Groups**: create a group, add members, then *Activate* it. The master slider scales every member's level and
-   keeps the differences between them, as Apple devices do. The Spotify volume slider drives that master level.
-4. **Now Playing** shows the track, the artwork and the Spotify volume. **Settings** holds the device name, the sender
-   latency L, the stream type preference and the volume poll. **Diagnostics** shows status, ports, statistics and a
-   live log.
+3. **Player** shows the track, the transport and the master volume, and its **Output** card picks the output: a
+   receiver or a group. *Edit groups* (phone) / *New group* opens **Groups**: create a group, add members, then
+   *Activate* it. The master slider scales every member's level and keeps the differences between them, as Apple
+   devices do. The Spotify volume slider drives that master level.
+4. **Settings** holds the device name, the sender latency L, the stream type preference, the volume poll, the theme
+   and the language, and links to **Diagnostics** (status, ports, statistics and a live log).
 
 While no receiver is connected, the bridge accepts playback and discards the audio (PLAN.md).
+
+### The web app
+
+A Blazor WebAssembly SPA (`src/Bridge.Web`), specified in [`docs/web/UI-SPEC.md`](docs/web/UI-SPEC.md) (mockups in
+`docs/web/mockups/`). Routes: `/` Player, `/receivers`, `/groups`, `/groups/new`, `/groups/{id}`, `/settings`,
+`/settings/diagnostics`, plus two developer pages, `/_styleguide` (every component in every state) and `/_audit` (the
+layout audit below).
+
+- **Phones** (up to 699px wide) get a bottom tab bar and a top bar that scrolls away; tablets (700-1023px) and desktops
+  get the tabs in a sticky top bar, desktops (from 1024px) the two-column Player. A landscape phone (e.g. 844 x 390)
+  uses the tablet layout with a slimmer sticky top bar (its tabs are the navigation there) and a compact now-playing
+  card. Every control is at least 44 x 44 px on phones and touch screens (the theme picker's 34px buttons are the one
+  exception; Settings > Appearance has the same choice as full-size radios), inputs use a 16px font, and fixed
+  bars keep clear of notches and the home indicator (`viewport-fit=cover` with `env(safe-area-inset-*)`).
+- **Theme**: light, dark or system, from the top-bar picker or Settings > Appearance; stored in the browser
+  (`localStorage`). **Language**: Deutsch, English, Français, Español, Русский, Українська, Português (Brasil); the
+  browser's language until one is chosen.
+- `?theme=light|dark|system` and `?lang=<code>` on any URL apply once without being stored (used by the scripts below).
+
+Working on the web app needs no speaker and no Spotify account: run the bridge with the fake receivers (see above) and
+use the scripts in `tools/` (PowerShell 7, headless Microsoft Edge; both start the bridge with
+`--Bridge:FakeReceivers=2`, Spotify off and a throw-away data directory unless `-NoStart` points them at a running one):
+
+```powershell
+# Screenshots: one PNG per route x size x theme x language, in artifacts/screenshots/<package>/ (git-ignored).
+pwsh tools/web-screenshots.ps1 -Package mine -Routes /,/receivers,/settings -Sizes 390x844,844x390,768x1024,1280x900 -Themes light,dark
+pwsh tools/web-screenshots.ps1 -Package mine -Routes / -Sizes 390x2200            # a tall viewport shows the end of a page
+pwsh tools/web-screenshots.ps1 -Package mine -Routes / -Setup tools/screenshot-setups/mobile-polish.ps1   # with an active group
+
+# Layout audit: fails on horizontal overflow, on controls without an accessible name and on touch targets under
+# 44 x 44 px; defaults: /, /receivers, /settings, /settings/diagnostics, /groups at 390x844 and 768x1024 in light
+# and dark. Sizes under 1024px wide are audited as touch devices (DevTools touch emulation: (pointer: coarse)
+# matches and the touch rules apply), so the 44px check covers tablets too; -Pointer fine audits them with a mouse,
+# -Pointer coarse also audits desktop sizes as touch screens.
+pwsh tools/web-audit.ps1
+pwsh tools/web-audit.ps1 -Langs en,de,ru -Setup tools/screenshot-setups/mobile-polish.ps1
+```
+
+`tools/screenshot-setups/<package>.ps1` put the fake receivers into a state through the REST API before the pictures
+are taken (`-Setup`); `mobile-polish.ps1 -BaseUrl <url> -HeroShots <dir>` also captures the Player with a demo track
+(injected in the browser only, since Spotify is off). Both scripts drive Edge over the DevTools protocol at exact CSS
+viewport sizes: headless Edge lays out no narrower than 504px when only `--window-size` is given. After a rebuild of
+`src/Bridge.Web`, restart a bridge that `-NoStart` uses; it serves the files it found when it started.
 
 ### Configuration
 

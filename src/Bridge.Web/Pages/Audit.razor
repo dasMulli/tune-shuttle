@@ -1,0 +1,190 @@
+@page "/_audit"
+@using System.Reflection
+@using System.Text.Json
+@inherits BridgeComponentBase
+@inject BrowserBridge Browser
+@* Developer page (UI-SPEC 5.6), driven by tools/web-audit.ps1: renders the page of ?route= (default "/") inside the
+   normal layout (a DynamicComponent of the page type resolved from the app's route table) and, once that page has
+   data, runs app.js audit() and writes its JSON ({ overflow, small, unnamed }) into <pre id="audit-result">. The
+   trigger: State.Loaded is true, the page rendered once more after that, then a settle time of 500 ms (the pages fill
+   from REST and then the WebSocket; an earlier audit would measure an empty page). Until then the <pre> is empty; a
+   route without a page writes {"error": …} at once. The <pre> is `hidden`, so the JSON never widens the layout it
+   describes. English is allowed on this page (WORK-PLAN 1); only the title comes from the catalog. *@
+
+<PageTitle>@L.Format("app.pageTitle", ("page", L["audit.title"]))</PageTitle>
+
+<h1 class="visually-hidden" tabindex="-1">@L["audit.title"]</h1>
+
+@if (_page is { } page)
+{
+    <DynamicComponent Type="page.Type" Parameters="page.Parameters" />
+}
+else
+{
+    <p class="meta">No page answers the route @RouteOrDefault.</p>
+}
+
+<pre id="audit-result" hidden>@_result</pre>
+
+@code {
+    /// <summary>How long the page settles after its data arrived before the audit runs (UI-SPEC 5.6).</summary>
+    public static readonly TimeSpan DefaultSettle = TimeSpan.FromMilliseconds(500);
+
+    // Every routable component of the app except this page, with its route templates split into segments.
+    private static readonly IReadOnlyList<(string[] Segments, Type Type)> s_routes = typeof(App).Assembly.GetExportedTypes()
+        .Where(t => typeof(IComponent).IsAssignableFrom(t) && t != typeof(Audit))
+        .SelectMany(t => t.GetCustomAttributes<RouteAttribute>(inherit: false).Select(a => (Split(a.Template), t)))
+        .ToList();
+
+    private ResolvedPage? _page;
+    private string? _resolvedFor;
+    private Phase _phase;
+    private string? _result;
+
+    private enum Phase
+    {
+        Waiting,
+        Armed,
+        Running,
+        Done,
+    }
+
+    private sealed record ResolvedPage(Type Type, IDictionary<string, object> Parameters);
+
+    /// <summary>The route to audit, e.g. <c>/receivers</c> (default <c>/</c>).</summary>
+    [SupplyParameterFromQuery(Name = "route")]
+    public string? Route { get; set; }
+
+    /// <summary>The settle time between the data and the audit; tests shorten it.</summary>
+    [Parameter]
+    public TimeSpan Settle { get; set; } = DefaultSettle;
+
+    private string RouteOrDefault => string.IsNullOrWhiteSpace(Route) ? "/" : Route.Trim();
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (_resolvedFor == RouteOrDefault)
+        {
+            return;
+        }
+
+        _resolvedFor = RouteOrDefault;
+        _page = Resolve(RouteOrDefault);
+        _phase = Phase.Waiting;
+        _result = _page is null ? JsonSerializer.Serialize(new { error = "No page answers the route " + RouteOrDefault }) : null;
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_page is null)
+        {
+            return;
+        }
+
+        switch (_phase)
+        {
+            case Phase.Waiting when State.Loaded:
+                // The data is there and this render showed it; render once more so the routed page has rendered at
+                // least once after Loaded (it re-renders on State.Changed itself as well), then settle and measure.
+                _phase = Phase.Armed;
+                StateHasChanged();
+                return;
+            case Phase.Armed:
+                _phase = Phase.Running;
+                break;
+            default:
+                return;
+        }
+
+        // A copy of the token: once the component is disposed, its CancellationTokenSource is disposed too and reading
+        // Lifetime again would throw ObjectDisposedException inside the catch filter below.
+        var lifetime = Lifetime;
+        string json;
+        try
+        {
+            await Task.Delay(Settle, lifetime);
+            json = await Browser.AuditAsync();
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            return; // the page went away
+        }
+        catch (JSException ex)
+        {
+            json = JsonSerializer.Serialize(new { error = "audit() failed: " + ex.Message });
+        }
+
+        // The awaits may resume off the renderer's context (BrowserBridge uses ConfigureAwait(false)): the state change
+        // and the render both happen inside the dispatch.
+        await InvokeAsync(() =>
+        {
+            _result = json;
+            _phase = Phase.Done;
+            StateHasChanged();
+        });
+    }
+
+    private static string[] Split(string path) =>
+        path.Split('?', '#')[0].Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>The page whose route template matches <paramref name="route"/>, with its route parameters.</summary>
+    private static ResolvedPage? Resolve(string route)
+    {
+        var segments = Split(route);
+        foreach (var (template, type) in s_routes.OrderBy(r => r.Segments.Count(s => s.StartsWith('{'))))
+        {
+            if (template.Length != segments.Length)
+            {
+                continue;
+            }
+
+            var parameters = new Dictionary<string, object>(StringComparer.Ordinal);
+            var matches = true;
+            for (var i = 0; i < template.Length && matches; i++)
+            {
+                var part = template[i];
+                if (part.StartsWith('{') && part.EndsWith('}'))
+                {
+                    // {name}, {name:constraint}, {name?}: bind the segment to the page's [Parameter] of that name.
+                    var name = part[1..^1].Split(':')[0].TrimEnd('?').TrimStart('*');
+                    matches = Bind(type, name, Uri.UnescapeDataString(segments[i]), parameters);
+                }
+                else
+                {
+                    matches = string.Equals(part, segments[i], StringComparison.OrdinalIgnoreCase);
+                }
+            }
+
+            if (matches)
+            {
+                return new ResolvedPage(type, parameters);
+            }
+        }
+
+        return null;
+    }
+
+    private static bool Bind(Type page, string name, string value, Dictionary<string, object> parameters)
+    {
+        var property = page.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) && p.IsDefined(typeof(ParameterAttribute)));
+        if (property is null)
+        {
+            return true; // a route value the page does not take: nothing to pass
+        }
+
+        object? converted = property.PropertyType == typeof(string) ? value
+            : property.PropertyType == typeof(int) && int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var number) ? number
+            : property.PropertyType == typeof(Guid) && Guid.TryParse(value, out var guid) ? guid
+            : null;
+        if (converted is null)
+        {
+            return false; // the segment does not fit the parameter's type (the router's constraint would reject it too)
+        }
+
+        parameters[property.Name] = converted;
+        return true;
+    }
+}

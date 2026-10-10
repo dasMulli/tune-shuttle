@@ -1,0 +1,431 @@
+@page "/groups/new"
+@page "/groups/{Id}"
+@inherits BridgeComponentBase
+@inject NavigationManager Navigation
+
+@* The group editor (UI-SPEC 4.5). /groups/new: one card with the name field; creating navigates to /groups/{id}.
+   /groups/{id}: the Name card (inline rename), the Output card (activate / stop), the Master card (G, with the live
+   r_i preview while it is dragged and the clamp hint), the Members card (one row per member with its compact r_i
+   slider and a remove button, then the add form) and the danger card (delete with an inline confirm). An unknown id
+   shows the not-found state. The commands and the busy/preview logic are the ones of the former single-page Groups
+   view. Focus follows the inline swaps: Rename → the name field, Save/Cancel/Escape → Rename, Delete → Keep, Keep → Delete. *@
+
+<PageTitle>@L.Format("app.pageTitle", ("page", L["nav.groups"]))</PageTitle>
+
+<div class="stack stack--narrow">
+    <div>
+        <a class="btn btn--ghost" href="groups"><span aria-hidden="true">←</span> @L["nav.backToGroups"]</a>
+    </div>
+
+    @if (Id is null)
+    {
+        <h1>@L["groups.create"]</h1>
+        <section class="card">
+            @* novalidate: an empty name keeps the button disabled; the browser's own bubble would be in its language. *@
+            <form class="field" novalidate @onsubmit="CreateAsync" @onsubmit:preventDefault>
+                <label for="new-group">@L["groups.name"]</label>
+                <input id="new-group" class="input" type="text" maxlength="@MaxNameLength" autocomplete="off"
+                       placeholder="@L["groups.namePlaceholder"]" @bind="_newName" @bind:event="oninput" />
+                <div class="actions">
+                    <button type="submit" class="btn btn--primary" disabled="@(_creating || string.IsNullOrWhiteSpace(_newName))">@L["groups.createAction"]</button>
+                </div>
+            </form>
+        </section>
+    }
+    else if (State.Group(Id) is { } group)
+    {
+        var members = _masterDraft is { } g ? GroupVolumePreview.Preview(group, g) : group.Members;
+        var candidates = State.Receivers.Where(r => group.Members.All(m => m.ReceiverId != r.Id)).ToList();
+        var hasMembers = group.Members.Count > 0;
+
+        <h1>@group.Name</h1>
+
+        <section class="card" aria-labelledby="group-name-title" data-card="name">
+            <div class="card__head">
+                <h2 id="group-name-title">@L["groups.name"]</h2>
+                @if (!_renaming)
+                {
+                    <button type="button" class="btn btn--ghost btn--sm" data-action="rename" disabled="@_busy"
+                            @onclick="StartRename" @ref="_renameButton">@L["groups.rename"]</button>
+                }
+            </div>
+            @if (_renaming)
+            {
+                <form class="field" data-form="rename" novalidate @onsubmit="RenameAsync" @onsubmit:preventDefault>
+                    <input class="input" type="text" aria-label="@L["groups.name"]" maxlength="@MaxNameLength" autocomplete="off"
+                           @bind="_renameText" @bind:event="oninput" @onkeydown="OnRenameKeyDown" @ref="_renameInput" />
+                    <div class="actions">
+                        <button type="submit" class="btn btn--primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_renameText))">@L["groups.save"]</button>
+                        <button type="button" class="btn" @onclick="CancelRename">@L["groups.cancel"]</button>
+                    </div>
+                </form>
+            }
+            else
+            {
+                <p>@group.Name</p>
+            }
+        </section>
+
+        <section class="card" aria-labelledby="group-output-title" data-card="output">
+            <div class="card__head">
+                <h2 id="group-output-title">@L["groups.output"]</h2>
+                <StatePill Group="group" />
+            </div>
+            <div class="actions">
+                @if (group.Active)
+                {
+                    <button type="button" class="btn" data-action="stop" disabled="@_busy" @onclick="DeactivateAsync">@L["groups.stopOutput"]</button>
+                }
+                else
+                {
+                    <button type="button" class="btn btn--primary" data-action="activate" disabled="@(_busy || !hasMembers)"
+                            title="@(hasMembers ? L["groups.activateTitle"] : L["groups.activateHint"])"
+                            @onclick="ActivateAsync">@L["groups.activate"]</button>
+                }
+                @if (!hasMembers)
+                {
+                    <span class="hint">@L["groups.activateHint"]</span>
+                }
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="group-master-title" data-card="master">
+            <h2 id="group-master-title" class="label">@L["groups.master"]</h2>
+            <LevelSlider Variant="LevelSlider.LevelVariant.Hero" HideLabel="true" Label="@L["groups.master"]"
+                         ValueText="@LevelText" Value="group.MasterLevel" Disabled="!hasMembers"
+                         DraftChanged="OnMasterDraft"
+                         Send="(level, ct) => Commands.SetGroupLevelAsync(group.Id, level, ct)" />
+            @if (_masterDraft is { } preview && GroupVolumePreview.Clamps(group, preview))
+            {
+                <p class="hint" data-hint="clamp">@L["groups.clampHint"]</p>
+            }
+        </section>
+
+        <section class="card" aria-labelledby="group-members-title" data-card="members">
+            <h2 id="group-members-title">@L["groups.members"]</h2>
+            @if (members.Count == 0)
+            {
+                <p class="meta">@L["groups.noMembers"]</p>
+            }
+            else
+            {
+                @* A plain block: the card's flex gap would split the rows. *@
+                <div>
+                @foreach (var member in members)
+                {
+                    var receiver = State.Receiver(member.ReceiverId);
+                    var name = receiver?.Name ?? member.Name;
+                    <div class="row" data-receiver-id="@member.ReceiverId" @key="member.ReceiverId">
+                        <span class="row__main">
+                            <strong>@name</strong>
+                            <span>
+                                @if (receiver is not null)
+                                {
+                                    <StatePill Receiver="receiver" />
+                                }
+                                else
+                                {
+                                    @* The receiver list does not know it (still loading, or forgotten): the member's own state. *@
+                                    var (css, text, title) = MemberPill(member.State);
+                                    <span class="@css" title="@title">@text</span>
+                                }
+                            </span>
+                        </span>
+                        <LevelSlider Variant="LevelSlider.LevelVariant.Compact" HideLabel="true"
+                                     Label="@L.Format("groups.memberLevel", ("name", name))"
+                                     ValueText="@LevelText" Value="member.Level" Disabled="_masterDraft is not null"
+                                     Send="(level, ct) => Commands.SetMemberLevelAsync(group.Id, member.ReceiverId, level, ct)" />
+                        <button type="button" class="btn btn--icon" data-action="remove" disabled="@_busy"
+                                aria-label="@L.Format("groups.remove", ("name", name))"
+                                @onclick="() => RemoveAsync(member.ReceiverId)">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                        </button>
+                    </div>
+                }
+                </div>
+            }
+
+            @if (candidates.Count > 0)
+            {
+                <form class="actions" data-form="add-member" novalidate @onsubmit="AddAsync" @onsubmit:preventDefault>
+                    <label for="add-member" class="label">@L["groups.addReceiver"]</label>
+                    <select id="add-member" class="input" value="@_addChoice" @onchange="e => _addChoice = e.Value?.ToString() ?? string.Empty">
+                        <option value="">@L["groups.choose"]</option>
+                        @foreach (var receiver in candidates)
+                        {
+                            <option value="@receiver.Id">@(receiver.Online ? receiver.Name : receiver.Name + " " + L["groups.offlineSuffix"])</option>
+                        }
+                    </select>
+                    <button type="submit" class="btn" disabled="@(_busy || string.IsNullOrEmpty(_addChoice))">@L["groups.add"]</button>
+                </form>
+            }
+        </section>
+
+        <section class="card card--danger" aria-labelledby="group-delete-title" data-card="delete">
+            @* One h2 per card (UI-SPEC 6.1); hidden, the card shows only the hint or the question and the buttons. *@
+            <h2 id="group-delete-title" class="visually-hidden">@L["groups.delete"]</h2>
+            @if (_confirmDelete)
+            {
+                <p><strong>@L.Format("groups.deleteConfirm", ("name", group.Name))</strong></p>
+                <div class="actions">
+                    <button type="button" class="btn btn--danger" data-action="delete-yes" disabled="@_busy" @onclick="DeleteAsync">@L["groups.deleteYes"]</button>
+                    <button type="button" class="btn" data-action="keep" @onclick="KeepGroup" @ref="_keepButton">@L["groups.keep"]</button>
+                </div>
+            }
+            else
+            {
+                <p class="hint">@L["groups.deleteHint"]</p>
+                <div class="actions">
+                    <button type="button" class="btn btn--danger" data-action="delete" disabled="@_busy"
+                            @onclick="ConfirmDelete" @ref="_deleteButton">@L["groups.delete"]</button>
+                </div>
+            }
+        </section>
+    }
+    else if (_deleting)
+    {
+        @* Deleted: the navigation to the list follows; no not-found flash in between. *@
+    }
+    else if (!State.Loaded)
+    {
+        <h1>@L["nav.groups"]</h1>
+        <p class="meta" role="status">@L["common.connecting"]</p>
+    }
+    else
+    {
+        <h1>@L["app.notFoundTitle"]</h1>
+        <div class="empty">
+            <p>@L["groups.notFound"]</p>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Longest group name the service accepts.</summary>
+    public const int MaxNameLength = 64;
+
+    private string _newName = string.Empty;
+    private bool _creating;
+    private bool _busy;
+    private int? _masterDraft;
+    private string _addChoice = string.Empty;
+    private bool _renaming;
+    private string _renameText = string.Empty;
+    private bool _confirmDelete;
+    private bool _deleting;
+    private string? _shownId;
+
+    // The element to focus after the next render (the inline swaps replace the focused button).
+    private Focus _focus;
+    private ElementReference _renameButton;
+    private ElementReference _renameInput;
+    private ElementReference _deleteButton;
+    private ElementReference _keepButton;
+
+    private enum Focus
+    {
+        None,
+        RenameButton,
+        RenameInput,
+        DeleteButton,
+        KeepButton,
+    }
+
+    /// <summary>The group id of <c>/groups/{id}</c>; null on <c>/groups/new</c>.</summary>
+    [Parameter]
+    public string? Id { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        // Another group (a link from the list, or the navigation after creating): no inline state carries over.
+        if (Id != _shownId)
+        {
+            _shownId = Id;
+            _busy = false;
+            _masterDraft = null;
+            _addChoice = string.Empty;
+            _renaming = false;
+            _confirmDelete = false;
+            _deleting = false;
+            _focus = Focus.None;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focus == Focus.None)
+        {
+            return;
+        }
+
+        var element = _focus switch
+        {
+            Focus.RenameButton => _renameButton,
+            Focus.RenameInput => _renameInput,
+            Focus.DeleteButton => _deleteButton,
+            _ => _keepButton,
+        };
+        _focus = Focus.None;
+        if (element.Context is null)
+        {
+            // never rendered (the group went away before the render that would have shown it)
+            return;
+        }
+
+        try
+        {
+            await element.FocusAsync();
+        }
+        catch (JSException)
+        {
+            // the element went away between the render and the call
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+    }
+
+    private string LevelText(int value) => L.Format("common.levelText", ("value", value));
+
+    /// <summary>
+    /// The pill of a member whose receiver is not in the receiver list: the receiver mapping of UI-SPEC 4.8 on the
+    /// member's own connection state (no online flag or pairing state to go by).
+    /// </summary>
+    private (string Css, string Text, string Title) MemberPill(ReceiverConnectionState state) => state switch
+    {
+        ReceiverConnectionState.Streaming => ("pill pill--ok", L["pills.playing"], L["pills.title.playing"]),
+        ReceiverConnectionState.Connected => ("pill pill--ok", L["pills.connected"], L["pills.title.connected"]),
+        ReceiverConnectionState.Connecting => ("pill pill--accent", L["pills.connecting"], L["pills.title.connecting"]),
+        ReceiverConnectionState.Error => ("pill pill--err", L["pills.error"], L.Format("pills.title.error", ("error", L["notices.connectFailedDefault"]))),
+        ReceiverConnectionState.Offline => ("pill", L["pills.offline"], L["pills.title.offline"]),
+        _ => ("pill pill--ok", L["pills.online"], L["pills.title.online"]),
+    };
+
+    private void OnMasterDraft(int? level) => _masterDraft = level;
+
+    private void StartRename()
+    {
+        if (Id is not null && State.Group(Id) is { } group)
+        {
+            _renaming = true;
+            _renameText = group.Name;
+            _focus = Focus.RenameInput;
+        }
+    }
+
+    private void CancelRename()
+    {
+        _renaming = false;
+        _focus = Focus.RenameButton;
+    }
+
+    private void OnRenameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            CancelRename();
+        }
+    }
+
+    private void ConfirmDelete()
+    {
+        _confirmDelete = true;
+        _focus = Focus.KeepButton;
+    }
+
+    private void KeepGroup()
+    {
+        _confirmDelete = false;
+        _focus = Focus.DeleteButton;
+    }
+
+    private async Task CreateAsync()
+    {
+        var name = _newName.Trim();
+        if (name.Length == 0 || _creating)
+        {
+            return;
+        }
+
+        _creating = true;
+        try
+        {
+            if (await Commands.CreateGroupAsync(name, Lifetime) is { } created)
+            {
+                _newName = string.Empty;
+                Navigation.NavigateTo("groups/" + Uri.EscapeDataString(created.Id));
+            }
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the page went away
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    private Task RenameAsync() => RunAsync(async (groupId, ct) =>
+    {
+        var name = _renameText.Trim();
+        if (name.Length > 0 && await Commands.RenameGroupAsync(groupId, name, ct))
+        {
+            _renaming = false;
+            _focus = Focus.RenameButton;
+        }
+    });
+
+    private Task DeleteAsync() => RunAsync(async (groupId, ct) =>
+    {
+        _deleting = true;
+        if (await Commands.DeleteGroupAsync(groupId, ct))
+        {
+            Navigation.NavigateTo("groups");
+        }
+        else
+        {
+            _deleting = false;
+        }
+    });
+
+    private Task ActivateAsync() => RunAsync((groupId, ct) => Commands.ActivateGroupAsync(groupId, ct));
+
+    private Task DeactivateAsync() => RunAsync((_, ct) => Commands.ClearOutputAsync(ct));
+
+    private Task RemoveAsync(string receiverId) => RunAsync((groupId, ct) => Commands.RemoveMemberAsync(groupId, receiverId, ct));
+
+    private Task AddAsync() => RunAsync(async (groupId, ct) =>
+    {
+        var receiverId = _addChoice;
+        if (receiverId.Length > 0 && await Commands.AddMemberAsync(groupId, receiverId, null, ct))
+        {
+            _addChoice = string.Empty;
+        }
+    });
+
+    private async Task RunAsync(Func<string, CancellationToken, Task> action)
+    {
+        if (Id is not { } groupId || _busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await action(groupId, Lifetime);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the page went away
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Bridge.Web;
 using Bridge.Web.Localization;
 using Xunit;
@@ -28,34 +29,67 @@ public sealed class FormattingTests
     [Theory]
     [InlineData("de", "1.234", "0", "-1.234")]
     [InlineData("en", "1,234", "0", "-1,234")]
+    [InlineData("fr", "1 234", "0", "-1 234")]
+    [InlineData("es", "1.234", "0", "-1.234")]
+    [InlineData("pt", "1.234", "0", "-1.234")]
+    [InlineData("ru", "1 234", "0", "-1 234")]
+    [InlineData("uk", "1 234", "0", "-1 234")]
     public void Integer_groups_thousands(string lang, string thousand, string zero, string negative)
     {
         using var scope = new CultureScope(lang);
-        Assert.Equal(thousand, Format.Integer(1234));
+        Assert.Equal(thousand, Spaces(Format.Integer(1234)));
         Assert.Equal(zero, Format.Integer(0));
-        Assert.Equal(negative, Format.Integer(-1234));
+        Assert.Equal(negative, Spaces(Format.Integer(-1234)));
+    }
+
+    [Theory]
+    [InlineData("de", "1.234.567")]
+    [InlineData("en", "1,234,567")]
+    [InlineData("fr", "1 234 567")]
+    [InlineData("es", "1.234.567")]
+    [InlineData("pt", "1.234.567")]
+    [InlineData("ru", "1 234 567")]
+    [InlineData("uk", "1 234 567")]
+    public void Integer_groups_millions_in_every_language(string lang, string expected)
+    {
+        using var scope = new CultureScope(lang);
+        Assert.Equal(expected, Spaces(Format.Integer(1_234_567)));
     }
 
     [Theory]
     [InlineData("de", "1,75", "1.234,5", "2")]
     [InlineData("en", "1.75", "1,234.5", "2")]
+    [InlineData("fr", "1,75", "1 234,5", "2")]
+    [InlineData("es", "1,75", "1.234,5", "2")]
+    [InlineData("pt", "1,75", "1.234,5", "2")]
+    [InlineData("ru", "1,75", "1 234,5", "2")]
+    [InlineData("uk", "1,75", "1 234,5", "2")]
     public void Decimal_uses_the_culture_separators(string lang, string twoDigits, string grouped, string noDigits)
     {
         using var scope = new CultureScope(lang);
         Assert.Equal(twoDigits, Format.Decimal(1.75, 2));
-        Assert.Equal(grouped, Format.Decimal(1234.5, 1));
+        Assert.Equal(grouped, Spaces(Format.Decimal(1234.5, 1)));
         Assert.Equal(noDigits, Format.Decimal(1.75, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => Format.Decimal(1, -1));
     }
 
     [Theory]
-    [InlineData("de", "0,4 %", "100,0 %")]
-    [InlineData("en", "0.4%", "100.0%")]
-    public void Percent_uses_the_culture_spacing(string lang, string small, string whole)
+    [InlineData("de", "0,4", "100,0", true)]
+    [InlineData("en", "0.4", "100.0", false)]
+    [InlineData("fr", "0,4", "100,0", true)]
+    [InlineData("es", "0,4", "100,0", true)]
+    [InlineData("pt", "0,4", "100,0", true)]
+    [InlineData("ru", "0,4", "100,0", true)]
+    [InlineData("uk", "0,4", "100,0", true)]
+    public void Percent_uses_the_culture_separators_and_spacing(string lang, string small, string whole, bool spaceMayPrecedeSign)
     {
+        // Whether a space precedes '%' (de/fr/es/ru "0,4 %", pt/uk "0,4%" on Windows ICU) is ICU-version data: the WASM
+        // icudt.dat, a Linux ICU and Windows can differ. The separator and the digits are strict; the comma locales may
+        // or may not have one (non-breaking or plain) space before the sign, en never has one.
         using var scope = new CultureScope(lang);
-        Assert.Equal(small, Spaces(Format.Percent(0.004, 1)));
-        Assert.Equal(whole, Spaces(Format.Percent(1, 1)));
+        var sign = spaceMayPrecedeSign ? "[   ]?%" : "%";
+        Assert.Matches($"^{Regex.Escape(small)}{sign}$", Format.Percent(0.004, 1));
+        Assert.Matches($"^{Regex.Escape(whole)}{sign}$", Format.Percent(1, 1));
     }
 
     [Theory]
@@ -85,6 +119,20 @@ public sealed class FormattingTests
         }
     }
 
+    [Theory]
+    [InlineData("fr")]
+    [InlineData("es")]
+    [InlineData("pt")]
+    [InlineData("ru")]
+    [InlineData("uk")]
+    public void Time_is_the_24_hour_clock_in_the_other_languages(string lang)
+    {
+        using var scope = new CultureScope(lang);
+        Assert.Equal("14:05:09", Format.Time(Afternoon));
+        Assert.Equal("14:05:09", Format.Time(Afternoon.ToUniversalTime()));
+        Assert.Matches("^0?9:05:09$", Format.Time(Afternoon.AddHours(-5))); // with or without a leading zero, never AM/PM
+    }
+
     [Fact]
     public void DateTime_is_the_local_general_pattern()
     {
@@ -102,6 +150,8 @@ public sealed class FormattingTests
     [Theory]
     [InlineData("de")]
     [InlineData("en")]
+    [InlineData("fr")]
+    [InlineData("ru")]
     public void Playback_times_are_invariant_and_remaining_uses_the_minus_sign(string lang)
     {
         using var scope = new CultureScope(lang);
@@ -157,5 +207,5 @@ public sealed class FormattingTests
     private static DateTimeOffset AtLocal(DateTime wallClock) => new(wallClock, TimeZoneInfo.Local.GetUtcOffset(wallClock));
 
     // ICU versions differ in the space before AM/PM and before % (U+202F, U+00A0 or a plain space); the spec writes a space.
-    private static string Spaces(string text) => text.Replace(' ', ' ').Replace(' ', ' ');
+    private static string Spaces(string text) => text.Replace('\u202F', ' ').Replace('\u00A0', ' ');
 }

@@ -169,6 +169,10 @@ legend { padding: 0; }
     justify-content: space-between;
     gap: 12px;
     padding: .7rem 1.25rem;
+    /* viewport-fit=cover: the bar's background runs under a notch or the status bar, its content stays clear of them. */
+    padding-top: calc(.7rem + env(safe-area-inset-top));
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+    padding-right: max(1.25rem, env(safe-area-inset-right));
     background: color-mix(in srgb, var(--surface) 88%, transparent);
     -webkit-backdrop-filter: saturate(1.2) blur(8px);
     backdrop-filter: saturate(1.2) blur(8px);
@@ -315,6 +319,8 @@ legend { padding: 0; }
     gap: .6rem;
     align-items: center;
     padding: .45rem 1.25rem;
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+    padding-right: max(1.25rem, env(safe-area-inset-right));
     font-size: .85rem;
     color: var(--text);
     background: var(--surface);
@@ -327,7 +333,15 @@ legend { padding: 0; }
 
 /* ── 4.2 Main ─────────────────────────────────────────────────────────────────────────────────────── */
 
-.main { max-width: 1440px; margin: 0 auto; padding: 1.25rem 1.25rem 2rem; min-width: 0; }
+.main {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 1.25rem 1.25rem 2rem;
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+    padding-right: max(1.25rem, env(safe-area-inset-right));
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+    min-width: 0;
+}
 .stack { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
 .stack--narrow { max-width: 44rem; }
 .stack > h1 { margin-bottom: 0; }
@@ -421,7 +435,7 @@ legend { padding: 0; }
 .btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
 .btn--ghost { border-color: transparent; background: transparent; color: var(--accent-ink); }
 .btn--danger { background: var(--danger-bg); border-color: var(--danger-bg); color: var(--danger-fg); }
-.btn--sm { position: relative; padding: .25rem .6rem; font-size: .78rem; min-height: 30px; }
+.btn--sm { padding: .25rem .6rem; font-size: .78rem; min-height: 30px; }
 .btn--icon { width: 2.2rem; height: 2.2rem; padding: 0; border-radius: 50%; display: grid; place-items: center; flex: none; }
 
 .step {
@@ -735,8 +749,8 @@ select.input {
     position: fixed;
     z-index: 30;
     top: calc(var(--topbar-h) + var(--banner-h, 0px) + .75rem);
-    right: 1.25rem;
-    width: min(26rem, calc(100vw - 2rem));
+    right: calc(1.25rem + env(safe-area-inset-right));
+    width: min(26rem, calc(100vw - 2rem - env(safe-area-inset-left) - env(safe-area-inset-right)));
     display: flex;
     flex-direction: column;
     gap: .5rem;
@@ -785,7 +799,7 @@ select.input {
     z-index: 60;
     display: grid;
     place-items: center;
-    padding: 1rem;
+    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
     background: var(--scrim);
 }
 .dialog {
@@ -809,6 +823,14 @@ select.input {
     font-variant-numeric: tabular-nums;
     width: 100%;
 }
+
+/* ── index.html's error strip (fixed; its inline style already pads the bottom inset) ──────────────── */
+
+#blazor-error-ui {
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+    padding-right: calc(3.5rem + env(safe-area-inset-right));
+}
+#blazor-error-ui .dismiss { right: calc(.5rem + env(safe-area-inset-right)); }
 
 /* ── 5.2 Tab bar (phones only) ────────────────────────────────────────────────────────────────────── */
 
@@ -846,6 +868,8 @@ select.input {
         position: static;
         padding: 10px 14px;
         padding-top: calc(10px + env(safe-area-inset-top));
+        padding-left: max(14px, env(safe-area-inset-left));
+        padding-right: max(14px, env(safe-area-inset-right));
         gap: 8px;
         -webkit-backdrop-filter: none;
         backdrop-filter: none;
@@ -869,10 +893,15 @@ select.input {
 
     .status { font-size: .74rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
-    .banner-slot { top: 0; }
-    .banner { padding: .45rem .875rem; }
+    .banner-slot { top: env(safe-area-inset-top, 0px); } /* the bar that carries the inset has scrolled away (PWA, notch) */
+    .banner { padding: .45rem .875rem; padding-left: max(.875rem, env(safe-area-inset-left)); padding-right: max(.875rem, env(safe-area-inset-right)); }
 
-    .main { padding: 1rem .875rem calc(1rem + var(--tabbar-h)); }
+    /* --tabbar-h is the whole bar, its safe-area padding included: the last card ends 1rem above the bar. */
+    .main {
+        padding: 1rem .875rem calc(1rem + var(--tabbar-h));
+        padding-left: max(.875rem, env(safe-area-inset-left));
+        padding-right: max(.875rem, env(safe-area-inset-right));
+    }
 
     .card { padding: 1rem; gap: .8rem; }
     .row { gap: .6rem; padding: .6rem .2rem; }
@@ -888,6 +917,7 @@ select.input {
     .hero__artist { font-size: .78rem; color: var(--muted); }
     .hero .art { width: 120px; height: 120px; }
     .hero__progress, .master { align-self: stretch; width: 100%; }
+    .master__head { justify-content: center; } /* the label and "follows the Spotify slider" centred like the rest of the hero */
     .hero__progress .track { height: 5px; }
     .step--lg { width: 44px; height: 44px; }
     .play { width: 56px; height: 56px; }
@@ -897,19 +927,28 @@ select.input {
 
     .output { padding: .8rem 1rem; }
     .output .level--compact { display: none; }
+    /* Compact sliders that do show on phones (group editor members): narrower, so a name like "Fake Receiver 1"
+       keeps one line beside the slider and the 44px remove button. */
+    .row .level--compact { width: 120px; }
     .fact-grid { grid-template-columns: minmax(0, 1fr); }
     .cards { grid-template-columns: minmax(0, 1fr); }
+    /* Fact lists stack like the Status card's facts: the label over its value, so long values (addresses, dates,
+       "live (1 connection, 63 events)") get the card's full width instead of the column beside the longest label. */
+    .facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .facts dt { font-size: .78rem; }
+    .facts dd { margin-bottom: .5rem; }
+    .facts dd:last-of-type { margin-bottom: 0; }
 
     .toasts {
         top: auto;
-        left: .75rem;
-        right: .75rem;
+        left: max(.75rem, env(safe-area-inset-left));
+        right: max(.75rem, env(safe-area-inset-right));
         width: auto;
         bottom: calc(var(--tabbar-h) + .75rem);
         flex-direction: column-reverse;
     }
 
-    .scrim { align-items: start; padding: max(.75rem, env(safe-area-inset-top)) .75rem .75rem; }
+    .scrim { align-items: start; padding: max(.75rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(.75rem, env(safe-area-inset-left)); }
     .dialog { width: 100%; }
 
     .tabbar {
@@ -924,6 +963,8 @@ select.input {
         -webkit-backdrop-filter: blur(8px);
         backdrop-filter: blur(8px);
         padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+        padding-left: max(8px, env(safe-area-inset-left));
+        padding-right: max(8px, env(safe-area-inset-right));
     }
     .tabbar a {
         flex: 1;
@@ -946,10 +987,22 @@ select.input {
     .brand__name { display: none; }
 }
 
-/* Landscape phones. */
+/* Landscape phones (844 x 390 is wider than 699px: the tablet shell with the tabs in the top bar, and no tab bar). The
+   top bar stays sticky, since its tabs are the only navigation there, but with less padding and a smaller brand tile
+   (on a touch screen the 44px tabs of 5.4 set its height); the banner keeps sticking below it (--topbar-h is measured)
+   and the toasts below both. A phone narrower than 700px in landscape keeps the phone shell (5.2): its bar is static
+   and the tab bar navigates. */
 @media (max-height: 500px) {
     .hero .art { width: 96px; height: 96px; }
-    .hero { padding: .8rem; }
+    .hero { padding: .8rem; gap: .6rem; }
+    /* A compacter hero, so the master volume row fits on the first screen of a 390px tall landscape phone. */
+    .hero__title { font-size: 1.3rem; }
+    .transport { gap: .75rem; }
+    .play { width: 48px; height: 48px; }
+    .topbar { padding-block: 5px; padding-top: calc(5px + env(safe-area-inset-top)); }
+    .brand__tile { width: 28px; height: 28px; }
+    .brand__tile svg { width: 18px; height: 18px; }
+    .tabs a { padding: .22rem .7rem; }
 }
 
 /* 5.4 Touch targets: phones by width (what headless Edge exercises) and coarse pointers at any width. */
@@ -961,17 +1014,16 @@ select.input {
     .master__row .step { width: 44px; height: 44px; }
     .toast__close { width: 44px; height: 44px; top: .1rem; right: .1rem; }
     .toast { padding-right: 3.2rem; }
-    /* .btn--sm keeps its 30px box (rows stay compact) and grows a centred 44 x 44 hit area. */
-    .btn--sm { min-height: 30px; }
-    .btn--sm::before {
-        content: "";
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: max(100%, 44px);
-        height: 44px;
-        transform: translate(-50%, -50%);
-    }
+    /* .btn--sm keeps its small type and padding but its box is 44 x 44 (an invisible ::before hit area would not count
+       for the layout audit, 5.6, which measures the element's own box). Inside rows and the banner it overlaps their
+       padding, so a row with a button is no taller than one without. */
+    .btn--sm { min-height: 44px; min-width: 44px; }
+    .row .btn--sm, .banner .btn--sm { margin-block: -.4rem; }
+    /* The brand link: a 44px target in a bar that keeps its height (the box overlaps the bar's padding). */
+    .brand { min-height: 44px; margin-block: -6px; }
+    /* The top-bar tabs on touch tablets and landscape phones (where they are the navigation): 44px tall links, so the
+       pill grows to 46px. */
+    .tabs a { display: inline-flex; align-items: center; min-height: 44px; }
     .card__head a:not(.btn), .card__actions a:not(.btn) { display: inline-flex; align-items: center; min-height: 44px; }
     .details > summary { padding-block: 13px; } /* stays display: list-item (keeps its disclosure marker); 18px line + 26px = 44px */
     .level input[type="range"] { height: 44px; }
