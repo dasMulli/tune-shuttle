@@ -98,16 +98,13 @@ else
                 return;
         }
 
-        // A copy of the token: once the component is disposed, its CancellationTokenSource is disposed too and reading
-        // Lifetime again would throw ObjectDisposedException inside the catch filter below.
-        var lifetime = Lifetime;
         string json;
         try
         {
-            await Task.Delay(Settle, lifetime);
+            await Task.Delay(Settle, Lifetime);
             json = await Browser.AuditAsync();
         }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
         {
             return; // the page went away
         }

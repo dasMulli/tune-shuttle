@@ -74,9 +74,12 @@
                 get: get,
                 setDocument: function (code) { document.documentElement.lang = code; }
             };
+            // The choice is known at first paint: <html lang> follows it now, not only once Program.Main runs.
+            document.documentElement.lang = get() || "en";
         })();
     </script>
-    <!-- Splash and error strip render before the runtime and the catalog exist: static English (UI-SPEC 8.1), coloured
+    <!-- Splash and error strip render before the runtime and the catalog exist: English in the static HTML, swapped for
+         the language bootstrap's choice by the inline map at the end of <body> (UI-SPEC 8.1), coloured
          with the tokens of css/app.css so they follow the theme. Declared before the stylesheet so app.css may refine them.
          blazor.webassembly.js shows the strip with style.display = "block", so it is styled for block flow: the .reload
          link carries its own spacing (no flex gap). -->
@@ -108,6 +111,29 @@
         <a href="." class="reload">Reload</a>
         <button type="button" class="dismiss" aria-label="Dismiss">×</button>
     </div>
+    <script>
+        // Splash and error strip in the language the bootstrap resolved (UI-SPEC 8.1): the catalog is not loaded yet, so
+        // these four texts live here; English stays in the markup as the fallback without script.
+        (function () {
+            var T = {
+                de: ["Die AirPlay-Bridge-App wird geladen…", "Ein unerwarteter Fehler ist aufgetreten.", "Neu laden", "Ausblenden"],
+                fr: ["Chargement de l’app AirPlay Bridge…", "Une erreur inattendue s’est produite.", "Recharger", "Masquer"],
+                es: ["Cargando la app AirPlay Bridge…", "Se ha producido un error inesperado.", "Recargar", "Descartar"],
+                ru: ["Загрузка приложения AirPlay Bridge…", "Произошла непредвиденная ошибка.", "Перезагрузить", "Скрыть"],
+                uk: ["Завантаження застосунку AirPlay Bridge…", "Сталася неочікувана помилка.", "Перезавантажити", "Сховати"],
+                pt: ["Carregando o app AirPlay Bridge…", "Ocorreu um erro inesperado.", "Recarregar", "Dispensar"]
+            };
+            var t = T[document.documentElement.lang];
+            if (!t) return;
+            var splash = document.querySelector("#app .splash p");
+            if (splash) splash.textContent = t[0];
+            var strip = document.getElementById("blazor-error-ui");
+            if (!strip) return;
+            strip.querySelector("span").textContent = t[1];
+            strip.querySelector(".reload").textContent = t[2];
+            strip.querySelector(".dismiss").setAttribute("aria-label", t[3]);
+        })();
+    </script>
     <script src="_framework/blazor.webassembly.js"></script>
 </body>
 </html>

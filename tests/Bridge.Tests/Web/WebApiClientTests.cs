@@ -207,6 +207,28 @@ public sealed class WebApiClientTests
     }
 
     [Fact]
+    public async Task Event_client_start_says_connecting_before_the_first_attempt_runs()
+    {
+        // No offline flash: the state is Connecting when Start returns, before the loop's first attempt (which yields).
+        var state = new BridgeState();
+        var connect = new TaskCompletionSource<WebSocket>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var events = new BridgeEventClient(
+            state,
+            new Uri("ws://localhost/ws/events"),
+            NullLogger<BridgeEventClient>.Instance,
+            connect: (_, ct) => connect.Task.WaitAsync(ct));
+        Assert.Equal(EventConnectionState.Disconnected, state.Connection);
+        Assert.Null(state.NextAttemptAt);
+
+        events.Start();
+
+        Assert.Equal(EventConnectionState.Connecting, state.Connection);
+        Assert.Null(state.ConnectionError);
+        events.Start(); // idempotent
+        Assert.Equal(EventConnectionState.Connecting, state.Connection);
+    }
+
+    [Fact]
     public async Task Event_client_drops_a_silent_connection_and_backs_off_while_the_server_is_unreachable()
     {
         var state = new BridgeState();

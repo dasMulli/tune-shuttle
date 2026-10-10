@@ -231,7 +231,7 @@
     "deviceNameHint": "The name shown in Spotify apps. Changing it restarts the Spotify Connect device.",
     "latency": "Latency L (frames)",
     "latencyHint": "= {{ms}} ms at 44.1 kHz ({{min}}–{{max}}).",
-    "latencyHint2": "How far ahead of playback the receivers get the audio; the default 77175 frames (1.75 s) fits most receivers. Changing it rebuilds the output.",
+    "latencyHint2": "How far ahead of playback the receivers get the audio; the default 77,175 frames (1.75 s) fits most receivers. Changing it rebuilds the output.",
     "stream": "Stream type",
     "streamRealtime": "Realtime",
     "streamBuffered": "Buffered",
@@ -245,7 +245,7 @@
     "validation": {
       "nameEmpty": "The device name is empty.",
       "nameTooLong": "The device name is longer than 64 characters.",
-      "latencyRange": "The latency must be between 22050 and 176400 frames.",
+      "latencyRange": "The latency must be between 22,050 and 176,400 frames.",
       "latencyNumber": "Enter the latency as a whole number of frames.",
       "stream": "The stream type is Realtime or Buffered."
     },
@@ -313,7 +313,8 @@
     "spotifyForgotten": "The Spotify login is forgotten; select the bridge in a Spotify app to log in again.",
     "connectFailed": "{{name}}: {{error}}",
     "connectFailedDefault": "the connection failed.",
-    "unreachable": "The bridge is not reachable: {{error}}",
+    "unreachable": "The bridge is not reachable.",
+    "unreadable": "The bridge's answer could not be read.",
     "timeout": "The bridge did not answer in time."
   },
   "actions": {

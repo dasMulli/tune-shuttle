@@ -13,7 +13,17 @@ namespace Bridge.Web.Components;
 public abstract class BridgeComponentBase : ComponentBase, IDisposable
 {
     private readonly CancellationTokenSource _lifetime = new();
+
+    // Captured once: a CancellationToken stays valid (and answers IsCancellationRequested) after its source is
+    // disposed, whereas _lifetime.Token would throw ObjectDisposedException, e.g. inside a catch filter after an await.
+    private readonly CancellationToken _lifetimeToken;
     private bool _disposed;
+
+    /// <summary>Creates the component and its lifetime token.</summary>
+    protected BridgeComponentBase()
+    {
+        _lifetimeToken = _lifetime.Token;
+    }
 
     /// <summary>The state container.</summary>
     [Inject]
@@ -32,7 +42,7 @@ public abstract class BridgeComponentBase : ComponentBase, IDisposable
     protected ILoggerFactory LoggerFactory { get; set; } = default!;
 
     /// <summary>Cancelled when the component is disposed.</summary>
-    protected CancellationToken Lifetime => _lifetime.Token;
+    protected CancellationToken Lifetime => _lifetimeToken;
 
     /// <inheritdoc />
     public void Dispose()

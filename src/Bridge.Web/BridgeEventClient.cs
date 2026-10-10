@@ -109,7 +109,15 @@ public sealed class BridgeEventClient : IAsyncDisposable
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            _run ??= RunAsync(_stop.Token);
+            if (_run is not null)
+            {
+                return;
+            }
+
+            // Connecting from the start: RunAsync yields before its first attempt, and the shell would otherwise render
+            // (and a screen reader announce) the offline pill and banner of the initial Disconnected state in between.
+            SetConnection(EventConnectionState.Connecting);
+            _run = RunAsync(_stop.Token);
         }
     }
 

@@ -442,9 +442,14 @@ public sealed class ShellTests : ComponentTestBase
         var (ctx, state, _, _, _) = UiTest.Create("en");
         await using (ctx)
         {
+            // BridgeEventClient.Start says Connecting before the first render (no offline flash at startup).
+            state.SetConnection(EventConnectionState.Connecting);
             var cut = ctx.Render<StatusPill>();
-            // The state before the first attempt: offline, no error.
-            Assert.Equal("status status--error", cut.Find(".status").ClassName);
+            Assert.Equal("status status--connecting", cut.Find(".status").ClassName);
+
+            // Disconnected without a retry time (the loop stopped): offline, no error, no dangling colon.
+            state.SetConnection(EventConnectionState.Disconnected);
+            cut.WaitForAssertion(() => Assert.Equal("status status--error", cut.Find(".status").ClassName));
             Assert.Equal("No connection to the bridge. The pages show the last known state.", cut.Find(".status").GetAttribute("title"));
 
             state.SetConnection(EventConnectionState.Disconnected, null, DateTimeOffset.UnixEpoch);
@@ -580,7 +585,7 @@ public sealed class ShellTests : ComponentTestBase
         var (ctx, state, _, _, _) = UiTest.Create("en");
         await using (ctx)
         {
-            var cut = ctx.Render<NoticeArea>(p => p.Add(x => x.DismissAfter, TimeSpan.FromHours(1)));
+            var cut = ctx.Render<NoticeArea>(p => p.Add(x => x.DismissAfter, TimeSpan.FromHours(1)).Add(x => x.ErrorDismissAfter, TimeSpan.FromHours(1)));
             state.Notify(NoticeKind.Success, "Settings saved.");
             state.Notify(NoticeKind.Info, "The Spotify login is forgotten.");
             state.Notify(NoticeKind.Error, "Connecting A failed.");
@@ -600,12 +605,12 @@ public sealed class ShellTests : ComponentTestBase
     }
 
     [Fact]
-    public async Task Toasts_auto_dismiss_success_and_info_but_not_errors()
+    public async Task Toasts_auto_dismiss_success_and_info_before_errors()
     {
         var (ctx, state, _, _, _) = UiTest.Create("de");
         await using (ctx)
         {
-            var cut = ctx.Render<NoticeArea>(p => p.Add(x => x.DismissAfter, TimeSpan.FromMilliseconds(50)));
+            var cut = ctx.Render<NoticeArea>(p => p.Add(x => x.DismissAfter, TimeSpan.FromMilliseconds(50)).Add(x => x.ErrorDismissAfter, TimeSpan.FromHours(1)));
             state.Notify(NoticeKind.Error, "Fehler.");
             state.Notify(NoticeKind.Success, "Einstellungen gespeichert.");
             state.Notify(NoticeKind.Info, "Info.");
@@ -616,6 +621,25 @@ public sealed class ShellTests : ComponentTestBase
             await Task.Delay(200);
             Assert.Single(state.Notices);
             Assert.Equal(TimeSpan.FromSeconds(6), NoticeArea.AutoDismiss);
+        }
+    }
+
+    [Fact]
+    public async Task Error_toasts_auto_dismiss_after_their_longer_delay()
+    {
+        // UI-SPEC 4.9: an error stays 15 s (role="alert" announces it at once), so a forgotten one does not cover the
+        // Output rows above the phone tab bar for good; it can still be dismissed earlier.
+        var (ctx, state, _, _, _) = UiTest.Create("en");
+        await using (ctx)
+        {
+            var cut = ctx.Render<NoticeArea>(p => p.Add(x => x.DismissAfter, TimeSpan.FromHours(1)).Add(x => x.ErrorDismissAfter, TimeSpan.FromMilliseconds(50)));
+            state.Notify(NoticeKind.Info, "Info.");
+            state.Notify(NoticeKind.Error, "Connecting A failed.");
+            cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll(".toast").Count));
+
+            cut.WaitForAssertion(() => Assert.Equal("toast toast--info", Assert.Single(cut.FindAll(".toast")).ClassName), TimeSpan.FromSeconds(5));
+            Assert.Equal(TimeSpan.FromSeconds(15), NoticeArea.ErrorAutoDismiss);
+            Assert.True(NoticeArea.ErrorAutoDismiss > NoticeArea.AutoDismiss);
         }
     }
 

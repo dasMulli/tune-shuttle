@@ -1,5 +1,6 @@
 @page "/settings"
 @inherits BridgeComponentBase
+@using Microsoft.Extensions.Logging
 @inject BrowserBridge Browser
 
 @* UI-SPEC 4.6: one narrow column of four cards (Bridge form, Appearance, Spotify, Diagnostics link). *@
@@ -13,13 +14,13 @@
     {
         <section class="card" aria-labelledby="settings-bridge">
             <div class="card__head"><h2 id="settings-bridge">@L["settings.bridge"]</h2></div>
-            @if (_loadError is null)
+            @if (_loadFailure is null)
             {
                 <p class="meta">@L["common.loading"]</p>
             }
             else
             {
-                <p class="meta text-err" role="alert">@L.Format("settings.loadFailed", ("detail", _loadError))</p>
+                <p class="meta text-err" role="alert">@L.Format("settings.loadFailed", ("detail", BridgeCommands.Describe(_loadFailure, L)))</p>
                 <div class="actions">
                     <button type="button" class="btn" @onclick="LoadAsync">@L["common.retry"]</button>
                 </div>
@@ -31,12 +32,12 @@
         <EditForm EditContext="_editContext" OnValidSubmit="SaveAsync" class="card settings" aria-labelledby="settings-bridge">
             <DataAnnotationsValidator />
             <div class="card__head"><h2 id="settings-bridge">@L["settings.bridge"]</h2></div>
-            @if (_loadError is not null)
+            @if (_loadFailure is not null)
             {
                 @* A failed reload (Reset) while the form is shown: say so above the values it could not replace. *@
-                <p class="meta text-err" role="alert">@L.Format("settings.loadFailed", ("detail", _loadError))</p>
+                <p class="meta text-err" role="alert">@L.Format("settings.loadFailed", ("detail", BridgeCommands.Describe(_loadFailure, L)))</p>
                 <div class="actions">
-                    <button type="button" class="btn settings-retry" @onclick="LoadAsync" disabled="@_saving">@L["common.retry"]</button>
+                    <button type="button" class="btn settings-retry" @onclick="ReloadAsync" aria-disabled="@Busy(_saving)">@L["common.retry"]</button>
                 </div>
             }
 
@@ -90,8 +91,10 @@
             </div>
 
             <div class="actions">
-                <button type="submit" class="btn btn--primary" disabled="@_saving">@(_saving ? L["settings.saving"] : L["settings.save"])</button>
-                <button type="button" class="btn btn--ghost" @onclick="LoadAsync" disabled="@_saving">@L["settings.reset"]</button>
+                @* aria-disabled while saving, not disabled: Chromium blurs a focused button that becomes disabled, so the
+                   keyboard focus would fall to <body>; the handlers ignore a press meanwhile. *@
+                <button type="submit" class="btn btn--primary" aria-disabled="@Busy(_saving)" aria-busy="@Busy(_saving)">@(_saving ? L["settings.saving"] : L["settings.save"])</button>
+                <button type="button" class="btn btn--ghost" @onclick="ReloadAsync" aria-disabled="@Busy(_saving)">@L["settings.reset"]</button>
             </div>
         </EditForm>
     }
@@ -134,8 +137,8 @@
         {
             <p>@L["settings.forgetConfirm"]</p>
             <div class="actions">
-                <button type="button" class="btn btn--danger" @onclick="ForgetSpotifyAsync" disabled="@_forgetting">@L["settings.forget"]</button>
-                <button type="button" class="btn" @onclick="() => _confirmForget = false" disabled="@_forgetting">@L["common.keep"]</button>
+                <button type="button" class="btn btn--danger" @onclick="ForgetSpotifyAsync" aria-disabled="@Busy(_forgetting)" aria-busy="@Busy(_forgetting)">@L["settings.forget"]</button>
+                <button type="button" class="btn" @onclick="KeepSpotify" aria-disabled="@Busy(_forgetting)">@L["common.keep"]</button>
             </div>
         }
         else
@@ -165,7 +168,7 @@
 
     private SettingsModel? _model;
     private EditContext? _editContext;
-    private string? _loadError;
+    private Exception? _loadFailure; // kept, not its text: the message is described in the current language per render
     private bool _saving;
     private bool _forgetting;
     private bool _confirmForget;
@@ -261,7 +264,7 @@
 
     private async Task LoadAsync()
     {
-        _loadError = null;
+        _loadFailure = null;
         try
         {
             _model = SettingsModel.From(await Commands.Api.GetSettingsAsync(Lifetime));
@@ -278,7 +281,8 @@
         }
         catch (Exception ex) when (BridgeCommands.IsFailure(ex, Lifetime))
         {
-            _loadError = BridgeCommands.Describe(ex, L);
+            _loadFailure = ex;
+            LoggerFactory.CreateLogger<Settings>().LogWarning("Loading the settings failed: {Error}", ex.Message);
         }
         catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
         {
@@ -294,9 +298,23 @@
         }
     }
 
+    /// <summary>The aria-disabled / aria-busy value: "true" or no attribute.</summary>
+    private static string? Busy(bool busy) => busy ? "true" : null;
+
+    /// <summary>Reset and the in-form Retry: ignored while a save runs (the buttons are aria-disabled then).</summary>
+    private Task ReloadAsync() => _saving ? Task.CompletedTask : LoadAsync();
+
+    private void KeepSpotify()
+    {
+        if (!_forgetting)
+        {
+            _confirmForget = false;
+        }
+    }
+
     private async Task SaveAsync()
     {
-        if (_model is null)
+        if (_model is null || _saving)
         {
             return;
         }
@@ -324,6 +342,11 @@
 
     private async Task ForgetSpotifyAsync()
     {
+        if (_forgetting)
+        {
+            return;
+        }
+
         _forgetting = true;
         try
         {

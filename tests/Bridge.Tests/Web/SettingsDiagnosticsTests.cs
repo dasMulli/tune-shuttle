@@ -47,7 +47,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
 
         cut.Find("#latency").Change("100");
         cut.Find("form").Submit();
-        cut.WaitForAssertion(() => Assert.Equal("The latency must be between 22050 and 176400 frames.", cut.Find(".validation-message").TextContent));
+        cut.WaitForAssertion(() => Assert.Equal("The latency must be between 22,050 and 176,400 frames.", cut.Find(".validation-message").TextContent));
         Assert.Equal("true", cut.Find("#latency").GetAttribute("aria-invalid"));
         Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Put);
 
@@ -99,7 +99,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     {
         using var scope = new CultureScope("en");
         var pending = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-        UseApi((request, _) => request.Method == HttpMethod.Put
+        var api = UseApi((request, _) => request.Method == HttpMethod.Put
             ? pending.Task
             : Task.FromResult(StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime"))));
         var cut = _ctx.Render<Settings>();
@@ -110,12 +110,23 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         cut.Find("#device-name").Change("  Küche ");
         cut.Find("form").Submit();
         cut.WaitForAssertion(() => Assert.Equal("Saving…", cut.Find("button[type=submit]").TextContent));
-        Assert.True(cut.Find("button[type=submit]").HasAttribute("disabled"));
-        Assert.True(cut.Find("form .actions .btn--ghost").HasAttribute("disabled"));
+        // The pressed Save keeps the focus while the PUT runs: aria-disabled and aria-busy, never disabled (Chromium blurs
+        // a focused button that becomes disabled); a second submit and Reset are ignored meanwhile.
+        Assert.False(cut.Find("button[type=submit]").HasAttribute("disabled"));
+        Assert.Equal("true", cut.Find("button[type=submit]").GetAttribute("aria-disabled"));
+        Assert.Equal("true", cut.Find("button[type=submit]").GetAttribute("aria-busy"));
+        Assert.False(cut.Find("form .actions .btn--ghost").HasAttribute("disabled"));
+        Assert.Equal("true", cut.Find("form .actions .btn--ghost").GetAttribute("aria-disabled"));
+        cut.Find("form").Submit();
+        cut.Find("form .actions .btn--ghost").Click();
+        Assert.Equal("Saving…", cut.Find("button[type=submit]").TextContent);
+        Assert.Single(api.Requests, r => r.Method == HttpMethod.Put);
+        Assert.Single(api.Requests, r => r.Method == HttpMethod.Get);
 
         pending.SetResult(StubHandler.Json(new SettingsDto("Küche", 77175, false, "Realtime")));
         cut.WaitForAssertion(() => Assert.Equal("Save", cut.Find("button[type=submit]").TextContent));
         Assert.False(cut.Find("button[type=submit]").HasAttribute("disabled"));
+        Assert.False(cut.Find("button[type=submit]").HasAttribute("aria-disabled"));
         Assert.Equal("Küche", cut.Find("#device-name").GetAttribute("value"));
 
         // The same EditContext and inputs stay (a new context would re-create them and drop the keyboard focus).
@@ -188,7 +199,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         cut.Find("#latency").Change("100");
         cut.Find("form").Submit();
         cut.WaitForAssertion(() => Assert.Equal(
-            ["Der Gerätename ist leer.", "Die Latenz muss zwischen 22050 und 176400 Frames liegen."],
+            ["Der Gerätename ist leer.", "Die Latenz muss zwischen 22.050 und 176.400 Frames liegen."],
             cut.FindAll(".validation-message").Select(m => m.TextContent)));
         Assert.All(cut.FindAll(".validation-message"), m => Assert.Equal("alert", m.GetAttribute("role")));
         Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Put);
@@ -205,11 +216,26 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         cut.WaitForAssertion(() => cut.Find("#latency"));
         cut.Find("#latency").Change("100");
         cut.Find("form").Submit();
-        cut.WaitForAssertion(() => Assert.Equal("The latency must be between 22050 and 176400 frames.", cut.Find(".validation-message").TextContent));
+        cut.WaitForAssertion(() => Assert.Equal("The latency must be between 22,050 and 176,400 frames.", cut.Find(".validation-message").TextContent));
 
         await cut.InvokeAsync(() => l.SetLanguage("de"));
-        cut.WaitForAssertion(() => Assert.Equal("Die Latenz muss zwischen 22050 und 176400 Frames liegen.", cut.Find(".validation-message").TextContent));
+        cut.WaitForAssertion(() => Assert.Equal("Die Latenz muss zwischen 22.050 und 176.400 Frames liegen.", cut.Find(".validation-message").TextContent));
         Assert.Equal("Einstellungen", cut.Find("h1").TextContent);
+    }
+
+    [Fact]
+    public async Task Settings_load_failure_follows_a_language_switch_without_the_runtime_text()
+    {
+        using var scope = new CultureScope("en");
+        var (ctx, _, _, l, _) = UiTest.Create("en", respond: (_, _) => throw new HttpRequestException("TypeError: Failed to fetch"));
+        await using var context = ctx;
+        var cut = ctx.Render<Settings>();
+        cut.WaitForAssertion(() => Assert.Equal("The settings could not be loaded. The bridge is not reachable.", cut.Find("[role=alert]").TextContent));
+
+        // The page keeps the failure, not its text: the switch re-renders it in German, and the runtime text never shows.
+        await cut.InvokeAsync(() => l.SetLanguage("de"));
+        cut.WaitForAssertion(() => Assert.Equal("Die Einstellungen konnten nicht geladen werden. Die Bridge ist nicht erreichbar.", cut.Find("[role=alert]").TextContent));
+        Assert.DoesNotContain("Failed to fetch", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -541,6 +567,40 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     }
 
     [Fact]
+    public void Live_log_formats_each_line_once_and_is_not_announced_line_by_line()
+    {
+        UseApi((request, _) => PathOf(request) == "/api/diagnostics"
+            ? StubHandler.Json(Stats)
+            : new HttpResponseMessage(HttpStatusCode.NotFound));
+        var cut = _ctx.Render<Diagnostics>();
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll(".log__line").Count)); // the REST history
+
+        // role=log is an implicit polite live region: switched off, so debug traffic does not flood a screen reader.
+        Assert.Equal("log", cut.Find(".log").GetAttribute("role"));
+        Assert.Equal("off", cut.Find(".log").GetAttribute("aria-live"));
+
+        // 600 lines, each followed by a render: every line is formatted once (not the whole buffer per render), and
+        // unrelated state changes (a status event) format nothing.
+        for (var i = 0; i < 600; i++)
+        {
+            _state.Apply(new BridgeEvent.LogLine(DateTimeOffset.UnixEpoch.AddSeconds(i), "info", "Bridge", "line " + i));
+            cut.Render();
+        }
+
+        Assert.Equal(600, cut.Instance.FormattedLines);
+        Assert.Equal(BridgeState.MaxLogLines, cut.FindAll(".log__line").Count);
+        Assert.EndsWith("line 100", cut.FindAll(".log__line")[0].TextContent, StringComparison.Ordinal);
+        Assert.EndsWith("line 599", cut.FindAll(".log__line")[^1].TextContent, StringComparison.Ordinal);
+
+        _state.Apply(new BridgeEvent.StatusChanged(Dto.Status()));
+        cut.Render();
+        cut.Find("#log-level").Change("3");
+        cut.Find("#log-level").Change("0");
+        Assert.Equal(600, cut.Instance.FormattedLines);
+        Assert.Equal(BridgeState.MaxLogLines, cut.FindAll(".log__line").Count);
+    }
+
+    [Fact]
     public void Pause_freezes_the_history_against_the_periodic_refresh()
     {
         using var scope = new CultureScope("en");
@@ -584,8 +644,8 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
 
         cut.WaitForAssertion(() => Assert.Equal("1.234", Fact(cut, "Gesendete Pakete")));
         Assert.Equal("Diagnose", cut.Find("h1").TextContent);
-        Assert.Equal("5", Fact(cut, "Neusendungen"));
-        Assert.Equal("2", Fact(cut, "Verspätete Pacer-Aufwachen"));
+        Assert.Equal("5", Fact(cut, "Neusendungsanfragen"));
+        Assert.Equal("2", Fact(cut, "Verspätete Pacer-Wakeups"));
         Assert.Equal("0,4 % · 2 verspätet", Spaces(Fact(cut, "Neusendungsquote")));
         Assert.Equal("6002", Fact(cut, "Timing-Port (UDP)"));
         Assert.Equal("noch nicht gebunden", Fact(cut, "Control-Port (UDP)"));

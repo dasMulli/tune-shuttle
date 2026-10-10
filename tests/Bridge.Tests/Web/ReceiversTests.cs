@@ -62,21 +62,30 @@ public sealed class ReceiversTests : ComponentTestBase
     public void Connect_shows_the_busy_label_while_the_request_runs()
     {
         var answer = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-        UseApi((request, _) => PathOf(request) == "/api/receivers/a/connect" ? answer.Task : Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)));
+        var api = UseApi((request, _) => PathOf(request) == "/api/receivers/a/connect" ? answer.Task : Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)));
         _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "A")));
         var cut = _ctx.Render<Receivers>();
 
         cut.Find("button.btn--primary").Click();
 
+        // The pressed button stays in the DOM and is not disabled while the request runs (Chromium would blur a focused
+        // button that becomes disabled): aria-disabled and aria-busy instead, and a second press is ignored.
         cut.WaitForAssertion(() =>
         {
             var busy = cut.Find("button.btn--primary");
             Assert.Equal("Connecting…", busy.TextContent);
-            Assert.True(busy.HasAttribute("disabled"));
+            Assert.False(busy.HasAttribute("disabled"));
+            Assert.Equal("true", busy.GetAttribute("aria-disabled"));
+            Assert.Equal("true", busy.GetAttribute("aria-busy"));
         });
+        cut.Find("button.btn--primary").Click();
+        Assert.Single(api.Requests);
 
+        // Connect and Disconnect are one element whose role switches (no @if pair the diff would swap).
         answer.SetResult(StubHandler.Json(Dto.Receiver("a", "A", state: ReceiverConnectionState.Connected)));
         cut.WaitForAssertion(() => Assert.Equal("Disconnect", cut.Find("[data-action=disconnect]").TextContent));
+        Assert.Single(cut.FindAll(".actions button[data-action=disconnect], .actions button[data-action=connect]"));
+        Assert.False(cut.Find("[data-action=disconnect]").HasAttribute("aria-disabled"));
     }
 
     [Fact]
@@ -152,7 +161,10 @@ public sealed class ReceiversTests : ComponentTestBase
         Assert.Equal("882 frames = 20 ms (latency trim, ±2 s)", details.QuerySelector(".hint")!.TextContent);
         var apply = details.QuerySelector("form.offset button.btn.btn--sm[type=submit]")!;
         Assert.Equal("Apply", apply.TextContent);
-        Assert.True(apply.HasAttribute("disabled")); // nothing to apply until the draft differs
+        // Nothing to apply until the draft differs: aria-disabled, not disabled (a successful apply makes the draft equal
+        // again, and a disabled button would drop the focus).
+        Assert.Equal("true", apply.GetAttribute("aria-disabled"));
+        Assert.False(apply.HasAttribute("disabled"));
 
         var facts = details.QuerySelectorAll(".facts dt").Zip(details.QuerySelectorAll(".facts dd"), (dt, dd) => (dt.TextContent, dd.TextContent)).ToList();
         Assert.Equal(
@@ -226,13 +238,15 @@ public sealed class ReceiversTests : ComponentTestBase
         cut.WaitForAssertion(() =>
         {
             Assert.Contains(api.Requests, r => r.Method == HttpMethod.Post && r.Path == "/api/receivers/p/pair");
-            Assert.True(cut.Find("article[data-receiver-id='p'] [data-action=pair]").HasAttribute("disabled"));
-            Assert.True(cut.Find("article[data-receiver-id='p'] [data-action=connect]").HasAttribute("disabled"));
+            Assert.Equal("true", cut.Find("article[data-receiver-id='p'] [data-action=pair]").GetAttribute("aria-disabled"));
+            Assert.False(cut.Find("article[data-receiver-id='p'] [data-action=pair]").HasAttribute("disabled")); // keeps the focus
+            Assert.Equal("true", cut.Find("article[data-receiver-id='p'] [data-action=connect]").GetAttribute("aria-disabled"));
         });
         pairAnswer.SetResult(StubHandler.Json(new PairingStartedDto("token-1", "Enter the PIN")));
         cut.WaitForAssertion(() =>
         {
             Assert.False(cut.Find("article[data-receiver-id='p'] [data-action=pair]").HasAttribute("disabled"));
+            Assert.False(cut.Find("article[data-receiver-id='p'] [data-action=pair]").HasAttribute("aria-disabled"));
             Assert.Equal("p", _state.Pairing?.ReceiverId);
         });
 
@@ -240,7 +254,8 @@ public sealed class ReceiversTests : ComponentTestBase
         cut.WaitForAssertion(() =>
         {
             Assert.Contains(api.Requests, r => r.Method == HttpMethod.Delete && r.Path == "/api/receivers/f/pairing");
-            Assert.True(cut.Find("article[data-receiver-id='f'] [data-action=forget]").HasAttribute("disabled"));
+            Assert.Equal("true", cut.Find("article[data-receiver-id='f'] [data-action=forget]").GetAttribute("aria-disabled"));
+            Assert.False(cut.Find("article[data-receiver-id='f'] [data-action=forget]").HasAttribute("disabled"));
         });
         forgetAnswer.SetResult(new HttpResponseMessage(HttpStatusCode.NoContent));
         cut.WaitForAssertion(() =>
@@ -322,7 +337,7 @@ public sealed class ReceiversTests : ComponentTestBase
             cut.WaitForAssertion(() => Assert.Equal("Fake Receiver 1", cut.Find("article.receiver h2").TextContent), RecordedFake.Patience);
             cut.WaitForAssertion(() => Assert.Equal("online", cut.Find("article.receiver .pill").TextContent), RecordedFake.Patience);
 
-            cut.Find("article.receiver button.btn--primary").Click();
+            await cut.InvokeAsync(() => cut.Find("article.receiver button.btn--primary").Click());
             await fake.WaitAsync<FakeReceiverEvent.StreamSetup>();
             cut.WaitForAssertion(() => Assert.Equal("connected", cut.Find("article.receiver .pill").TextContent), RecordedFake.Patience);
 
@@ -330,7 +345,10 @@ public sealed class ReceiversTests : ComponentTestBase
             await fake.WaitAsync<FakeReceiverEvent.Volume>(v => Math.Abs(v.Db - -24.0) < 0.001); // level 20 -> -30 + 0.3 * 20
             cut.WaitForAssertion(() => Assert.Equal("20", cut.Find("article.receiver .level output").TextContent), RecordedFake.Patience);
 
-            cut.Find("article.receiver [data-action=disconnect]").Click();
+            // The connect request may still be on its way (its events came first): the button is aria-disabled and a
+            // press is ignored until it settles, as for a user.
+            cut.WaitForAssertion(() => Assert.False(cut.Find("article.receiver [data-action=disconnect]").HasAttribute("aria-disabled")), RecordedFake.Patience);
+            await cut.InvokeAsync(() => cut.Find("article.receiver [data-action=disconnect]").Click());
             await fake.WaitAsync<FakeReceiverEvent.Teardown>();
             cut.WaitForAssertion(() => Assert.Equal("online", cut.Find("article.receiver .pill").TextContent), RecordedFake.Patience);
         }

@@ -27,7 +27,8 @@
                 <input id="new-group" class="input" type="text" maxlength="@MaxNameLength" autocomplete="off"
                        placeholder="@L["groups.namePlaceholder"]" @bind="_newName" @bind:event="oninput" />
                 <div class="actions">
-                    <button type="submit" class="btn btn--primary" disabled="@(_creating || string.IsNullOrWhiteSpace(_newName))">@L["groups.createAction"]</button>
+                    <button type="submit" class="btn btn--primary" disabled="@string.IsNullOrWhiteSpace(_newName)"
+                            aria-disabled="@Busy(_creating)" aria-busy="@Busy(_creating)">@L["groups.createAction"]</button>
                 </div>
             </form>
         </section>
@@ -45,7 +46,7 @@
                 <h2 id="group-name-title">@L["groups.name"]</h2>
                 @if (!_renaming)
                 {
-                    <button type="button" class="btn btn--ghost btn--sm" data-action="rename" disabled="@_busy"
+                    <button type="button" class="btn btn--ghost btn--sm" data-action="rename" aria-disabled="@Busy(_busy)"
                             @onclick="StartRename" @ref="_renameButton">@L["groups.rename"]</button>
                 }
             </div>
@@ -55,7 +56,8 @@
                     <input class="input" type="text" aria-label="@L["groups.name"]" maxlength="@MaxNameLength" autocomplete="off"
                            @bind="_renameText" @bind:event="oninput" @onkeydown="OnRenameKeyDown" @ref="_renameInput" />
                     <div class="actions">
-                        <button type="submit" class="btn btn--primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_renameText))">@L["groups.save"]</button>
+                        <button type="submit" class="btn btn--primary" disabled="@string.IsNullOrWhiteSpace(_renameText)"
+                                aria-disabled="@Busy(_busy)" aria-busy="@Busy(_busy)">@L["groups.save"]</button>
                         <button type="button" class="btn" @onclick="CancelRename">@L["groups.cancel"]</button>
                     </div>
                 </form>
@@ -72,16 +74,12 @@
                 <StatePill Group="group" />
             </div>
             <div class="actions">
-                @if (group.Active)
-                {
-                    <button type="button" class="btn" data-action="stop" disabled="@_busy" @onclick="DeactivateAsync">@L["groups.stopOutput"]</button>
-                }
-                else
-                {
-                    <button type="button" class="btn btn--primary" data-action="activate" disabled="@(_busy || !hasMembers)"
-                            title="@(hasMembers ? L["groups.activateTitle"] : L["groups.activateHint"])"
-                            @onclick="ActivateAsync">@L["groups.activate"]</button>
-                }
+                @* One element for Activate and Stop, so the focus survives the group becoming (in)active; aria-disabled
+                   while a request runs (a disabled focused button drops the focus), disabled only without members. *@
+                <button type="button" class="@(group.Active ? "btn" : "btn btn--primary")" data-action="@(group.Active ? "stop" : "activate")"
+                        disabled="@(!group.Active && !hasMembers)" aria-disabled="@Busy(_busy)" aria-busy="@Busy(_busy)"
+                        title="@(group.Active ? null : hasMembers ? L["groups.activateTitle"] : L["groups.activateHint"])"
+                        @onclick="() => group.Active ? DeactivateAsync() : ActivateAsync()" @ref="_outputButton">@(group.Active ? L["groups.stopOutput"] : L["groups.activate"])</button>
                 @if (!hasMembers)
                 {
                     <span class="hint">@L["groups.activateHint"]</span>
@@ -135,7 +133,7 @@
                                      Label="@L.Format("groups.memberLevel", ("name", name))"
                                      ValueText="@LevelText" Value="member.Level" Disabled="_masterDraft is not null"
                                      Send="(level, ct) => Commands.SetMemberLevelAsync(group.Id, member.ReceiverId, level, ct)" />
-                        <button type="button" class="btn btn--icon" data-action="remove" disabled="@_busy"
+                        <button type="button" class="btn btn--icon" data-action="remove" aria-disabled="@Busy(_busy)"
                                 aria-label="@L.Format("groups.remove", ("name", name))"
                                 @onclick="() => RemoveAsync(member.ReceiverId)">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
@@ -156,7 +154,9 @@
                             <option value="@receiver.Id">@(receiver.Online ? receiver.Name : receiver.Name + " " + L["groups.offlineSuffix"])</option>
                         }
                     </select>
-                    <button type="submit" class="btn" disabled="@(_busy || string.IsNullOrEmpty(_addChoice))">@L["groups.add"]</button>
+                    @* aria-disabled, not disabled: a successful add empties the choice, and a disabled button would drop
+                       the focus; AddAsync ignores an empty choice. *@
+                    <button type="submit" class="btn" aria-disabled="@Busy(_busy || string.IsNullOrEmpty(_addChoice))">@L["groups.add"]</button>
                 </form>
             }
         </section>
@@ -168,7 +168,7 @@
             {
                 <p><strong>@L.Format("groups.deleteConfirm", ("name", group.Name))</strong></p>
                 <div class="actions">
-                    <button type="button" class="btn btn--danger" data-action="delete-yes" disabled="@_busy" @onclick="DeleteAsync">@L["groups.deleteYes"]</button>
+                    <button type="button" class="btn btn--danger" data-action="delete-yes" aria-disabled="@Busy(_busy)" aria-busy="@Busy(_busy)" @onclick="DeleteAsync">@L["groups.deleteYes"]</button>
                     <button type="button" class="btn" data-action="keep" @onclick="KeepGroup" @ref="_keepButton">@L["groups.keep"]</button>
                 </div>
             }
@@ -176,7 +176,7 @@
             {
                 <p class="hint">@L["groups.deleteHint"]</p>
                 <div class="actions">
-                    <button type="button" class="btn btn--danger" data-action="delete" disabled="@_busy"
+                    <button type="button" class="btn btn--danger" data-action="delete" aria-disabled="@Busy(_busy)"
                             @onclick="ConfirmDelete" @ref="_deleteButton">@L["groups.delete"]</button>
                 </div>
             }
@@ -221,6 +221,13 @@
     private ElementReference _renameInput;
     private ElementReference _deleteButton;
     private ElementReference _keepButton;
+    private ElementReference _outputButton;
+
+    /// <summary>The Activate / Stop button (tests: the same element in both states).</summary>
+    internal ElementReference OutputButton => _outputButton;
+
+    /// <summary>The aria-disabled / aria-busy value: "true" or no attribute.</summary>
+    private static string? Busy(bool busy) => busy ? "true" : null;
 
     private enum Focus
     {
@@ -308,7 +315,7 @@
 
     private void StartRename()
     {
-        if (Id is not null && State.Group(Id) is { } group)
+        if (!_busy && Id is not null && State.Group(Id) is { } group)
         {
             _renaming = true;
             _renameText = group.Name;
@@ -332,6 +339,11 @@
 
     private void ConfirmDelete()
     {
+        if (_busy)
+        {
+            return; // aria-disabled while a request runs
+        }
+
         _confirmDelete = true;
         _focus = Focus.KeepButton;
     }

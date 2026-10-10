@@ -16,6 +16,9 @@
     --surface-2: #f1f4f9;
     --line: #e0e5ee;
     --line-strong: #d2d9e4;
+    /* The 3:1 boundary of text fields, selects, slider tracks and read-only bars (WCAG 1.4.11, UI-SPEC 6.3); --line-strong
+       stays for decorative borders (pills, the tabs and theme pills, outlined buttons whose label identifies them). */
+    --control-border: #7f8b9c;
     --text: #1b2330;
     --muted: #5f6b7a;
     --accent: #2f6df6;
@@ -60,6 +63,7 @@
         --surface-2: #0f141b;
         --line: #283039;
         --line-strong: #323b46;
+        --control-border: #66727f;
         --text: #e6edf3;
         --muted: #93a0ad;
         --accent: #4c8dff;
@@ -95,6 +99,7 @@
     --surface-2: #0f141b;
     --line: #283039;
     --line-strong: #323b46;
+    --control-border: #66727f;
     --text: #e6edf3;
     --muted: #93a0ad;
     --accent: #4c8dff;
@@ -472,7 +477,7 @@ legend { padding: 0; }
     flex: none;
 }
 .step--lg { width: 2.8rem; height: 2.8rem; }
-.step:disabled, .play:disabled { opacity: .5; cursor: default; }
+.step:disabled, .play:disabled, .step[aria-disabled="true"], .play[aria-disabled="true"] { opacity: .5; cursor: default; }
 .play {
     width: 3.6rem;
     height: 3.6rem;
@@ -531,7 +536,7 @@ a.row { color: var(--text); }
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    border: 2px solid var(--line-strong);
+    border: 2px solid color-mix(in srgb, var(--muted) 70%, var(--line-strong)); /* 3:1 control boundary, 6.3 */
     background: var(--surface);
     display: grid;
     place-items: center;
@@ -581,7 +586,7 @@ fieldset.field > legend { margin-bottom: .3rem; }
     padding: .5rem .7rem;
     min-height: 40px;
     min-width: 0;
-    border: 1px solid var(--line-strong);
+    border: 1px solid var(--control-border);
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text);
@@ -672,7 +677,7 @@ select.input {
 .level { display: flex; align-items: center; gap: .8rem; min-width: 0; --fill-color: var(--accent); }
 .level--hero { gap: .8rem; }
 .level--compact { gap: .4rem; width: 150px; flex: none; }
-.row.is-quiet .level { --fill-color: var(--line-strong); }
+.row.is-quiet .level { --fill-color: var(--muted); } /* grey, but still 3:1 on the track (6.3) */
 .level__label { font-size: .85rem; color: var(--muted); flex: none; max-width: 40%; overflow-wrap: anywhere; }
 .level input[type="range"] {
     -webkit-appearance: none;
@@ -690,10 +695,10 @@ select.input {
     box-sizing: border-box;
     height: 6px;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--line);
+    border: 1px solid var(--control-border);
     background: linear-gradient(var(--fill-color), var(--fill-color)) 0 / var(--fill, 0%) 100% no-repeat var(--surface-2);
 }
-.level input[type="range"]::-moz-range-track { height: 6px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface-2); }
+.level input[type="range"]::-moz-range-track { height: 6px; border-radius: var(--radius-pill); border: 1px solid var(--control-border); background: var(--surface-2); }
 .level input[type="range"]::-moz-range-progress { height: 6px; border-radius: var(--radius-pill); background: var(--fill-color); }
 .level input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -729,7 +734,7 @@ select.input {
     height: 6px;
     border-radius: var(--radius-pill);
     background: var(--surface-2);
-    border: 1px solid var(--line);
+    border: 1px solid var(--control-border);
 }
 .track__fill {
     position: absolute;
@@ -776,6 +781,7 @@ select.input {
 .member__level { min-width: 1.6rem; text-align: right; font-variant-numeric: tabular-nums; }
 
 .output { gap: .4rem; }
+.card--status { gap: .6rem; } /* the Status card of the desktop mockups (4.3); not .status, the top-bar pill */
 .output > .card__head { margin-bottom: .3rem; }
 .output__none { padding: .2rem .4rem; }
 .output__list { display: flex; flex-direction: column; }
@@ -861,6 +867,9 @@ select.input {
     box-shadow: var(--shadow-lift);
 }
 .dialog__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
+/* The pairing dialog's form sits inside the role=dialog box (a form may not carry the dialog role); display: contents
+   keeps its parts direct flex / grid items of .dialog. */
+.dialog__form { display: contents; }
 .input.pin {
     font-size: 1.6rem;
     letter-spacing: .4em;
@@ -946,7 +955,7 @@ select.input {
         background: var(--surface);
     }
 
-    .status { font-size: .74rem; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+    .status { font-size: .74rem; padding: .3rem .6rem; gap: .35rem; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
 
     .banner-slot { top: env(safe-area-inset-top, 0px); } /* the bar that carries the inset has scrolled away (PWA, notch) */
     .banner { padding: .45rem .875rem; padding-left: max(.875rem, env(safe-area-inset-left)); padding-right: max(.875rem, env(safe-area-inset-right)); }
@@ -972,13 +981,20 @@ select.input {
     .hero__title { font-size: 1.2rem; }
     .hero__artist { font-size: .78rem; color: var(--muted); }
     .hero .art { width: 120px; height: 120px; }
+    .hero .art--placeholder svg { width: 36.67%; height: 36.67%; } /* the 44px note on the 120px art of the phone mockup */
     .hero__progress, .master { align-self: stretch; width: 100%; }
     .master__head { justify-content: center; } /* the label and "follows the Spotify slider" centred like the rest of the hero */
     .hero__progress .track { height: 5px; }
     .step--lg { width: 44px; height: 44px; }
     .play { width: 56px; height: 56px; }
     .play svg { width: 24px; height: 24px; }
-    .master__row { gap: .6rem; }
+    /* The master row is a grid on phones, so the number drops under the track instead of sitting beside it and the
+       slider gets the row between the 44px steppers (221px at 390px, 151px at 320px instead of 170/100px). The
+       .level--hero box is display: contents, so its children (−, track, +, number: the DOM and so the Tab order) are
+       the grid items and --fill-color still inherits from it. */
+    .master__row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: .4rem .6rem; }
+    .master__row > .level--hero { display: contents; }
+    .master__row .level--hero output.big { grid-column: 2; justify-self: end; line-height: 1; }
     .big, .level output.big { font-size: 1.3rem; min-width: 2rem; }
 
     .output { padding: .8rem 1rem; }
@@ -1009,6 +1025,9 @@ select.input {
         bottom: calc(var(--tabbar-h) + .75rem);
         flex-direction: column-reverse;
     }
+    /* Only the two newest toasts on a phone, so a pile never covers the Player's lower half (the others stay in the
+       DOM and come back as these are dismissed or time out). */
+    .toasts .toast:nth-last-child(n + 3) { display: none; }
 
     .scrim { align-items: start; padding: max(.75rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(.75rem, env(safe-area-inset-left)); }
     .dialog { width: 100%; }
@@ -1048,6 +1067,12 @@ select.input {
 @media (max-width: 359px) {
     .brand__name { display: none; }
     .tools { flex-shrink: 1; }
+    /* Without its name the brand link stays a 44 x 44 target around the 32px tile. */
+    .brand { min-width: 44px; justify-content: center; }
+    /* A compacter hero on 320px phones, so the master volume row stays above the tab bar on the first screen. */
+    .hero .art { width: 96px; height: 96px; }
+    .hero { gap: .5rem; }
+    .hero__title { font-size: 1.1rem; }
 }
 
 /* The top-bar language select needs 700px plus room for its 4.5rem floor: below 760px (pt, ru, uk with the theme pill
@@ -1061,8 +1086,9 @@ select.input {
    top bar stays sticky, since its tabs are the only navigation there, but with less padding and a smaller brand tile
    (on a touch screen the 44px tabs of 5.4 set its height); the banner keeps sticking below it (--topbar-h is measured)
    and the toasts below both. A phone narrower than 700px in landscape keeps the phone shell (5.2): its bar is static
-   and the tab bar navigates. */
-@media (max-height: 500px) {
+   and the tab bar navigates. Only in landscape: a portrait phone whose keyboard shrinks the layout viewport below 500px
+   (interactive-widget=resizes-content) must not see the bar and the hero jump while a field is focused. */
+@media (max-height: 500px) and (orientation: landscape) {
     .hero .art { width: 96px; height: 96px; }
     .hero { padding: .8rem; gap: .6rem; }
     /* A compacter hero, so the master volume row fits on the first screen of a 390px tall landscape phone. */
@@ -1073,8 +1099,12 @@ select.input {
     .brand__tile { width: 28px; height: 28px; }
     .brand__tile svg { width: 18px; height: 18px; }
     .tabs a { padding: .22rem .7rem; }
-    /* The pairing dialog is top-anchored and compacter, like the phone sheet: with a landscape keyboard the visible
-       height is 150-200px, and the PIN field and the actions must stay in the upper part (REVIEW-2 #3). */
+}
+
+/* Short viewports in any orientation (landscape phones, and portrait phones with the keyboard open): the pairing dialog
+   is top-anchored and compacter, like the phone sheet: with a landscape keyboard the visible height is 150-200px, and
+   the PIN field and the actions must stay in the upper part (REVIEW-2 #3). */
+@media (max-height: 500px) {
     .scrim { align-items: start; padding-top: max(.5rem, env(safe-area-inset-top)); }
     /* The PIN field and the Pair/Cancel row share one line (a grid; the DOM and so the Tab order stay field, actions), so
        with a landscape keyboard (150-200px visible) the actions are visible next to the field without any scrolling:
@@ -1088,10 +1118,10 @@ select.input {
         padding: .8rem 1rem;
         max-height: calc(100dvh - 1rem);
     }
-    .dialog > * { grid-column: 1 / -1; }
-    .dialog > .field { grid-column: 1; grid-row: 3; }
-    .dialog > .dialog__actions { grid-column: 2; grid-row: 3; }
-    .dialog > .validation-message { grid-row: 4; }
+    .dialog > *, .dialog__form > * { grid-column: 1 / -1; }
+    .dialog > .field, .dialog__form > .field { grid-column: 1; grid-row: 3; }
+    .dialog > .dialog__actions, .dialog__form > .dialog__actions { grid-column: 2; grid-row: 3; }
+    .dialog > .validation-message, .dialog__form > .validation-message { grid-row: 4; }
 }
 
 /* 5.4 Touch targets: phones by width (what headless Edge exercises) and coarse pointers at any width. */
@@ -1105,6 +1135,9 @@ select.input {
        REVIEW-2 #5); not 44px and no halo (2.4), allow-listed in the audit. */
     .theme-btn { width: 34px; height: 34px; }
     .theme-btn .ico { width: 18px; height: 18px; }
+    /* Compact sliders on touch tablets: 220px (a 188px input), not the 150px desktop box with < 1px per level. Phones
+       are unaffected: the Output rows hide them and the member rows set width: auto (both more specific). */
+    .level--compact { width: 220px; }
     .toast__close { width: 44px; height: 44px; top: .1rem; right: .1rem; }
     .toast { padding-right: 3.2rem; }
     /* .btn--sm keeps its small type and padding but its box is 44 x 44 (an invisible ::before hit area would not count
@@ -1126,6 +1159,7 @@ select.input {
     .level input[type="range"]::-moz-range-thumb { width: 24px; height: 24px; }
     /* .lang-select is named because its own class rule (.85rem) would beat the type selectors (coarse-pointer tablets). */
     input, select, textarea, .input, .lang-select { font-size: 16px; }
+    .lang-select { min-height: 44px; padding-block: .5rem; } /* the top-bar select on touch tablets (from 760px) */
     .input.pin { font-size: 1.6rem; }
     .actions, .card__actions, .dialog__actions, .offset { gap: .75rem; }
 }
@@ -1138,17 +1172,18 @@ select.input {
     .theme-btn:hover { color: var(--accent-ink); }
     /* Outlined buttons get the accent border; filled ones darken (toward --text, which raises their text contrast in
        both themes) and ghost ones get the soft accent fill instead of an outline. */
-    .btn:not(:disabled):not(.btn--primary):not(.btn--danger):not(.btn--ghost):hover, .step:not(:disabled):hover,
+    .btn:not(:disabled):not([aria-disabled="true"]):not(.btn--primary):not(.btn--danger):not(.btn--ghost):hover,
+    .step:not(:disabled):not([aria-disabled="true"]):hover,
     .lang-select:hover, select.input:hover { border-color: var(--accent); }
-    .btn--primary:not(:disabled):hover {
+    .btn--primary:not(:disabled):not([aria-disabled="true"]):hover {
         background: color-mix(in srgb, var(--accent) 88%, var(--text));
         border-color: color-mix(in srgb, var(--accent) 88%, var(--text));
     }
-    .btn--danger:not(:disabled):hover {
+    .btn--danger:not(:disabled):not([aria-disabled="true"]):hover {
         background: color-mix(in srgb, var(--danger-bg) 88%, var(--text));
         border-color: color-mix(in srgb, var(--danger-bg) 88%, var(--text));
     }
-    .btn--ghost:not(:disabled):hover { background: var(--accent-soft); }
+    .btn--ghost:not(:disabled):not([aria-disabled="true"]):hover { background: var(--accent-soft); }
     .toast__close:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
     .tabbar a:hover { color: var(--text); }
 }

@@ -3,7 +3,8 @@
    div.row whose label (.row__label: the visually-hidden radio, the .radio glyph, name, meta and pill) fills it, so arrow
    keys, Space and screen readers work natively and the whole row height is the target; the row's other controls (a
    group's Edit link on wide screens, a receiver's compact slider or Pair button) sit beside the label, never inside it.
-   Checking a row activates the group / connects the receiver (selection follows = activation). While that request runs
+   Checking a row activates the group / connects the receiver (selection follows = activation; a click or tap starts at
+   once, an arrow-key pick only after a short pause, so stepping through the list sends one request). While it runs
    the row carries aria-busy and its pill says "connecting…"; the radio stays enabled (a radio disabled under the
    keyboard focus drops the focus to <body>) and a repeat on the busy row is ignored. Head actions and the metas differ
    between phones and wider screens through .only-phone / .only-wide. *@
@@ -22,14 +23,12 @@
         <div class="card__actions">
             <a class="btn btn--ghost btn--sm only-wide" href="groups/new">@L["player.newGroup"]</a>
             <a class="only-phone" href="groups">@L["player.editGroups"]</a>
-            @if (selected)
-            {
-                <button type="button" class="btn btn--sm" disabled="@_stopping" @onclick="StopAsync">@L["player.stopOutput"]</button>
-            }
-            else
-            {
-                <button type="button" class="btn btn--sm only-wide" disabled>@L["player.stopOutput"]</button>
-            }
+            @* One element in both states (an @if pair would be swapped by the diff and drop the focus when the output
+               clears); aria-disabled, not disabled, so the pressed button keeps the focus. Phones show it only while an
+               output is selected (5.3). *@
+            <button type="button" class="@(selected ? "btn btn--sm" : "btn btn--sm only-wide")"
+                    aria-disabled="@(selected && !_stopping ? null : "true")" aria-busy="@(_stopping ? "true" : null)"
+                    @onclick="StopAsync" @ref="_stopButton">@L["player.stopOutput"]</button>
         </div>
     </div>
 
@@ -67,7 +66,7 @@
                     var metaId = nameId + "-meta";
                     var pillId = nameId + "-pill";
                     <div class="@(active ? "row row--choice is-active" : "row row--choice")" data-group-id="@group.Id" aria-busy="@(busy ? "true" : null)" @key="key">
-                        <label class="row__label">
+                        <label class="row__label" @onpointerdown="OnPointerDown">
                             <input type="radio" name="output" class="visually-hidden" checked="@Checked(key, active)"
                                    disabled="@(group.Members.Count == 0 || !reachable)"
                                    aria-labelledby="@nameId" aria-describedby="@(metaId + " " + pillId)"
@@ -104,7 +103,7 @@
                     var metaId = nameId + "-meta";
                     var pillId = nameId + "-pill";
                     <div class="@RowClass(active, inOutput)" data-receiver-id="@receiver.Id" aria-busy="@(busy ? "true" : null)" @key="key">
-                        <label class="row__label">
+                        <label class="row__label" @onpointerdown="OnPointerDown">
                             <input type="radio" name="output" class="visually-hidden" checked="@Checked(key, active)"
                                    disabled="@(!receiver.Online || receiver.Pairing == PairingState.Disabled)"
                                    aria-labelledby="@nameId" aria-describedby="@(metaId + " " + pillId)"
@@ -148,8 +147,21 @@
 </section>
 
 @code {
+    /// <summary>How long a keyboard pick waits for the next arrow key before it selects (selection follows focus).</summary>
+    internal static readonly TimeSpan KeyboardSelectDelay = TimeSpan.FromMilliseconds(400);
+
+    // A change within this time after a pointer press on a row's label is a click or tap.
+    private const long PointerPickWindowMs = 2000;
+
     private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
     private bool _stopping;
+    private ElementReference _stopButton;
+
+    // Selection follows focus in a radio set, so arrow keys stepping through the rows fire a change per step, and each
+    // connect or activation takes seconds on a real receiver. A pick that follows a pointer press starts at once; any
+    // other pick waits KeyboardSelectDelay and is replaced by a newer one, so only the row the user stops on is sent.
+    private long? _pointerDownAt;
+    private (CancellationTokenSource Wait, string Key)? _pending;
 
     // The row whose radio the browser checked last (the user's pick). When the selections settle and the output is not
     // that row (a failed request, a connect answered with State == Error or PinRequired, a member of the active group
@@ -171,7 +183,12 @@
         _ => "row row--choice is-quiet",
     };
 
+    /// <summary>The Stop output button (tests: its element survives the output being cleared).</summary>
+    internal ElementReference StopButton => _stopButton;
+
     private bool Checked(string key, bool active) => _echo is { } echo ? echo == key : active;
+
+    private void OnPointerDown() => _pointerDownAt = Environment.TickCount64;
 
     private string? OutputKey() => State.Output switch
     {
@@ -187,13 +204,49 @@
     private async Task SelectAsync(string key, Func<CancellationToken, Task<bool>> select)
     {
         _picked = key;
-        if (!_busy.Add(key))
+        if (_busy.Contains(key))
         {
-            return; // already on its way
+            return; // already on its way (or waiting for the keyboard to settle)
         }
 
+        if (_pending is { } previous)
+        {
+            // A newer pick replaces one that is still waiting: that one is never sent.
+            _pending = null;
+            _busy.Remove(previous.Key);
+            previous.Wait.Cancel();
+        }
+
+        var immediate = _pointerDownAt is { } pressed && Environment.TickCount64 - pressed <= PointerPickWindowMs;
+        _pointerDownAt = null;
+        var superseded = false;
+        _busy.Add(key);
         try
         {
+            if (!immediate)
+            {
+                var wait = CancellationTokenSource.CreateLinkedTokenSource(Lifetime);
+                _pending = (wait, key);
+                try
+                {
+                    await Task.Delay(KeyboardSelectDelay, wait.Token);
+                }
+                catch (OperationCanceledException) when (!Lifetime.IsCancellationRequested)
+                {
+                    superseded = true; // the newer pick owns the busy set and the native check now
+                    return;
+                }
+                finally
+                {
+                    if (_pending?.Wait == wait)
+                    {
+                        _pending = null;
+                    }
+
+                    wait.Dispose();
+                }
+            }
+
             await select(Lifetime);
         }
         catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
@@ -202,7 +255,10 @@
         }
         finally
         {
-            _busy.Remove(key);
+            if (!superseded)
+            {
+                _busy.Remove(key);
+            }
         }
 
         // Whatever the outcome: once nothing is in flight, the native check must sit on the output.
@@ -236,6 +292,11 @@
 
     private async Task StopAsync()
     {
+        if (_stopping || (State.Output.GroupId is null && State.Output.ReceiverId is null))
+        {
+            return; // aria-disabled: nothing selected, or already stopping
+        }
+
         _stopping = true;
         try
         {

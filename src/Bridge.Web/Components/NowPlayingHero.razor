@@ -9,7 +9,10 @@
     var status = State.Status;
     var spotifyConnected = status?.SpotifyConnected == true;
     var playing = playback?.Playing == true;
-    var transportDisabled = !spotifyConnected || _busy;
+    // Disabled only for the static reason (Spotify not connected). While a command runs the buttons are aria-disabled
+    // instead: Chromium blurs a focused button that becomes disabled, so the keyboard focus would fall to <body>.
+    var transportDisabled = !spotifyConnected;
+    var busy = _busy ? "true" : null;
 }
 
 <section class="card hero" aria-label="@L["player.nowPlaying"]">
@@ -73,22 +76,18 @@
     }
 
     <div class="transport">
-        <button type="button" class="step step--lg" aria-label="@L["player.previous"]" disabled="@transportDisabled" @onclick='() => CommandAsync("prev")'>
+        <button type="button" class="step step--lg" aria-label="@L["player.previous"]" disabled="@transportDisabled"
+                aria-disabled="@busy" aria-busy="@busy" @onclick='() => CommandAsync("prev")'>
             <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
         </button>
-        @if (playing)
-        {
-            <button type="button" class="play" aria-label="@L["player.pause"]" disabled="@transportDisabled" @onclick='() => CommandAsync("pause")'>
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
-            </button>
-        }
-        else
-        {
-            <button type="button" class="play" aria-label="@L["player.play"]" disabled="@transportDisabled" @onclick='() => CommandAsync("play")'>
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-            </button>
-        }
-        <button type="button" class="step step--lg" aria-label="@L["player.next"]" disabled="@transportDisabled" @onclick='() => CommandAsync("next")'>
+        @* One element for play and pause: two elements in an @if would be swapped by the diff when playbackChanged flips
+           the state right after a key press, and the focused one would be destroyed. Only the label and icon change. *@
+        <button type="button" class="play" aria-label="@(playing ? L["player.pause"] : L["player.play"])" disabled="@transportDisabled"
+                aria-disabled="@busy" aria-busy="@busy" @onclick='() => CommandAsync(playing ? "pause" : "play")' @ref="_playButton">
+            @(playing ? PauseIcon : PlayIcon)
+        </button>
+        <button type="button" class="step step--lg" aria-label="@L["player.next"]" disabled="@transportDisabled"
+                aria-disabled="@busy" aria-busy="@busy" @onclick='() => CommandAsync("next")'>
             <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
         </button>
     </div>
@@ -97,7 +96,24 @@
 </section>
 
 @code {
+    private static readonly RenderFragment PlayIcon = __builder =>
+    {
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+    };
+
+    private static readonly RenderFragment PauseIcon = __builder =>
+    {
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+    };
+
     private bool _busy;
+
+    // Captured so the element's identity is observable (bUnit prints the reference id; the tests check that the play
+    // button survives a play/pause flip as the same element).
+    private ElementReference _playButton;
+
+    /// <summary>The play/pause button (tests).</summary>
+    internal ElementReference PlayButton => _playButton;
 
     private static string Seconds(long ms) => (Math.Max(0, ms) / 1000).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -121,6 +137,11 @@
 
     private async Task CommandAsync(string command)
     {
+        if (_busy)
+        {
+            return; // one command at a time (the buttons are only aria-disabled meanwhile)
+        }
+
         _busy = true;
         try
         {

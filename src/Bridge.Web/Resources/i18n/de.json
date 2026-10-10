@@ -231,7 +231,7 @@
     "deviceNameHint": "Der Name in Spotify-Apps. Eine Änderung startet das Spotify-Connect-Gerät neu.",
     "latency": "Latenz L (Frames)",
     "latencyHint": "= {{ms}} ms bei 44,1 kHz ({{min}}–{{max}}).",
-    "latencyHint2": "Wie weit vor der Wiedergabe die Empfänger das Audio bekommen; der Standard 77175 Frames (1,75 s) passt für die meisten. Eine Änderung baut die Ausgabe neu auf.",
+    "latencyHint2": "Wie weit vor der Wiedergabe die Empfänger das Audio bekommen; der Standard 77.175 Frames (1,75 s) passt für die meisten. Eine Änderung baut die Ausgabe neu auf.",
     "stream": "Stream-Typ",
     "streamRealtime": "Realtime",
     "streamBuffered": "Gepuffert",
@@ -245,9 +245,9 @@
     "validation": {
       "nameEmpty": "Der Gerätename ist leer.",
       "nameTooLong": "Der Gerätename ist länger als 64 Zeichen.",
-      "latencyRange": "Die Latenz muss zwischen 22050 und 176400 Frames liegen.",
+      "latencyRange": "Die Latenz muss zwischen 22.050 und 176.400 Frames liegen.",
       "latencyNumber": "Gib die Latenz als ganze Zahl an Frames ein.",
-      "stream": "Der Stream-Typ ist Realtime oder Buffered."
+      "stream": "Der Stream-Typ ist Realtime oder Gepuffert."
     },
     "appearance": "Darstellung",
     "theme": "Design",
@@ -282,8 +282,8 @@
     "controlPort": "Control-Port (UDP)",
     "notBound": "noch nicht gebunden",
     "packetsSent": "Gesendete Pakete",
-    "retransmits": "Neusendungen",
-    "lateWakeups": "Verspätete Pacer-Aufwachen",
+    "retransmits": "Neusendungsanfragen",
+    "lateWakeups": "Verspätete Pacer-Wakeups",
     "retransmitRatio": "Neusendungsquote",
     "retransmitRatioValue": "{{percent}} · {{late}} verspätet",
     "localAddresses": "Lokale Adressen",
@@ -313,7 +313,8 @@
     "spotifyForgotten": "Die Spotify-Anmeldung ist vergessen; wähle die Bridge in einer Spotify-App, um dich neu anzumelden.",
     "connectFailed": "{{name}}: {{error}}",
     "connectFailedDefault": "die Verbindung ist fehlgeschlagen.",
-    "unreachable": "Die Bridge ist nicht erreichbar: {{error}}",
+    "unreachable": "Die Bridge ist nicht erreichbar.",
+    "unreadable": "Die Antwort der Bridge war nicht lesbar.",
     "timeout": "Die Bridge hat nicht rechtzeitig geantwortet."
   },
   "actions": {

@@ -231,7 +231,7 @@
     "deviceNameHint": "O nome exibido nos apps do Spotify. Alterá-lo reinicia o dispositivo Spotify Connect.",
     "latency": "Latência L (quadros)",
     "latencyHint": "= {{ms}} ms a 44,1 kHz ({{min}}–{{max}}).",
-    "latencyHint2": "Com quanta antecedência em relação à reprodução os receptores recebem o áudio; o padrão de 77175 quadros (1,75 s) serve para a maioria. Alterá-lo reconstrói a saída.",
+    "latencyHint2": "Com quanta antecedência em relação à reprodução os receptores recebem o áudio; o padrão de 77.175 quadros (1,75 s) serve para a maioria. Alterá-lo reconstrói a saída.",
     "stream": "Tipo de stream",
     "streamRealtime": "Tempo real",
     "streamBuffered": "Com buffer",
@@ -245,9 +245,9 @@
     "validation": {
       "nameEmpty": "O nome do dispositivo está vazio.",
       "nameTooLong": "O nome do dispositivo tem mais de 64 caracteres.",
-      "latencyRange": "A latência deve estar entre 22050 e 176400 quadros.",
+      "latencyRange": "A latência deve estar entre 22.050 e 176.400 quadros.",
       "latencyNumber": "Digite a latência como um número inteiro de quadros.",
-      "stream": "O tipo de stream é Realtime ou Buffered."
+      "stream": "O tipo de stream é Tempo real ou Com buffer."
     },
     "appearance": "Aparência",
     "theme": "Tema",
@@ -313,7 +313,8 @@
     "spotifyForgotten": "O login do Spotify foi esquecido; selecione o Bridge em um app do Spotify para entrar de novo.",
     "connectFailed": "{{name}}: {{error}}",
     "connectFailedDefault": "a conexão falhou.",
-    "unreachable": "O Bridge não está acessível: {{error}}",
+    "unreachable": "O Bridge não está acessível.",
+    "unreadable": "Não foi possível ler a resposta do Bridge.",
     "timeout": "O Bridge não respondeu a tempo."
   },
   "actions": {

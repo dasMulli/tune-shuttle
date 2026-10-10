@@ -1,5 +1,6 @@
 @page "/settings/diagnostics"
 @inherits BridgeComponentBase
+@using Microsoft.Extensions.Logging
 @inject BridgeEventClient Events
 
 @* UI-SPEC 4.7: back link, then a grid of three fact cards and the full-width live log. Values that originate in the
@@ -73,7 +74,7 @@
                 </dl>
                 @if (_error is not null)
                 {
-                    <p class="meta text-err" role="alert">@L.Format("diagnostics.unavailable", ("detail", _error))</p>
+                    <p class="meta text-err" role="alert">@L.Format("diagnostics.unavailable", ("detail", BridgeCommands.Describe(_error, L)))</p>
                 }
                 @if (_updated is { } updated)
                 {
@@ -82,7 +83,7 @@
             }
             else if (_error is not null)
             {
-                <p class="meta text-err" role="alert">@L.Format("diagnostics.unavailable", ("detail", _error))</p>
+                <p class="meta text-err" role="alert">@L.Format("diagnostics.unavailable", ("detail", BridgeCommands.Describe(_error, L)))</p>
                 <div class="actions">
                     <button type="button" class="btn" @onclick="RetryAsync">@L["common.retry"]</button>
                 </div>
@@ -140,10 +141,13 @@
             }
             else
             {
-                <div class="log" role="log" tabindex="0" aria-labelledby="diagnostics-log">
+                @* aria-live="off": role=log is an implicit polite live region, and debug traffic (plus the replay after a
+                   reconnect) would flood a screen reader; the focusable log is read on demand. @key keeps the <p> of a
+                   line when lines are appended and the oldest drop out. *@
+                <div class="log" role="log" aria-live="off" tabindex="0" aria-labelledby="diagnostics-log">
                     @foreach (var line in lines)
                     {
-                        <p class="@LineClass(line.Level)">@line.Text</p>
+                        <p @key="line.Key" class="@LineClass(line.Level)">@line.Text</p>
                     }
                 </div>
             }
@@ -163,15 +167,33 @@
 
     private DiagnosticsDto? _diagnostics;
     private DateTimeOffset? _updated;
-    private string? _error;
+    private Exception? _error; // kept, not its text: described in the current language per render
     private int _minimumLevel;
     private bool _paused;
     private bool _historyCleared;
     private IReadOnlyList<ShownLine>? _pausedView;
     private bool _subscribed;
 
-    /// <summary>A log line as shown: its level (for the class and the filter) and its text.</summary>
-    private readonly record struct ShownLine(string Level, string Text);
+    // The page re-renders on every state change, most of which are not log lines: the formatted text of each live line
+    // is kept, and the lists are rebuilt only when the log (BridgeState.LogVersion), the REST history or the filter
+    // changed. The lists are never mutated, so a paused snapshot can share them.
+    private Dictionary<BridgeEvent.LogLine, string> _formatted = [];
+    private long _liveVersion = -1;
+    private IReadOnlyList<ShownLine> _live = [];
+    private DiagnosticsDto? _historyOf;
+    private IReadOnlyList<ShownLine> _history = [];
+    private IReadOnlyList<ShownLine>? _filteredOf;
+    private int _filteredLevel;
+    private IReadOnlyList<ShownLine> _filtered = [];
+
+    /// <summary>Live lines formatted so far (each once, not once per render; tests).</summary>
+    internal int FormattedLines { get; private set; }
+
+    /// <summary>
+    /// A log line as shown: its level (for the class and the filter), its text and the <c>@key</c> of its element (the
+    /// live <see cref="BridgeEvent.LogLine"/> itself, or the history text).
+    /// </summary>
+    private readonly record struct ShownLine(string Level, string Text, object Key);
 
     /// <summary>
     /// Severity rank of a log level name: the service writes the console's short forms (trce, dbug, info, warn, fail,
@@ -304,7 +326,19 @@
     private IReadOnlyList<ShownLine> Lines()
     {
         var lines = _pausedView ?? CurrentLines();
-        return _minimumLevel == 0 ? lines : [.. lines.Where(l => Rank(l.Level) >= _minimumLevel)];
+        if (_minimumLevel == 0)
+        {
+            return lines;
+        }
+
+        if (!ReferenceEquals(lines, _filteredOf) || _minimumLevel != _filteredLevel)
+        {
+            _filtered = [.. lines.Where(l => Rank(l.Level) >= _minimumLevel)];
+            _filteredOf = lines;
+            _filteredLevel = _minimumLevel;
+        }
+
+        return _filtered;
     }
 
     /// <summary>
@@ -313,13 +347,49 @@
     /// </summary>
     private IReadOnlyList<ShownLine> CurrentLines()
     {
-        var live = State.Log;
-        IEnumerable<ShownLine> lines = live.Count > 0 || _historyCleared || _diagnostics is null
-            ? live.Select(l => new ShownLine(
-                l.Level,
-                $"{l.At.ToLocalTime().ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture)} {l.Level} {l.Category}: {l.Message}"))
-            : _diagnostics.RecentLog.Select(text => new ShownLine(HistoryLevel(text), text));
-        return [.. lines];
+        // The version first: a line appended after this read makes the next render rebuild again.
+        var version = State.LogVersion;
+        if (version != _liveVersion)
+        {
+            var live = State.Log;
+            var formatted = new Dictionary<BridgeEvent.LogLine, string>(live.Count);
+            var lines = new ShownLine[live.Count];
+            for (var i = 0; i < live.Count; i++)
+            {
+                var line = live[i];
+                if (!_formatted.TryGetValue(line, out var text))
+                {
+                    text = $"{line.At.ToLocalTime().ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture)} {line.Level} {line.Category}: {line.Message}";
+                    FormattedLines++;
+                }
+
+                formatted[line] = text;
+                lines[i] = new ShownLine(line.Level, text, line);
+            }
+
+            _formatted = formatted; // lines that dropped out of the log are forgotten
+            _live = lines;
+            _liveVersion = version;
+        }
+
+        if (_live.Count > 0 || _historyCleared || _diagnostics is null)
+        {
+            return _live;
+        }
+
+        if (!ReferenceEquals(_diagnostics, _historyOf))
+        {
+            // History lines are plain text and may repeat: the n-th repeat of a text gets (text, n) as its key.
+            var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+            _history = [.. _diagnostics.RecentLog.Select(text =>
+            {
+                var n = seen[text] = seen.GetValueOrDefault(text) + 1;
+                return new ShownLine(HistoryLevel(text), text, n == 1 ? text : (text, n));
+            })];
+            _historyOf = _diagnostics;
+        }
+
+        return _history;
     }
 
     /// <summary>The level of a history line "HH:mm:ss.fff level Category: message" (info when it does not parse).</summary>
@@ -346,7 +416,13 @@
         catch (Exception ex) when (BridgeCommands.IsFailure(ex, ct))
         {
             // A timeout included: the page shows the catalog text, and a failed tick does not end the refresh loop.
-            _error = BridgeCommands.Describe(ex, L);
+            if (_error is null)
+            {
+                // Once per outage, not on every refresh tick.
+                LoggerFactory.CreateLogger<Diagnostics>().LogWarning("Loading the diagnostics failed: {Error}", ex.Message);
+            }
+
+            _error = ex;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

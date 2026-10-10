@@ -39,6 +39,9 @@ public sealed class GroupsPairingTests : ComponentTestBase
         Assert.Equal("PIN Speaker needs a PIN pairing. Enter the PIN it shows now.", cut.Find("#pairing-prompt").TextContent);
         Assert.Equal("true", cut.Find(".scrim > .dialog").GetAttribute("aria-modal"));
         Assert.Equal("pairing-title", cut.Find(".dialog").GetAttribute("aria-labelledby"));
+        // The dialog role sits on the wrapper div (ARIA in HTML allows no dialog role on <form>); the form is inside it.
+        Assert.Equal("dialog", cut.Find(".scrim > div.dialog").GetAttribute("role"));
+        Assert.False(cut.Find(".dialog > form.dialog__form").HasAttribute("role"));
 
         // The PIN field: a labelled numeric one-time-code input.
         var pin = cut.Find("input#pairing-pin.input.pin");
@@ -49,7 +52,7 @@ public sealed class GroupsPairingTests : ComponentTestBase
         Assert.True(cut.Find("button[data-action=pair]").HasAttribute("disabled")); // nothing typed yet
 
         cut.Find("input.pin").Input("0000");
-        cut.Find("form.dialog").Submit();
+        cut.Find("form.dialog__form").Submit();
         cut.WaitForAssertion(() =>
         {
             Assert.Equal("The receiver rejected the PIN. Start again; it then shows a new PIN.", cut.Find("[role=alert]").TextContent);
@@ -80,7 +83,7 @@ public sealed class GroupsPairingTests : ComponentTestBase
         });
 
         cut.Find("input.pin").Input("4711");
-        cut.Find("form.dialog").Submit();
+        cut.Find("form.dialog__form").Submit();
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[role=dialog]")));
         Assert.Equal(PairingState.Paired, _state.Receiver("pin")!.Pairing);
         Assert.Contains(api.Requests, r => r.Path == "/api/receivers/pin/pair/pin" && r.Body!.Contains("token-2", StringComparison.Ordinal) && r.Body.Contains("4711", StringComparison.Ordinal));
@@ -218,7 +221,7 @@ public sealed class GroupsPairingTests : ComponentTestBase
         var cut = _ctx.Render<PairingDialog>();
 
         cut.Find("input.pin").Input("1234");
-        cut.Find("form.dialog").Submit();
+        cut.Find("form.dialog__form").Submit();
 
         cut.WaitForAssertion(() => Assert.Equal("The pairing failed: Receiver unreachable: No route to host.", cut.Find("[role=alert]").TextContent));
         Assert.Equal("Pair", cut.Find("button.btn--primary").TextContent); // a failure keeps the token: try again
@@ -235,7 +238,7 @@ public sealed class GroupsPairingTests : ComponentTestBase
         var cut = _ctx.Render<PairingDialog>();
 
         // Enter in the field submits the form even though the Pair button is disabled.
-        cut.Find("form.dialog").Submit();
+        cut.Find("form.dialog__form").Submit();
 
         cut.WaitForAssertion(() => Assert.Equal("Enter the PIN the receiver shows.", cut.Find("[role=alert]").TextContent));
         Assert.Equal("Pair", cut.Find("button.btn--primary").TextContent); // nothing consumed: type and pair
@@ -438,11 +441,18 @@ public sealed class GroupsPairingTests : ComponentTestBase
         // The candidates: offline ones carry the suffix.
         Assert.Equal("Add receiver", cut.Find("label[for=add-member]").TextContent);
         Assert.Equal(["Choose…", "Attic (offline)", "Bedroom"], cut.FindAll("#add-member option").Select(o => o.TextContent));
-        Assert.True(cut.Find("[data-form=add-member] button").HasAttribute("disabled"));
+        // Nothing chosen: aria-disabled, not disabled (a successful add empties the choice, and a disabled button would
+        // drop the focus); a submit is ignored.
+        Assert.Equal("true", cut.Find("[data-form=add-member] button").GetAttribute("aria-disabled"));
+        Assert.False(cut.Find("[data-form=add-member] button").HasAttribute("disabled"));
+        cut.Find("[data-form=add-member]").Submit();
+        Assert.DoesNotContain(api.Requests, r => r.Path == "/api/groups/g/members");
 
         cut.Find("#add-member").Change("a");
+        Assert.False(cut.Find("[data-form=add-member] button").HasAttribute("aria-disabled"));
         cut.Find("[data-form=add-member]").Submit();
         cut.WaitForAssertion(() => Assert.Equal("Bedroom", cut.Find(".row[data-receiver-id=a] strong").TextContent));
+        Assert.Equal("true", cut.Find("[data-form=add-member] button").GetAttribute("aria-disabled"));
         Assert.Contains(api.Requests, r => r.Path == "/api/groups/g/members" && r.Body!.Contains("\"receiverId\":\"a\"", StringComparison.Ordinal));
         Assert.Equal(["Choose…", "Attic (offline)"], cut.FindAll("#add-member option").Select(o => o.TextContent));
 
@@ -539,14 +549,16 @@ public sealed class GroupsPairingTests : ComponentTestBase
     public void Group_editor_activates_and_stops_the_output()
     {
         var group = Dto.Group("g", "Upstairs", 50, false, ("a", "Bedroom", 50));
+        var activated = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var api = UseApi((request, body) => (request.Method.Method, PathOf(request)) switch
         {
-            ("POST", "/api/groups/g/activate") => StubHandler.Json(new OutputDto("g", null, 50, group.Members)),
-            ("PUT", "/api/output") => StubHandler.Json(Dto.NoOutput),
-            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            ("POST", "/api/groups/g/activate") => activated.Task,
+            ("PUT", "/api/output") => Task.FromResult(StubHandler.Json(Dto.NoOutput)),
+            _ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)),
         });
         _state.Load(Snapshot([Dto.Receiver("a", "Bedroom")], [group]));
         var cut = RenderEditor("g");
+        var element = cut.Instance.OutputButton.Id;
 
         var activate = cut.Find("button[data-action=activate]");
         Assert.Equal("Activate", activate.TextContent);
@@ -554,13 +566,28 @@ public sealed class GroupsPairingTests : ComponentTestBase
         Assert.False(activate.HasAttribute("disabled"));
         Assert.Equal("ready", cut.Find("[data-card=output] .pill").TextContent);
 
+        // While the request runs the pressed button keeps the focus: aria-disabled and aria-busy, never disabled.
         activate.Click();
+        cut.WaitForAssertion(() =>
+        {
+            var busy = cut.Find("button[data-action=activate]");
+            Assert.False(busy.HasAttribute("disabled"));
+            Assert.Equal("true", busy.GetAttribute("aria-disabled"));
+            Assert.Equal("true", busy.GetAttribute("aria-busy"));
+            Assert.Equal("true", cut.Find("button[data-action=rename]").GetAttribute("aria-disabled"));
+            Assert.False(cut.Find("button[data-action=rename]").HasAttribute("disabled"));
+        });
+        activated.SetResult(StubHandler.Json(new OutputDto("g", null, 50, group.Members)));
         cut.WaitForAssertion(() => Assert.Equal("Stop output", cut.Find("button[data-action=stop]").TextContent));
+        // Activate and Stop are one element (no @if pair the diff would swap and so drop the focus).
+        Assert.Equal(element, cut.Instance.OutputButton.Id);
+        cut.WaitForAssertion(() => Assert.False(cut.Find("button[data-action=stop]").HasAttribute("aria-disabled")));
         Assert.Equal("g", _state.Output.GroupId);
         Assert.Equal("active", cut.Find("[data-card=output] .pill").TextContent);
 
         cut.Find("button[data-action=stop]").Click();
         cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("button[data-action=activate]")));
+        Assert.Equal(element, cut.Instance.OutputButton.Id);
         Assert.Null(_state.Output.GroupId);
         Assert.Contains(api.Requests, r => r.Method == HttpMethod.Put && r.Path == "/api/output");
     }

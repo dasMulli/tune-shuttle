@@ -261,8 +261,9 @@ internal sealed class EventClient : IAsyncDisposable
         {
             await _reader;
         }
-        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or IOException)
+        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or IOException or ObjectDisposedException)
         {
+            // TestHost's socket may throw ObjectDisposedException to a pending receive once it is closed.
         }
 
         _socket.Dispose();

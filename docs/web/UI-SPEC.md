@@ -34,6 +34,7 @@ set in an ink token; dots, borders, fills and large glyphs use the raw token.**
 | `--surface-2` | `#f1f4f9` | `#0f141b` | pill backgrounds, tab rail, slider track, log box |
 | `--line` | `#e0e5ee` | `#283039` | card borders, row separators |
 | `--line-strong` | `#d2d9e4` | `#323b46` | control borders (buttons, selects, pills, pickers) |
+| `--control-border` | `#7f8b9c` | `#66727f` | boundaries that identify a control by themselves (WCAG 1.4.11, 3:1, 6.3): `.input`/`select.input`, the range track, the read-only `.track` |
 | `--text` | `#1b2330` | `#e6edf3` | body text |
 | `--muted` | `#5f6b7a` | `#93a0ad` | secondary text, labels, inactive tabs |
 | `--accent` | `#2f6df6` | `#4c8dff` | primary buttons, active tab fill, slider fill, focus ring, brand tile, radio dot |
@@ -168,7 +169,7 @@ left: 50%; transform: translateX(-50%)`) so they never shift between pages.
 | `.theme-btn.is-active` | chosen option | `background: var(--accent-soft); color: var(--accent)` (the mockup's colour; the icon is a glyph, not text: 3.8:1 light / 4.3:1 dark on `--accent-soft` over `--surface-2`, above the 3:1 floor for graphics; listed in 6.3) |
 | `.lang-select` | top-bar language select | `font-size: .85rem; padding: .35rem 1.6rem .35rem .7rem; min-height: 32px; min-width: 4.5rem; flex-shrink: 3; max-width: 11rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--text); appearance: none; background: var(--surface) url(<chevron svg>) no-repeat right .55rem center; text-overflow: ellipsis` (the chevron colours are in 3.2; the shrink factor 3 lets it give way first in a tight tablet bar, down to the `4.5rem` floor that keeps one readable character plus the chevron; hidden below 760px, 5.5); the Settings page uses the `Field` variant of the component with `.input` instead (4.6) |
 | `.only-phone` / `.only-wide` | responsive toggles | `.only-phone { display: none }` at ≥ 700px, `.only-wide { display: none }` at ≤ 699px; used where the phone shows different text or actions than the desktop (4.3). Nothing else is hidden with these two classes |
-| `.btn` | button | `font-size: .85rem; font-weight: 600; padding: .45rem .9rem; min-height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); color: var(--text)`; hover `border-color: var(--accent)`; disabled `opacity: .5; cursor: default` |
+| `.btn` | button | `font-size: .85rem; font-weight: 600; padding: .45rem .9rem; min-height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); color: var(--text)`; hover `border-color: var(--accent)`; disabled and `[aria-disabled=true]` `opacity: .5; cursor: default` (hover rules exclude both). A button that is busy with its own request gets `aria-disabled="true" aria-busy="true"`, never `disabled`, and its handler ignores a repeat press: disabling the pressed (focused) button would drop the focus to `<body>`. `disabled` stays for conditions a press does not change (Spotify not connected, receiver offline, HomeKit only, empty name, group without members); Add and Apply use `aria-disabled` for an empty or unchanged input too, since a successful press makes it empty or unchanged again |
 | `.btn--primary` | main action | `background: var(--accent); border-color: var(--accent); color: var(--accent-contrast)` |
 | `.btn--ghost` | low-key action | `border-color: transparent; background: transparent; color: var(--accent-ink)` |
 | `.btn--danger` | delete/forget | light: `background: var(--err-ink); border-color: var(--err-ink); color: #fff`; dark: `background: var(--err); border-color: var(--err); color: var(--accent-contrast)` |
@@ -183,11 +184,11 @@ left: 50%; transform: translateX(-50%)`) so they never shift between pages.
 | `.row` | list row | `display: flex; align-items: center; gap: .8rem; padding: .7rem .4rem; border-top: 1px solid var(--line); min-height: 44px`; first row no border |
 | `.row.is-active` | selected output | `background: var(--accent-soft); border-radius: 10px; border-top-color: transparent; padding-left: .7rem; padding-right: .7rem` |
 | `.row--choice` / `.row__label` | an Output row (4.3): a `div.row.row--choice` whose `label.row__label` holds the radio, glyph, name, meta and pill | `.row.row--choice { padding-top: 0; padding-bottom: 0 }`; `.row__label { flex: 1; min-width: 0; min-height: 44px; align-self: stretch; display: flex; align-items: center; gap: inherit; padding-block: .7rem (.6rem at ≤ 699px); cursor: pointer }` (default cursor when its radio is disabled): the label fills the row's height, so the whole row checks the radio, and the row's other controls sit beside it; since the row has no block padding of its own, the touch `.btn--sm` negative margin (5.4) is inert here: the 44px label sets the row height and the button is simply centred |
-| `.radio` | custom radio glyph | `width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line-strong); background: var(--surface); display: grid; place-items: center; flex: none`; `.is-on { border-color: var(--accent) }`; `.is-on::after { content:""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent) }` |
+| `.radio` | custom radio glyph | `width: 20px; height: 20px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--muted) 70%, var(--line-strong)); background: var(--surface); display: grid; place-items: center; flex: none` (the mockups' `--line-strong` ring is 1.4-1.5:1 on `--surface`, too faint for the boundary of a control in dark; the mix clears the 3:1 of WCAG 1.4.11, 6.3); `.is-on { border-color: var(--accent) }`; `.is-on::after { content:""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent) }` |
 | `.art` | artwork | `width: 200px; height: 200px; border-radius: 16px; object-fit: cover; box-shadow: var(--shadow); flex: none`; placeholder: the mockup gradient `linear-gradient(135deg,#1d4ed8,#7c3aed 60%,#ec4899)` with the white note glyph |
 | `.big` | large number | `font-size: 1.7rem; font-weight: 700; color: var(--accent-ink); min-width: 2.6rem; text-align: right; font-variant-numeric: tabular-nums`; inside a disabled slider (`.level.is-disabled output.big`: no output, an offline receiver) `color: var(--muted)`, so the number or the `–` never reads as a third control |
 | `.field` | form field | `display: flex; flex-direction: column; gap: .3rem` ; `.field > label` is `.label`-like but `text-transform: none; font-size: .85rem; font-weight: 600; color: var(--text)` |
-| `.input` | text/number/select | `padding: .5rem .7rem; min-height: 40px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text)`; invalid `border-color: var(--err)` |
+| `.input` | text/number/select | `padding: .5rem .7rem; min-height: 40px; border: 1px solid var(--control-border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text)`; invalid `border-color: var(--err)` |
 | `.hint` | field hint | `.meta` + `margin: 0` |
 | `.validation-message` | DataAnnotations message | `color: var(--err-ink); font-size: .85rem` |
 | `.empty` | empty state | `.card` with `border-style: dashed; box-shadow: none; color: var(--muted); text-align: center; padding: 2rem 1rem` |
@@ -200,14 +201,13 @@ Sliders stay native `<input type="range">` (keyboard, screen readers, touch for 
 the mockup's track:
 
 ```css
-.level { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .8rem; --fill-color: var(--accent); }
-.level--hero { grid-template-columns: auto 1fr auto auto; }                   /* − track + number */
-.level--compact { grid-template-columns: 1fr auto; gap: .4rem; width: 150px; }  /* track + number, Output rows */
-.row.is-quiet .level { --fill-color: var(--line-strong); }                     /* de-emphasised: Output rows that are not the output (4.3) */
-.level input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; margin: 0; }
-.level input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: var(--radius-pill); border: 1px solid var(--line);
+.level { display: flex; align-items: center; gap: .8rem; min-width: 0; --fill-color: var(--accent); } /* label · Before · track · After · number, in DOM order */
+.level--compact { gap: .4rem; width: 150px; flex: none; }              /* track + number, Output rows */
+.row.is-quiet .level { --fill-color: var(--muted); }                           /* de-emphasised: Output rows that are not the output (4.3); grey but 3:1 on the track (6.3) */
+.level input[type="range"] { -webkit-appearance: none; appearance: none; flex: 1 1 auto; min-width: 0; width: 100%; height: 28px; background: transparent; margin: 0; }
+.level input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: var(--radius-pill); border: 1px solid var(--control-border);
     background: linear-gradient(var(--fill-color), var(--fill-color)) 0 / var(--fill, 0%) 100% no-repeat var(--surface-2); }
-.level input[type="range"]::-moz-range-track { height: 6px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface-2); }
+.level input[type="range"]::-moz-range-track { height: 6px; border-radius: var(--radius-pill); border: 1px solid var(--control-border); background: var(--surface-2); }
 .level input[type="range"]::-moz-range-progress { height: 6px; border-radius: var(--radius-pill); background: var(--fill-color); }
 .level input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%;
     background: var(--surface); border: 2px solid var(--accent); box-shadow: 0 1px 3px rgba(16,24,40,.25); }
@@ -222,12 +222,16 @@ the mockup's track:
 ```
 
 `LevelSlider` sets `style="--fill: {value}%"` on the input so the WebKit track shows the filled part (Firefox uses
-`::-moz-range-progress`). The fill colour is `--fill-color`: accent by default, `--line-strong` (the mockup's grey
-fill) inside a `.row.is-quiet`, which `OutputList` sets on every receiver row that is not the current output (4.3);
+`::-moz-range-progress`). The fill colour is `--fill-color`: accent by default, `--muted` (grey like the mockup's
+`--line-strong` fill, but 3:1 on the track) inside a `.row.is-quiet`, which `OutputList` sets on every receiver row that is not the current output (4.3);
 the thumb border stays accent so the control is still recognisable. Member mini-bars that are not interactive (Player
-hero, 4.3) use `.track`/`.track__fill` exactly as in the mockup (`height: 6px`, fill `var(--accent)`), never a
+hero, 4.3) use `.track`/`.track__fill` as in the mockup (`height: 6px`, fill `var(--accent)`, border `--control-border`), never a
 disabled range input. There is no `.track__knob` anywhere in the app (8.1): the only draggable thumbs are the native
 range thumbs.
+
+On touch (the block of 5.4) `.level--compact` is 220px wide instead of 150px, so a coarse-pointer tablet's Output and
+member rows get a 188px input (about 1.6px per level instead of < 1px); phones are unaffected (the Output rows hide
+the compact slider and the member rows set `width: auto`, both more specific, 5.3).
 
 The old `.level` rules (label column of 5.5rem) go away; the label is a visually-hidden `<label>` unless the
 variant shows it.
@@ -473,7 +477,9 @@ user reads:
 
 Log lines keep `HH:mm:ss.fff` invariant (they are diagnostics, aligned columns). There is no `Format.Seconds`: the
 only consumer would have been the mockups' Stream fact, which is not built (8.1); the "1,75 s" in
-settings.latencyHint2 is literal catalog text.
+settings.latencyHint2 is literal catalog text. Numbers written into catalog literals (settings.latencyHint2's
+default, settings.validation.latencyRange's bounds) are grouped the way `Format.Integer` groups them in that language
+(77.175 de/es/pt, 77,175 en, 77 175 ru/uk with U+00A0, fr with U+202F), so they match the formatted numbers beside them.
 
 ### 3.5 What is not translated
 
@@ -493,6 +499,13 @@ WASM runtime ships without its exception message resources and reports a resourc
 `net_webstatus_ConnectFailure` as the message, so "shown as is in English" would put an identifier on screen in the most
 common case, an unreachable bridge (REVIEW-2 #2). `ShellTests.Connection_banner_never_shows_the_clients_runtime_text`
 asserts both cases in German and English, and a second test that the constant matches the client's literal.
+
+The same rule holds for request failures (`BridgeCommands.Describe`, used by notices.failed, settings.loadFailed,
+diagnostics.unavailable and the pairing dialog's failure line): a `BridgeApiException` shows the service's problem
+details as sent; an unreachable bridge (`HttpRequestException`, in WASM "TypeError: Failed to fetch") → notices.unreachable,
+a timeout → notices.timeout, anything else (a body that does not parse) → notices.unreadable, all without the exception
+message, which is logged instead. Pages keep the failure itself (an `Exception`, an `OffsetError`), not its text, and
+describe it per render, so a language switch re-renders the message in the new language.
 
 ### 3.6 The catalog
 
@@ -579,8 +592,9 @@ left, Output and Status stacked right. One column below.
    draws a `.track__knob` on this bar, but there is no seek API, so the bar is a plain read-only progress bar
    without a handle (8.1).
 3. Transport, centred: `.step.step--lg` previous (player.previous), `.play` play/pause (player.play / player.pause),
-   `.step.step--lg` next (player.next); icons are the mockup SVGs; all disabled while Spotify is not connected or a
-   command is in flight; `aria-label` on each.
+   `.step.step--lg` next (player.next); icons are the mockup SVGs; all disabled while Spotify is not connected; while a
+   command is in flight the pressed button is `aria-disabled` + `aria-busy` (1.5) and a repeat press is ignored; play and
+   pause are one `<button>` whose label and icon change, so the focus stays on it; `aria-label` on each.
 4. Master volume block (`Components/MasterVolume.razor`), separated by a top border:
    - Row 1: `.label` player.masterVolume "{{output}}" where output is the active group's name or the single
      receiver's name; player.masterVolumeNone when nothing is selected. Right: `.meta` player.followsSpotify.
@@ -611,8 +625,9 @@ left, Output and Status stacked right. One column below.
   - `.btn.btn--ghost.btn--sm.only-wide` player.newGroup (→ `/groups/new`; desktop/tablet only);
   - `a.only-phone` player.editGroups (→ `/groups`, `font-size: .82rem; font-weight: 600`; the phone mockup's link;
     the Groups page has groups.newGroup, so nothing is lost);
-  - `.btn.btn--sm` player.stopOutput (`Commands.ClearOutputAsync`): on desktop/tablet always rendered and disabled
-    when nothing is selected; on phones rendered **only while an output is selected** (a disabled button would only
+  - `.btn.btn--sm` player.stopOutput (`Commands.ClearOutputAsync`): one `<button>` kept across state changes (its
+    `only-wide` class is toggled, never an `@if` swap, so the focus survives): on desktop/tablet always shown and
+    `aria-disabled` when nothing is selected; on phones shown **only while an output is selected** (a disabled button would only
     take width there). The phone therefore keeps a stop path on the Player page; the Receivers page's Disconnect and
     the group editor's groups.stopOutput are the other two.
 - Directly under the head, when `State.Loaded`, there is at least one receiver and `State.Output` has neither
@@ -629,7 +644,10 @@ left, Output and Status stacked right. One column below.
   or `Commands.ConnectAsync(receiverId)`; the row shows `.is-active` for the current output (`State.Output.GroupId` /
   `ReceiverId`). While a request runs the row carries `aria-busy`, the pill shows pills.connecting and a repeated check
   is ignored; the radio stays enabled so keyboard focus is kept (disabling the focused radio would drop the focus to
-  `<body>`; `PlayerTests.A_busy_row_says_connecting_and_keeps_its_radio_enabled`).
+  `<body>`; `PlayerTests.A_busy_row_says_connecting_and_keeps_its_radio_enabled`). Picks are debounced by input type:
+  a `pointerdown` on a row label marks the next change as a click or tap, which is sent at once; any other change (arrow
+  keys move the check row by row) waits `KeyboardSelectDelay` (400 ms) and a newer pick cancels it, so arrowing
+  through the list sends one request, for the row the user stops on.
 - Order: groups (by name), then receivers (by name). Row content:
   - Group: `<strong>` name, meta, pill (4.8), `.btn.btn--sm.only-wide` player.edit (→ `/groups/{id}`; `aria-label`
     player.editGroup "{{name}}"; wide screens only: on phones the head's player.editGroups link leads to the editor,
@@ -644,13 +662,13 @@ left, Output and Status stacked right. One column below.
     `.meta.only-wide` player.receiverMeta "{{model}} · {{address}}" (player.unknownModel when no model; address
     without port) and `.meta.only-phone` with the model alone (player.unknownModel when none; the phone mockup's
     "Apple receiver"). Receiver rows that are not the current output carry `is-quiet` so their compact slider's fill
-    is the grey `--line-strong` of the mockup (1.6); the output's row keeps the accent fill. Group rows have no slider.
+    is grey (`--muted`, 1.6); the output's row keeps the accent fill. Group rows have no slider.
   - Empty state (no receivers, `State.Loaded`): `.empty` receivers.empty + receivers.emptyHint.
   Phone: the compact slider is hidden (`display: none` ≤ 699px, the Receivers page has the full one) and the group's
   Edit link too (`.only-wide`); the row keeps radio, name, meta and pill, plus the player.pair button of a PIN receiver
   (the only one-tap way to pair from the Player) (5.3).
 
-**Status card** (`section.card`, `Components/StatusCard.razor`):
+**Status card** (`section.card.card--status`, `Components/StatusCard.razor`; `.card--status { gap: .6rem }`, the desktop mockups' `style="gap: .6rem"`, not the generic `.9rem`; on phones the `.card` override of 5.3 applies):
 
 - Head: `<h2>` player.status; right: link `/settings/diagnostics` player.diagnostics.
 - Grid of facts, each `.label` + value (600 weight): two columns (2 × 2) at ≥ 1024px, where the card is half the
@@ -675,7 +693,8 @@ through the catalog). Then `.cards` grid: `grid-template-columns: repeat(auto-fi
 (one column < 700px). Each receiver is an `article.card.receiver[data-receiver-id]`:
 
 1. `.card__head`: `<h2>` name; pill (4.8).
-2. `.meta`: "{{model}} · {{address}}:{{port}}" (receivers.unknownModel when no model).
+2. `.meta`: player.receiverMeta "{{model}} · {{address}}" with `address` = "address:port" (receivers.unknownModel when
+   no model; the model alone while there is no address), the same key as the Player's Output row.
 3. Level block: `.label` receivers.volume, then `LevelSlider Variant="Hero"` (`Label` = receivers.volumeOf "{{name}}"
    hidden, `ValueText` common.levelText) with the `.big` number (same look as the master slider; no −/+ steppers here).
 4. Tags row (`.tags`, chips): chip "AirPlay 2" when `Capabilities.AirPlay2`, "PTP", "Buffered" (receivers.tags.*),
@@ -713,7 +732,8 @@ nav.groups for all three routes (4.1):
   confirm groups.deleteConfirm "{{name}}" with `.btn.btn--danger` groups.deleteYes and `.btn` groups.keep; after
   deleting navigate to `/groups`.
 - `.card` **Output**: pill (active/ready/…) and `.btn.btn--primary` groups.activate (disabled without members,
-  `title` groups.activateHint; enabled: `title` groups.activateTitle) or `.btn` groups.stopOutput when active.
+  `title` groups.activateHint; enabled: `title` groups.activateTitle) or `.btn` groups.stopOutput when active; one `<button>` whose label,
+  class and handler change with the state, so the focus stays on it.
 - `.card` **Master**: `.label` groups.master "Master (G)", `LevelSlider Variant="Hero"` (`Label` = groups.master
   hidden, `ValueText` common.levelText) + `.big`; clamp hint groups.clampHint under it while previewing (existing
   behaviour).
@@ -816,11 +836,16 @@ kind class `.toast--ok` / `.toast--err` / `.toast--info` that sets border and ba
 var(--shadow-lift)`, `role="alert"` for errors, `role="status"` otherwise, a `.toast__close` icon button
 (`aria-label` common.dismiss, 44px on touch). The old `.notice`, `.notice-error` and `.dismiss` classes go away;
 `ShellTests` (the moved `Notices_show_api_errors_and_can_be_dismissed` test) selects `.toast--err` and `.toast__close`. Success/info auto-dismiss after 6 s (unchanged
-`AutoDismiss`), errors stay. Newest at the bottom (desktop) / top (phone). Max 5 (unchanged).
+`AutoDismiss`); errors after 15 s (`ErrorAutoDismiss`, parameter `ErrorDismissAfter`; `role="alert"` announces them
+at once), so a forgotten error does not cover the Output rows above the phone tab bar for good; every toast can be
+dismissed earlier with its ×. Newest at the bottom (desktop) / top (phone). Max 5 (unchanged); on phones only the two
+newest are shown (`.toasts .toast:nth-last-child(n + 3) { display: none }` in the phone block), so a pile never covers
+the lower half of the Player; the hidden ones come back as the shown ones go.
 
 Catalogued notice texts (BridgeCommands uses `I18n`): notices.failed "{{what}} failed. {{detail}}" with `what` from
 actions.* (actions.connect "{{name}}", …), notices.settingsSaved, notices.paired "{{name}}", notices.spotifyForgotten,
-notices.connectFailed "{{name}}: {{error}}". `PlaybackAsync(string command)` maps `"play"`/`"pause"`/`"next"`/`"prev"`
+notices.connectFailed "{{name}}: {{error}}"; the `{{detail}}` of notices.failed is `Describe` (3.5): the problem
+details, or notices.unreachable / notices.timeout / notices.unreadable (no placeholders, never the exception message). `PlaybackAsync(string command)` maps `"play"`/`"pause"`/`"next"`/`"prev"`
 to actions.playbackPlay/Pause/Next/Previous (a `switch`; any other value throws `ArgumentOutOfRangeException`,
 the four transport buttons are the only callers), so no raw command word is interpolated into a sentence.
 
@@ -842,7 +867,9 @@ font `.85rem`, padding `.45rem 1.25rem`, `display: flex; gap: .6rem; align-items
 
 A modal: `.scrim` (`position: fixed; inset: 0; background: rgba(9,12,18,.45); z-index: 60; display: grid;
 place-items: center; padding: 1rem`) and `.dialog` (`.card` + `box-shadow: var(--shadow-lift); width: min(26rem, 100%);
-max-height: calc(100dvh - 2rem); overflow: auto`), `role="dialog" aria-modal="true" aria-labelledby`. On phones
+max-height: calc(100dvh - 2rem); overflow: auto`), a `div.dialog` with `role="dialog" aria-modal="true" aria-labelledby
+aria-describedby` and the Escape handler; inside it `form.dialog__form` (`novalidate`, `display: contents`, so the
+dialog's own layout rules, including the short-viewport grid below, apply to the form's children too). On phones
 (≤ 699px) the dialog is a **top-anchored sheet, not a bottom sheet**: `.scrim { align-items: start; padding:
 max(.75rem, env(safe-area-inset-top)) .75rem .75rem }` and `.dialog { width: 100% }`. Reason: the on-screen keyboard
 opens with the focused PIN field, and on iOS a bottom-anchored `position: fixed` element stays laid out against the
@@ -850,7 +877,7 @@ layout viewport and ends up under the keyboard; a sheet at the top with the PIN 
 on every platform without a `visualViewport` listener. In addition the viewport meta carries
 `interactive-widget=resizes-content` (5.2) so Chrome/Android shrink the layout viewport with the keyboard. Headless
 screenshots cannot show the keyboard; review-2 lists the real-device check (WORK-PLAN).
-Landscape phones (the `(max-height: 500px)` block of 5.1) get the same top anchoring with a compacter dialog whose PIN
+Landscape phones and portrait phones with the keyboard open (the `(max-height: 500px)` block of 5.1) get the same top anchoring with a compacter dialog whose PIN
 field and Pair/Cancel row share one line (`.scrim { align-items: start; padding-top: max(.5rem,
 env(safe-area-inset-top)) }`; `.dialog { display: grid; grid-template-columns: minmax(7rem, 1fr) auto; align-items:
 end; gap: .6rem .75rem; width: min(32rem, 100%); padding: .8rem 1rem; max-height: calc(100dvh - 1rem) }`, every child
@@ -909,7 +936,8 @@ of media queries `app.css` may contain (`DesignTokenTests` greps for it; anythin
 | `(min-width: 1024px)` | absolutely centred tabs, the Player's two columns, the two-column (2 × 2) Status facts, `html { scrollbar-gutter: stable }` (4.11) |
 | `(max-width: 359px)` | hides `.brand__name`; `.tools { flex-shrink: 1 }` again (5.2) |
 | `(max-width: 759px)` | hides the top-bar `.lang-select` (5.5; the phone block hides it too) |
-| `(max-height: 500px)` | landscape phones: the compacter first screen listed under the table |
+| `(max-height: 500px)` | short viewports in any orientation (landscape phones, a portrait phone with its keyboard open): the compact pairing dialog of 4.11 |
+| `(max-height: 500px) and (orientation: landscape)` | landscape phones only: the compacter first screen listed under the table (not for a portrait phone whose keyboard shrinks the layout viewport to about 390 × 450–500, `interactive-widget=resizes-content`: the bar and the hero would jump while a field is focused) |
 | `(max-width: 699px), (pointer: coarse)` | the touch block of 5.4 (the width half makes it reproducible in headless Edge, which reports `pointer: coarse` as false, 5.6) |
 | `(hover: hover)` | every `:hover` rule is wrapped in it so touch devices do not get sticky hover states |
 | `(prefers-reduced-motion: reduce)` | 1.3 |
@@ -922,23 +950,25 @@ one row of the full-width card at 768px); three receiver cards per row at ≥ 12
 **Landscape phones** (844×390) are wider than 699px, so no width query can give them the phone shell: they get the
 **tablet shell**, with the tabs in the top bar (44px tall on a touch screen, 5.4) and no bottom tab bar. The top bar
 stays sticky there, since its tabs are the only navigation. A phone narrower than 700px in landscape keeps the phone
-shell (5.2). The `(max-height: 500px)` block compacts the first screen so the master volume row fits on it: hero
+shell (5.2). The `(max-height: 500px) and (orientation: landscape)` block compacts the first screen so the master volume row fits on it: hero
 artwork 96px, hero padding `.8rem` and gap `.6rem`, `.hero__title` 1.3rem, transport gap `.75rem`, `.play` 48px (still
 ≥ 44px), top-bar block padding 5px (plus the top safe-area inset), brand tile 28px with an 18px glyph, tab padding
-`.22rem .7rem`, and the top-anchored compact pairing dialog of 4.11. The audit passes at 844×390 with touch emulated.
+`.22rem .7rem`; the plain `(max-height: 500px)` block adds the top-anchored compact pairing dialog of 4.11. The audit
+passes at 844×390 with touch emulated.
 
 ### 5.2 Phone shell (≤ 699px)
 
 - `.topbar { position: static; padding: 10px 14px; gap: 8px; backdrop-filter: none; -webkit-backdrop-filter: none;
   background: var(--surface) }` (the phone mockup: the bar scrolls away with the page, which also saves height in
   landscape; the bottom tab bar is the fixed navigation); `.tabs { display: none }`; `.lang-select { display: none }`;
-  `.brand__tile` 32px, glyph 20px; `.brand__name { font-size: 1rem }`, hidden below 360px (`@media (max-width: 359px)`).
+  `.brand__tile` 32px, glyph 20px; `.brand__name { font-size: 1rem }`, hidden below 360px (`@media (max-width: 359px)`,
+  where `.brand { min-width: 44px; justify-content: center }` keeps the link a 44 × 44 target around the 32px tile).
   Because the bar is not sticky, the connection banner (4.10) is `top: 0` at ≤ 699px.
 - The theme picker buttons are 34px (`.ico` 18px; the size rule sits in the touch block of 5.4, which covers phones
   by width) with `border: 1px solid var(--line-strong); background: var(--surface)` in the collapsed state (the
   mockup's single round button; selected with the two collapse selectors of 2.4, the touch twin included); unfolding
   works as on desktop (first tap opens; the open pill is 3 × 34px + gaps ≈ 110px wide). No halo, not 44px: see 2.4.
-- The status pill keeps its text (`.74rem`), `min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow:
+- The status pill keeps its text (`.74rem`, `padding: .3rem .6rem; gap: .35rem` as in the phone mockup), `min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow:
   ellipsis` (from 700px it does not shrink at all, 5.5; the audit checks from 360px that the word is whole, 5.6). The
   phone `.tools` cluster has `flex-shrink: 0`, so from 360px the brand name alone gives way and the status word stays
   whole even with the theme pill open (es "en directo" at 390px was cut by 2px while the cluster shared the shrink;
@@ -975,10 +1005,10 @@ The phone keeps every desktop component value of 1.5–1.7 **except** the overri
 | `.label` | `font-size: .66rem` |
 | `.chip` | `font-size: .76rem; padding: .28rem .6rem` |
 | `.brand__name`, `.topbar`, `.brand__tile`, `.theme-btn`, `.status` | as in 5.2 |
-| `.hero` | `align-items: center; text-align: center; gap: .6rem`; artwork `.art` 120px (96px under `(max-height: 500px)`); `.hero__title` 1.2rem, max 2 lines; artist as `.meta` (`.hero__artist` `.78rem`, `--muted`); the chip row centred |
+| `.hero` | `align-items: center; text-align: center; gap: .6rem`; artwork `.art` 120px (96px in landscape under `(max-height: 500px) and (orientation: landscape)`, and below 360px wide, where the hero also gets `gap: .5rem` and `.hero__title` 1.1rem so the master row stays above the tab bar of a 320 × 568 phone; the Output card starts below the first screen there, the accepted small-phone layout); the placeholder note `36.67%` of the artwork (the phone mockup's 44px on 120px; the desktop rule of 1.5 is `32%`, 64px on 200px); `.hero__title` 1.2rem, max 2 lines; artist as `.meta` (`.hero__artist` `.78rem`, `--muted`); the chip row centred |
 | progress row | `.track` 5px, times at both ends (`width: 100%`) |
 | transport | `.step.step--lg` 44px, `.play` 56px |
-| master row | `.step` 44px (the touch rule of 5.4), hero slider, `.big` 1.3rem; row 3 replaced by `.chip--members` (4.3), centred; `.master__head` centred (the label and player.followsSpotify centred like the rest of the hero) |
+| master row | a grid, `.master__row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: .4rem .6rem }` with `.master__row > .level--hero { display: contents }` (its children are the grid items in DOM and Tab order −, track, +, number, and `--fill-color` still inherits) and `output.big { grid-column: 2; justify-self: end; line-height: 1 }`: the number drops under the right end of the track, so the slider gets the row between the steppers (221px at 390px, 151px at 320px, instead of 170/100px beside the number; `DesignTokenTests` checks the `display: contents` is phone-only); `.step` 44px (the touch rule of 5.4), hero slider, `.big` 1.3rem; row 3 replaced by `.chip--members` (4.3), centred; `.master__head` centred (the label and player.followsSpotify centred like the rest of the hero) |
 | Output card | `padding: .8rem 1rem`; rows: radio, name + `.meta.only-phone`, pill (compact slider and group Edit link hidden; a PIN receiver keeps its player.pair button); head actions per 4.3 (player.editGroups link, Stop output only while selected, with `padding-inline: .5rem` so the head fits one line in longer languages; where a longer language still does not fit, the actions wrap under the title by design, 1.5) |
 | Status card | one column of facts |
 | `main` | `padding: 1rem .875rem calc(1rem + var(--tabbar-h))` |
@@ -1003,9 +1033,10 @@ Order on `/`: hero card, Output card, Status card (single column).
   links (`.card__head a:not(.btn)`, `.card__actions a:not(.btn)`), the top-bar tabs (on touch tablets and landscape
   phones), the brand link (`margin-block: -6px`, so the bar keeps its height) and `summary` (`padding-block: 13px`) are
   44px tall too. `.theme-btn` is 34px (`.ico` 18px) in this block, on phones and every coarse pointer (REVIEW-2 #5).
-  **Not grown** to 44px: `.theme-btn` (34px, 2.4) and the
-  top-bar `.lang-select` (hidden on phones anyway, 5.2; 32px on tablets with a coarse pointer, allow-listed in 5.6
-  like the reference apps).
+  The top-bar `.lang-select` (hidden below 760px, 5.5) gets `min-height: 44px; padding-block: .5rem` on coarse-pointer
+  tablets (its width is unchanged). **Not grown** to 44px: `.theme-btn` (34px, 2.4, allow-listed in 5.6).
+- Compact sliders: `.level--compact { width: 220px }` (1.6), so touch tablets get a usable track in the Output and
+  member rows.
 - Range inputs: `height: 44px` (the track stays 6/10px); the thumb is **24px on every variant** (the hero's 24px
   is unchanged; the mockup's 22px phone knob is rounded up to 24px; there is no 28px thumb); the whole 44px band
   is draggable because the input itself is 44px tall.
@@ -1055,7 +1086,7 @@ a larger `--virtual-time-budget`, 2 s steps up to 30 s) until the `<pre>` is non
   `(hover: hover)` = true at every `--window-size`, verified with a `matchMedia` probe at 390×844, so a coarse-only
   rule would never run). Visually-hidden inputs (the output radios, the hidden labels' inputs) are skipped when
   their wrapping `label` is itself ≥ 44 × 44. Elements with `display: none` or zero size are skipped. The script
-  prints `small` and fails only on entries outside the allow-list `.theme-btn`, `.lang-select`;
+  prints `small` and fails only on entries outside the allow-list `.theme-btn`;
 - `unnamed`: selectors of `a[href]`, `button`, `input` (not `type=hidden`), `select`, `textarea`, `[role=radio]`,
   `[role=button]`, `[role=dialog]` without an accessible name. The name is computed with this rule set, in order,
   and the element is unnamed only when every step yields an empty string after trimming: (1) `aria-labelledby`
@@ -1135,6 +1166,9 @@ an unknown address has none); `ShellTests.Unknown_address_shows_the_not_found_te
 | `#fff` on `--accent` (brand glyph, placeholder note; non-text, floor 3.0) | 4.53 | 3.2 |
 | `--text` on `--ok-fill` / `--warn-fill` / `--err-fill` / `--info-fill` (toast body) | ≥ 12 | 11.8–12.8 |
 | `--muted` on the four fills (toast secondary text) | ≥ 4.5 | 5.24–5.66 |
+| `.radio` ring `color-mix(in srgb, var(--muted) 70%, var(--line-strong))` on `--surface` (unselected output radio, a control boundary; non-text, floor 3.0) | 3.41 | 4.37 |
+| `--control-border` on `--surface` / `--surface-2` / `--bg` (field, slider-track and bar borders; non-text, floor 3.0) | 3.46 / 3.14 / 3.05 | 3.49 / 3.77 / 3.86 |
+| `--muted` on `--surface-2` (quiet slider fill on its track; non-text, floor 3.0) | 4.92 | 6.93 |
 | `--line-strong` on `--surface` (control borders, decorative; **report only, no floor**) | 1.42 | 1.51 |
 
 Raw `--accent` as text on light surfaces is 4.0–4.5 and raw `--ok`/`--warn` 3.2–4.1: that is why text uses the ink
@@ -1203,7 +1237,7 @@ the existing DTOs), the service (`src/Bridge.Service`), the routes in `ApiRoutes
 | Bottom-sheet pairing dialog on phones | 4.11 of the first draft | replaced by a top-anchored sheet (4.11) |
 | Spotify volume `<meter>` | today's NowPlaying page | dropped (4.3); `PlaybackDto.SpotifyVolume` is unused by the web app |
 | `/now-playing`, `/diagnostics` routes | today's pages | dropped in wave 0 (4.1), no redirects |
-| Static index.html texts ("Loading the AirPlay Bridge app…", "An unhandled error has occurred.", "Reload", "x") | `wwwroot/index.html` | stay English, static HTML: they render before the runtime and the catalog exist. There are no catalog keys for them (app.loading/app.error do not exist) |
+| Static index.html texts ("Loading the AirPlay Bridge app…", "An unhandled error has occurred.", "Reload", "x" with aria-label "Dismiss") | `wwwroot/index.html` | not catalog keys: they render before the runtime and the catalog exist (app.loading/app.error do not exist). English stays in the markup as the no-script fallback; the language bootstrap sets `<html lang>` at once and an inline seven-language map at the end of `<body>` swaps the four texts for the resolved language (wording as in common.reload / common.dismiss) |
 | `Format.Seconds`, units.* keys | first draft | removed, no consumer (3.4) |
 
 Changed in a contained way:
@@ -1288,7 +1322,7 @@ diagnostics.spotify … diagnostics.version → the Diagnostics Status card (4.7
 `<h1>` and page title of the two developer pages; player.bridgeFallback → the device-name fallback (4.3);
 player.noOutput → the Output card's no-output line (4.3); banner.closedByBridge → the connection error text of 3.5;
 settings.validation.latencyNumber → the latency field's parse message (4.6). Removed from the first draft because nothing consumed
-them: app.loading, app.error (index.html is static English, 8.1), common.close, common.save, common.working,
+them: app.loading, app.error (index.html carries its own inline texts, 8.1), common.close, common.save, common.working,
 common.yes, common.no, units.*, player.title, player.levelText and groups.masterText (both → common.levelText),
 actions.playback (→ the four actions.playback* keys).
 
@@ -1530,7 +1564,7 @@ actions.playback (→ the four actions.playback* keys).
 | settings.deviceNameHint | Der Name in Spotify-Apps. Eine Änderung startet das Spotify-Connect-Gerät neu. | The name shown in Spotify apps. Changing it restarts the Spotify Connect device. |
 | settings.latency | Latenz L (Frames) | Latency L (frames) |
 | settings.latencyHint | = {{ms}} ms bei 44,1 kHz ({{min}}–{{max}}). | = {{ms}} ms at 44.1 kHz ({{min}}–{{max}}). |
-| settings.latencyHint2 | Wie weit vor der Wiedergabe die Empfänger das Audio bekommen; der Standard 77175 Frames (1,75 s) passt für die meisten. Eine Änderung baut die Ausgabe neu auf. | How far ahead of playback the receivers get the audio; the default 77175 frames (1.75 s) fits most receivers. Changing it rebuilds the output. |
+| settings.latencyHint2 | Wie weit vor der Wiedergabe die Empfänger das Audio bekommen; der Standard 77.175 Frames (1,75 s) passt für die meisten. Eine Änderung baut die Ausgabe neu auf. | How far ahead of playback the receivers get the audio; the default 77,175 frames (1.75 s) fits most receivers. Changing it rebuilds the output. |
 | settings.stream | Stream-Typ | Stream type |
 | settings.streamRealtime | Realtime | Realtime |
 | settings.streamBuffered | Gepuffert | Buffered |
@@ -1543,9 +1577,9 @@ actions.playback (→ the four actions.playback* keys).
 | settings.loadFailed | Die Einstellungen konnten nicht geladen werden. {{detail}} | The settings could not be loaded. {{detail}} |
 | settings.validation.nameEmpty | Der Gerätename ist leer. | The device name is empty. |
 | settings.validation.nameTooLong | Der Gerätename ist länger als 64 Zeichen. | The device name is longer than 64 characters. |
-| settings.validation.latencyRange | Die Latenz muss zwischen 22050 und 176400 Frames liegen. | The latency must be between 22050 and 176400 frames. |
+| settings.validation.latencyRange | Die Latenz muss zwischen 22.050 und 176.400 Frames liegen. | The latency must be between 22,050 and 176,400 frames. |
 | settings.validation.latencyNumber | Gib die Latenz als ganze Zahl an Frames ein. | Enter the latency as a whole number of frames. |
-| settings.validation.stream | Der Stream-Typ ist Realtime oder Buffered. | The stream type is Realtime or Buffered. |
+| settings.validation.stream | Der Stream-Typ ist Realtime oder Gepuffert. | The stream type is Realtime or Buffered. |
 | settings.appearance | Darstellung | Appearance |
 | settings.theme | Design | Theme |
 | settings.language | Sprache | Language |
@@ -1582,8 +1616,8 @@ actions.playback (→ the four actions.playback* keys).
 | diagnostics.controlPort | Control-Port (UDP) | Control port (UDP) |
 | diagnostics.notBound | noch nicht gebunden | not bound yet |
 | diagnostics.packetsSent | Gesendete Pakete | Packets sent |
-| diagnostics.retransmits | Neusendungen | Retransmit requests |
-| diagnostics.lateWakeups | Verspätete Pacer-Aufwachen | Late pacer wake-ups |
+| diagnostics.retransmits | Neusendungsanfragen | Retransmit requests |
+| diagnostics.lateWakeups | Verspätete Pacer-Wakeups | Late pacer wake-ups |
 | diagnostics.retransmitRatio | Neusendungsquote | Retransmit ratio |
 | diagnostics.retransmitRatioValue | {{percent}} · {{late}} verspätet | {{percent}} · {{late}} late |
 | diagnostics.localAddresses | Lokale Adressen | Local addresses |
@@ -1614,7 +1648,8 @@ actions.playback (→ the four actions.playback* keys).
 | notices.spotifyForgotten | Die Spotify-Anmeldung ist vergessen; wähle die Bridge in einer Spotify-App, um dich neu anzumelden. | The Spotify login is forgotten; select the bridge in a Spotify app to log in again. |
 | notices.connectFailed | {{name}}: {{error}} | {{name}}: {{error}} |
 | notices.connectFailedDefault | die Verbindung ist fehlgeschlagen. | the connection failed. |
-| notices.unreachable | Die Bridge ist nicht erreichbar: {{error}} | The bridge is not reachable: {{error}} |
+| notices.unreachable | Die Bridge ist nicht erreichbar. | The bridge is not reachable. |
+| notices.unreadable | Die Antwort der Bridge war nicht lesbar. | The bridge's answer could not be read. |
 | notices.timeout | Die Bridge hat nicht rechtzeitig geantwortet. | The bridge did not answer in time. |
 | actions.refresh | Laden des Bridge-Zustands | Loading the bridge state |
 | actions.connect | Verbinden von {{name}} | Connecting {{name}} |

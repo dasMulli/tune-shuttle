@@ -34,6 +34,7 @@
             @foreach (var receiver in State.Receivers)
             {
                 var busy = _busy.Contains(receiver.Id);
+                var ariaBusy = busy ? "true" : null;
                 var inOutput = State.IsInOutput(receiver.Id);
                 var session = receiver.State is ReceiverConnectionState.Connected or ReceiverConnectionState.Streaming or ReceiverConnectionState.Connecting;
                 var headingId = "receiver-" + Slug(receiver.Id);
@@ -96,28 +97,24 @@
                         <p class="meta text-err" role="alert">@error</p>
                     }
 
+                    @* While a request runs the buttons are aria-disabled, not disabled (Chromium blurs a focused button that
+                       becomes disabled); disabled stays for the static reasons (offline, HomeKit only). Connect and
+                       Disconnect are one element whose role switches, so the focus survives the session starting. *@
                     <div class="actions">
-                        @if (session)
-                        {
-                            <button type="button" class="btn" data-action="disconnect" disabled="@busy"
-                                    @onclick="() => DisconnectAsync(receiver.Id)">@L["receivers.disconnect"]</button>
-                        }
-                        else
-                        {
-                            <button type="button" class="btn btn--primary" data-action="connect"
-                                    disabled="@(busy || !receiver.Online || receiver.Pairing == PairingState.Disabled)"
-                                    title="@ConnectTitle(receiver)"
-                                    @onclick="() => ConnectAsync(receiver.Id)">@(busy ? L["receivers.connecting"] : L["receivers.connect"])</button>
-                        }
+                        <button type="button" class="@(session ? "btn" : "btn btn--primary")" data-action="@(session ? "disconnect" : "connect")"
+                                disabled="@(!session && (!receiver.Online || receiver.Pairing == PairingState.Disabled))"
+                                aria-disabled="@ariaBusy" aria-busy="@ariaBusy"
+                                title="@(session ? null : ConnectTitle(receiver))"
+                                @onclick="() => session ? DisconnectAsync(receiver.Id) : ConnectAsync(receiver.Id)">@(session ? L["receivers.disconnect"] : busy ? L["receivers.connecting"] : L["receivers.connect"])</button>
 
                         @if (receiver.Pairing == PairingState.PinRequired)
                         {
-                            <button type="button" class="btn" data-action="pair" disabled="@(busy || !receiver.Online)"
+                            <button type="button" class="btn" data-action="pair" disabled="@(!receiver.Online)" aria-disabled="@ariaBusy"
                                     @onclick="() => PairAsync(receiver.Id)">@L["receivers.pairWithPin"]</button>
                         }
                         else if (receiver.Pairing == PairingState.Paired)
                         {
-                            <button type="button" class="btn btn--ghost" data-action="forget" disabled="@busy"
+                            <button type="button" class="btn btn--ghost" data-action="forget" aria-disabled="@ariaBusy"
                                     @onclick="() => ForgetAsync(receiver.Id)">@L["receivers.forgetPairing"]</button>
                         }
                     </div>
@@ -141,12 +138,14 @@
                                    aria-invalid="@(hasError ? "true" : null)"
                                    aria-describedby="@(hasError ? hintId + " " + errorId : hintId)"
                                    @onchange="e => SetOffsetDraft(receiver.Id, e)" />
-                            <button type="submit" class="btn btn--sm" disabled="@(busy || draft == receiver.OffsetFrames)">@L["receivers.apply"]</button>
+                            @* aria-disabled while unchanged or busy: a successful apply makes the draft equal again, and a
+                               disabled button would drop the focus; ApplyOffsetAsync ignores the submit then. *@
+                            <button type="submit" class="btn btn--sm" aria-disabled="@(busy || draft == receiver.OffsetFrames ? "true" : null)">@L["receivers.apply"]</button>
                         </form>
                         <p id="@hintId" class="hint">@L.Format("receivers.offsetHint", ("frames", Format.Integer(draft)), ("ms", Format.Milliseconds(draft)))</p>
                         @if (hasError)
                         {
-                            <p id="@errorId" class="validation-message" role="alert">@offsetError</p>
+                            <p id="@errorId" class="validation-message" role="alert">@(offsetError == OffsetError.Invalid ? L["receivers.offsetInvalid"] : L.Format("receivers.offsetRange", ("max", Format.Integer(MaxOffsetFrames))))</p>
                         }
                         <dl class="facts">
                             <dt>@L["receivers.facts.id"]</dt>
@@ -176,7 +175,14 @@
 
     private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _offsetDrafts = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _offsetErrors = new(StringComparer.Ordinal);
+    // What went wrong, not its text: the message is rendered in the current language (a language switch re-renders).
+    private readonly Dictionary<string, OffsetError> _offsetErrors = new(StringComparer.Ordinal);
+
+    private enum OffsetError
+    {
+        Invalid,
+        Range,
+    }
 
     private string LevelText(int value) => L.Format("common.levelText", ("value", value));
 
@@ -197,12 +203,12 @@
         return L.Format("receivers.lead", ("device", status.DeviceName), ("spotify", spotify), ("output", outputText));
     }
 
-    /// <summary>"{{model}} · {{address}}:{{port}}"; the address part is left out while the receiver has none.</summary>
+    /// <summary>player.receiverMeta ("{{model}} · {{address}}") with the address as "address:port"; only the model while the receiver has no address.</summary>
     private string Meta(ReceiverDto receiver)
     {
         var model = string.IsNullOrWhiteSpace(receiver.Model) ? L["receivers.unknownModel"] : receiver.Model;
         return receiver.Address is { Length: > 0 } address
-            ? model + " · " + address + ":" + receiver.Port.ToString(CultureInfo.InvariantCulture)
+            ? L.Format("player.receiverMeta", ("model", model), ("address", address + ":" + receiver.Port.ToString(CultureInfo.InvariantCulture)))
             : model;
     }
 
@@ -246,7 +252,7 @@
         }
         else
         {
-            _offsetErrors[receiverId] = L["receivers.offsetInvalid"];
+            _offsetErrors[receiverId] = OffsetError.Invalid;
         }
     }
 
@@ -258,9 +264,14 @@
         }
 
         var frames = OffsetDraft(receiver);
+        if (frames == receiver.OffsetFrames)
+        {
+            return; // nothing to apply (the button is aria-disabled)
+        }
+
         if (Math.Abs(frames) > MaxOffsetFrames)
         {
-            _offsetErrors[receiver.Id] = L.Format("receivers.offsetRange", ("max", Format.Integer(MaxOffsetFrames)));
+            _offsetErrors[receiver.Id] = OffsetError.Range;
             return;
         }
 

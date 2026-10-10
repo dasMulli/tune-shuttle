@@ -19,46 +19,49 @@
 {
     var primaryDisabled = _busy || (!Restartable && string.IsNullOrWhiteSpace(_pin));
     <div class="scrim">
-        @* The dialog is the form itself, so its parts are direct children of .dialog (gap) and Enter in the field submits. *@
-        <form class="dialog" role="dialog" aria-modal="true" aria-labelledby="pairing-title" aria-describedby="pairing-prompt"
-              novalidate @onsubmit="SubmitAsync" @onsubmit:preventDefault @onkeydown="OnDialogKeyDown">
-            <h2 id="pairing-title">@L.Format("pairing.title", ("name", State.NameOf(prompt.ReceiverId)))</h2>
-            @if (prompt.Origin == PairingPromptOrigin.Service)
-            {
-                <p id="pairing-prompt">@L.Format("pairing.prompt", ("name", State.NameOf(prompt.ReceiverId)))</p>
-            }
-            else
-            {
-                <p id="pairing-prompt" class="meta">@prompt.Message</p>
-            }
-            <div class="field">
-                <label for="pairing-pin" class="label">@L["pairing.pin"]</label>
-                <input id="pairing-pin" class="input pin" type="text" inputmode="numeric" autocomplete="one-time-code"
-                       maxlength="8" placeholder="0000" readonly="@_busy"
-                       aria-invalid="@(Error is null ? null : "true")"
-                       aria-describedby="@(Error is null ? null : "pairing-error")"
-                       @bind="_pin" @bind:event="oninput"
-                       @onkeydown="OnPinKeyDown" @ref="_pinInput" />
-            </div>
-            @if (Error is { } error)
-            {
-                <p id="pairing-error" class="validation-message" role="alert">@error</p>
-            }
-            <div class="dialog__actions">
-                @if (Restartable)
+        @* The dialog role sits on a div (a form may not carry it); the form inside is display: contents, so its parts are
+           still direct flex / grid items of .dialog, and Enter in the field submits. *@
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pairing-title" aria-describedby="pairing-prompt"
+             @onkeydown="OnDialogKeyDown">
+            <form class="dialog__form" novalidate @onsubmit="SubmitAsync" @onsubmit:preventDefault>
+                <h2 id="pairing-title">@L.Format("pairing.title", ("name", State.NameOf(prompt.ReceiverId)))</h2>
+                @if (prompt.Origin == PairingPromptOrigin.Service)
                 {
-                    <button type="button" class="btn btn--primary" data-action="restart" disabled="@primaryDisabled"
-                            @onclick="RestartAsync" @ref="_primaryButton">@L["pairing.startAgain"]</button>
+                    <p id="pairing-prompt">@L.Format("pairing.prompt", ("name", State.NameOf(prompt.ReceiverId)))</p>
                 }
                 else
                 {
-                    <button type="submit" class="btn btn--primary" data-action="pair" disabled="@primaryDisabled"
-                            @ref="_primaryButton">@L["pairing.pair"]</button>
+                    <p id="pairing-prompt" class="meta">@prompt.Message</p>
                 }
-                <button type="button" class="btn" data-action="cancel" @onclick="Cancel"
-                        @onkeydown="OnCancelKeyDown" @ref="_cancelButton">@L["common.cancel"]</button>
-            </div>
-        </form>
+                <div class="field">
+                    <label for="pairing-pin" class="label">@L["pairing.pin"]</label>
+                    <input id="pairing-pin" class="input pin" type="text" inputmode="numeric" autocomplete="one-time-code"
+                           maxlength="8" placeholder="0000" readonly="@_busy"
+                           aria-invalid="@(Error is null ? null : "true")"
+                           aria-describedby="@(Error is null ? null : "pairing-error")"
+                           @bind="_pin" @bind:event="oninput"
+                           @onkeydown="OnPinKeyDown" @ref="_pinInput" />
+                </div>
+                @if (Error is { } error)
+                {
+                    <p id="pairing-error" class="validation-message" role="alert">@error</p>
+                }
+                <div class="dialog__actions">
+                    @if (Restartable)
+                    {
+                        <button type="button" class="btn btn--primary" data-action="restart" disabled="@primaryDisabled"
+                                @onclick="RestartAsync" @ref="_primaryButton">@L["pairing.startAgain"]</button>
+                    }
+                    else
+                    {
+                        <button type="submit" class="btn btn--primary" data-action="pair" disabled="@primaryDisabled"
+                                @ref="_primaryButton">@L["pairing.pair"]</button>
+                    }
+                    <button type="button" class="btn" data-action="cancel" @onclick="Cancel"
+                            @onkeydown="OnCancelKeyDown" @ref="_cancelButton">@L["common.cancel"]</button>
+                </div>
+            </form>
+        </div>
     </div>
 }
 

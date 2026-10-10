@@ -94,6 +94,12 @@ public sealed class BridgeState
     /// <summary>Incremented on every change (tests and change detection).</summary>
     public long Version { get; private set; }
 
+    /// <summary>
+    /// Incremented only when <see cref="Log"/> changes (a line appended, the log cleared), so the diagnostics page can
+    /// keep its formatted lines across the many renders that other events cause.
+    /// </summary>
+    public long LogVersion { get; private set; }
+
     /// <summary>The service status, or null before the first answer.</summary>
     public StatusDto? Status { get; private set; }
 
@@ -482,6 +488,7 @@ public sealed class BridgeState
     {
         _log.Clear();
         _logIndex.Clear();
+        LogVersion++;
     });
 
     // ---- internals (called under the lock) -----------------------------------------------------------------------
@@ -629,5 +636,7 @@ public sealed class BridgeState
             _logIndex.Remove(_log.First!.Value);
             _log.RemoveFirst();
         }
+
+        LogVersion++;
     }
 }

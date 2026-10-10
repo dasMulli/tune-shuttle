@@ -112,7 +112,7 @@ public sealed partial class I18nTests
     [InlineData("fr", "settings.title", "Réglages")]
     [InlineData("fr", "app.notFound", "Il n’y a rien à cette adresse.")]
     [InlineData("es", "nav.receivers", "Receptores")]
-    [InlineData("es", "player.liveUpdates", "Tiempo real")]
+    [InlineData("es", "player.liveUpdates", "Actualizaciones en directo")]
     [InlineData("es", "notices.failed", "Error al {{what}}. {{detail}}")]
     [InlineData("es", "settings.title", "Ajustes")]
     [InlineData("pt", "nav.settings", "Ajustes")]
@@ -157,7 +157,7 @@ public sealed partial class I18nTests
     [InlineData("actions.playbackPause", "Pausieren", "Pausing")]
     [InlineData("actions.playbackNext", "Weiterschalten zum nächsten Titel", "Skipping to the next track")]
     [InlineData("actions.playbackPrevious", "Zurückschalten zum vorherigen Titel", "Going back to the previous track")]
-    [InlineData("settings.validation.latencyRange", "Die Latenz muss zwischen 22050 und 176400 Frames liegen.", "The latency must be between 22050 and 176400 frames.")]
+    [InlineData("settings.validation.latencyRange", "Die Latenz muss zwischen 22.050 und 176.400 Frames liegen.", "The latency must be between 22,050 and 176,400 frames.")]
     [InlineData("player.receiversOnline_one", "{{count}} von {{total}} online", "{{count}} of {{total}} online")]
     [InlineData("diagnostics.liveUpdatesValue_other", "{{state}} ({{count}} Verbindungen, Ereignisse: {{events}})", "{{state}} ({{count}} connections, events: {{events}})")]
     [InlineData("settings.streamRealtime", "Realtime", "Realtime")]
@@ -530,10 +530,13 @@ public sealed partial class I18nTests
     public void Describe_names_network_failures_from_the_catalog()
     {
         var de = new I18n("de");
-        Assert.Equal("Die Bridge ist nicht erreichbar: down", BridgeCommands.Describe(new HttpRequestException("down"), de));
+        // The client's runtime text (in WASM "TypeError: Failed to fetch", parser messages) never reaches the screen (3.5).
+        Assert.Equal("Die Bridge ist nicht erreichbar.", BridgeCommands.Describe(new HttpRequestException("TypeError: Failed to fetch"), de));
+        Assert.Equal("The bridge is not reachable.", BridgeCommands.Describe(new HttpRequestException("TypeError: Failed to fetch")));
         Assert.Equal("Die Bridge hat nicht rechtzeitig geantwortet.", BridgeCommands.Describe(new TimeoutException(), de));
         Assert.Equal("The bridge did not answer in time.", BridgeCommands.Describe(new TimeoutException()));
-        Assert.Equal("boom", BridgeCommands.Describe(new InvalidOperationException("boom"), de));
+        Assert.Equal("Die Antwort der Bridge war nicht lesbar.", BridgeCommands.Describe(new System.Text.Json.JsonException("'<' is an invalid start of a value."), de));
+        Assert.Equal("The bridge's answer could not be read.", BridgeCommands.Describe(new InvalidOperationException("boom")));
     }
 
     [Theory]

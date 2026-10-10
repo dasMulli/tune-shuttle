@@ -102,6 +102,49 @@ public sealed class PlayerTests : ComponentTestBase
     }
 
     [Fact]
+    public void Transport_buttons_keep_the_focus_while_a_command_runs_and_play_pause_is_one_element()
+    {
+        var answer = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var api = UseApi((request, _) => PathOf(request) == "/api/playback"
+            ? answer.Task
+            : Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)));
+        _state.Apply(new BridgeEvent.StatusChanged(Dto.Status(spotify: true)));
+        _state.Apply(new BridgeEvent.PlaybackChanged(Dto.Playback(playing: false, position: 0, duration: 100_000, title: "Song")));
+        var cut = _ctx.Render<NowPlayingHero>();
+        var play = cut.Instance.PlayButton.Id;
+
+        // While the request runs the pressed button stays in the DOM and is not disabled (Chromium would blur it):
+        // every transport button is aria-disabled and aria-busy instead, and a second press is ignored.
+        cut.Find("button[aria-label=Play]").Click();
+        cut.WaitForAssertion(() => Assert.All(cut.FindAll(".transport button"), b =>
+        {
+            Assert.False(b.HasAttribute("disabled"));
+            Assert.Equal("true", b.GetAttribute("aria-disabled"));
+            Assert.Equal("true", b.GetAttribute("aria-busy"));
+        }));
+        cut.Find("button[aria-label=Play]").Click();
+        cut.Find("button[aria-label='Next track']").Click();
+        Assert.Single(api.Requests);
+
+        // playbackChanged flips the state: the same <button> element changes its label and icon (no swap that would
+        // destroy the focused element).
+        _state.Apply(new BridgeEvent.PlaybackChanged(Dto.Playback(playing: true, position: 0, duration: 100_000, title: "Song")));
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".transport button.play[aria-label=Pause]")));
+        Assert.Single(cut.FindAll(".transport button.play"));
+        Assert.Equal(play, cut.Instance.PlayButton.Id);
+
+        answer.SetResult(StubHandler.Json(Dto.Playback(playing: true, position: 0, duration: 100_000, title: "Song")));
+        cut.WaitForAssertion(() => Assert.All(cut.FindAll(".transport button"), b =>
+        {
+            Assert.False(b.HasAttribute("aria-disabled"));
+            Assert.False(b.HasAttribute("aria-busy"));
+        }));
+        _state.Apply(new BridgeEvent.PlaybackChanged(Dto.Playback(playing: false, position: 0, duration: 100_000, title: "Song")));
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".transport button.play[aria-label=Play]")));
+        Assert.Equal(play, cut.Instance.PlayButton.Id);
+    }
+
+    [Fact]
     public void Track_without_an_album_shows_the_duration_alone_and_without_a_duration_the_album_alone()
     {
         UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
@@ -377,6 +420,8 @@ public sealed class PlayerTests : ComponentTestBase
         Assert.Empty(cut.FindAll(".output .row.is-active"));
         Assert.Equal(["Downstairs", "Kitchen", "Living room"], cut.FindAll(".output .row strong").Select(s => s.TextContent));
 
+        cut.Find("[data-group-id=g] .row__label").PointerDown();
+
         cut.Find("[data-group-id=g] input[type=radio]").Change(true);
         cut.WaitForAssertion(() =>
         {
@@ -386,6 +431,8 @@ public sealed class PlayerTests : ComponentTestBase
             Assert.True(row.QuerySelector("input[type=radio]")!.HasAttribute("checked"));
             Assert.NotNull(row.QuerySelector(".radio.is-on"));
         });
+
+        cut.Find("[data-receiver-id=b] .row__label").PointerDown();
 
         cut.Find("[data-receiver-id=b] input[type=radio]").Change(true);
         cut.WaitForAssertion(() => Assert.Contains(api.Requests, r => r.Method == HttpMethod.Post && r.Path == "/api/receivers/b/connect"));
@@ -486,6 +533,8 @@ public sealed class PlayerTests : ComponentTestBase
         var stop = cut.FindAll(".output .card__actions button").Single();
         Assert.Equal("Stop output", stop.TextContent);
         Assert.DoesNotContain("only-wide", stop.ClassList);
+        Assert.False(stop.HasAttribute("aria-disabled"));
+        var stopElement = cut.FindComponent<OutputList>().Instance.StopButton.Id;
         stop.Click();
 
         cut.WaitForAssertion(() =>
@@ -497,10 +546,15 @@ public sealed class PlayerTests : ComponentTestBase
             Assert.Empty(cut.FindAll(".output .row.is-active"));
         });
 
-        // With nothing selected the button stays on wide screens only, disabled.
+        // With nothing selected the button stays on wide screens only, aria-disabled: the same element (no @if pair the
+        // diff would swap), never disabled, so a keyboard user who pressed it keeps the focus.
         var disabled = cut.FindAll(".output .card__actions button").Single();
-        Assert.True(disabled.HasAttribute("disabled"));
+        Assert.Equal("true", disabled.GetAttribute("aria-disabled"));
+        Assert.False(disabled.HasAttribute("disabled"));
         Assert.Contains("only-wide", disabled.ClassList);
+        Assert.Equal(stopElement, cut.FindComponent<OutputList>().Instance.StopButton.Id);
+        disabled.Click(); // ignored: nothing to stop
+        Assert.Single(api.Requests, r => r.Path == "/api/output");
         var json = JsonDocument.Parse(api.Requests.Single(r => r.Path == "/api/output").Body!).RootElement;
         Assert.Equal(JsonValueKind.Null, json.GetProperty("groupId").ValueKind);
         Assert.Equal(JsonValueKind.Null, json.GetProperty("receiverId").ValueKind);
@@ -570,6 +624,8 @@ public sealed class PlayerTests : ComponentTestBase
         var cut = _ctx.Render<OutputList>();
         Assert.False(cut.Find("[data-receiver-id=b]").HasAttribute("aria-busy"));
 
+        cut.Find("[data-receiver-id=b] .row__label").PointerDown();
+
         cut.Find("[data-receiver-id=b] input[type=radio]").Change(true);
         cut.WaitForAssertion(() =>
         {
@@ -580,6 +636,8 @@ public sealed class PlayerTests : ComponentTestBase
             Assert.Contains("pill--accent", pill.ClassList);
             Assert.False(row.QuerySelector("input[type=radio]")!.HasAttribute("disabled")); // keeps the keyboard focus
         });
+
+        cut.Find("[data-receiver-id=b] .row__label").PointerDown();
 
         cut.Find("[data-receiver-id=b] input[type=radio]").Change(true); // a repeat while busy is ignored
         Assert.Single(api.Requests);
@@ -594,6 +652,38 @@ public sealed class PlayerTests : ComponentTestBase
             Assert.Contains("is-active", row.ClassList);
             Assert.True(row.QuerySelector("input[type=radio]")!.HasAttribute("checked"));
         });
+    }
+
+    [Fact]
+    public void Arrow_key_picks_wait_for_the_last_row_and_send_one_request()
+    {
+        var api = UseApi((request, _) => PathOf(request) switch
+        {
+            "/api/receivers/c/connect" => StubHandler.Json(Dto.Receiver("c", "Office", state: ReceiverConnectionState.Connected)),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "Kitchen")));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("b", "Living room")));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("c", "Office")));
+        _state.Apply(new BridgeEvent.OutputChanged(Dto.NoOutput));
+        var cut = _ctx.Render<OutputList>();
+
+        // Arrow keys stepping through the radio set: a change per step and no pointer press before any of them. A
+        // replaced pick ends its handler on the renderer's own time (a render that renews the handler ids), so each
+        // step finds and changes its radio on the renderer's dispatcher, with no render in between.
+        void Step(string id) => cut.InvokeAsync(() => cut.Find($"[data-receiver-id={id}] input[type=radio]").Change(true)).GetAwaiter().GetResult();
+
+        Step("a");
+        Step("b");
+        Step("c");
+        Assert.Empty(api.Requests); // nothing is sent while the keys still move
+
+        // Only the row the user stopped on is connected, once.
+        cut.WaitForAssertion(() => Assert.Single(api.Requests), TimeSpan.FromSeconds(5));
+        Assert.Equal("/api/receivers/c/connect", api.Requests.Single().Path);
+        Thread.Sleep(OutputList.KeyboardSelectDelay * 2);
+        Assert.Single(api.Requests);
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".row[aria-busy]")));
     }
 
     [Theory]
@@ -629,6 +719,7 @@ public sealed class PlayerTests : ComponentTestBase
         cut.OnMarkupUpdated += (_, _) => checksOfB.Enqueue(Checked("b"));
 
         // The browser has checked b's radio when the change event fires; the output stays a.
+        cut.Find("[data-receiver-id=b] .row__label").PointerDown();
         cut.Find("[data-receiver-id=b] input[type=radio]").Change(true);
         cut.WaitForAssertion(() =>
         {
@@ -650,6 +741,7 @@ public sealed class PlayerTests : ComponentTestBase
         }
 
         // The row can be tried again at once.
+        cut.Find("[data-receiver-id=b] .row__label").PointerDown();
         cut.Find("[data-receiver-id=b] input[type=radio]").Change(true);
         cut.WaitForAssertion(() => Assert.Equal(2, api.Requests.Count(r => r.Path == "/api/receivers/b/connect")));
         cut.WaitForAssertion(() => Assert.False(Checked("b")));

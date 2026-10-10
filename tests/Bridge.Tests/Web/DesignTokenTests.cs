@@ -24,7 +24,7 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
     /// <summary>UI-SPEC 1.1: every token, and whether the table gives it a dark value of its own.</summary>
     private static readonly (string Name, bool HasDark)[] SpecTokens =
     [
-        ("--bg", true), ("--surface", true), ("--surface-2", true), ("--line", true), ("--line-strong", true),
+        ("--bg", true), ("--surface", true), ("--surface-2", true), ("--line", true), ("--line-strong", true), ("--control-border", true),
         ("--text", true), ("--muted", true), ("--accent", true), ("--accent-ink", true), ("--accent-soft", true),
         ("--accent-contrast", true), ("--ok", true), ("--ok-ink", true), ("--warn", true), ("--warn-ink", true),
         ("--err", true), ("--err-ink", true), ("--ok-fill", true), ("--warn-fill", true), ("--err-fill", true),
@@ -41,6 +41,7 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
         "(max-width: 359px)",
         "(max-width: 759px)",
         "(max-height: 500px)",
+        "(max-height: 500px) and (orientation: landscape)",
         "(max-width: 699px), (pointer: coarse)",
         "(hover: hover)",
         "(prefers-reduced-motion: reduce)",
@@ -120,6 +121,66 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
         Assert.Equal("(prefers-reduced-motion: reduce)", Css.MediaQueries[^1]);
         Assert.Contains("(max-width: 699px), (pointer: coarse)", used);
         Assert.Contains("(hover: hover)", used);
+    }
+
+    [Fact]
+    public void Phone_master_row_is_a_grid_and_its_level_box_is_display_contents_only_on_phones()
+    {
+        // UI-SPEC 5.3: on phones the number drops under the track, so the slider gets the row between the steppers.
+        const string Phone = "(max-width: 699px)";
+        var contents = Css.Rules.Where(r => r.Selector == ".master__row > .level--hero" && r.Value("display") == "contents").ToList();
+        Assert.Equal([Phone], Assert.Single(contents).Media);
+
+        var row = Css.Rules.Single(r => r.Selector == ".master__row" && r.Media.SequenceEqual([Phone]));
+        Assert.Equal("grid", row.Value("display"));
+        Assert.Equal("44px minmax(0, 1fr) 44px", row.Value("grid-template-columns"));
+        var number = Css.Rules.Single(r => r.Selector == ".master__row .level--hero output.big");
+        Assert.Equal([Phone], number.Media);
+        Assert.Equal("2", number.Value("grid-column"));
+    }
+
+    [Fact]
+    public void Mobile_touch_rules_of_review_cycle_one_are_in_their_queries()
+    {
+        const string Touch = "(max-width: 699px), (pointer: coarse)";
+        const string Landscape = "(max-height: 500px) and (orientation: landscape)";
+
+        // 5.1: the shell and hero compaction only for landscape phones, not for a portrait phone with its keyboard open;
+        // the pairing dialog compaction for every short viewport.
+        Assert.Contains(Css.Rules, r => r.Selector == ".topbar" && r.Media.SequenceEqual([Landscape]));
+        Assert.DoesNotContain(Css.Rules, r => r.Media.SequenceEqual(["(max-height: 500px)"]) && r.Selector is ".topbar" or ".hero" or ".hero .art" or ".brand__tile" or ".tabs a");
+        Assert.Contains(Css.Rules, r => r.Selector == ".dialog" && r.Media.SequenceEqual(["(max-height: 500px)"]));
+
+        // 5.4: compact sliders and the top-bar language select on touch tablets; 5.2: the 44px brand link below 360px.
+        Assert.Equal("220px", Css.Rules.Single(r => r.Selector == ".level--compact" && r.Media.SequenceEqual([Touch])).Value("width"));
+        Assert.Equal("44px", Css.Rules.Single(r => r.Selector == ".lang-select" && r.Media.SequenceEqual([Touch]) && r.Value("min-height") is not null).Value("min-height"));
+        Assert.Equal("44px", Css.Rules.Single(r => r.Selector == ".brand" && r.Media.SequenceEqual(["(max-width: 359px)"])).Value("min-width"));
+
+        // 4.9: at most the two newest toasts on a phone.
+        Assert.Equal("none", Css.Rules.Single(r => r.Selector == ".toasts .toast:nth-last-child(n + 3)").Value("display"));
+    }
+
+    [Fact]
+    public void Control_boundaries_aria_disabled_and_the_dialog_form_follow_the_a11y_review()
+    {
+        // WCAG 1.4.11 (6.3): text fields and selects, slider tracks and read-only bars get the 3:1 --control-border; the
+        // quiet slider fill is --muted (3:1 on its track), not the decorative --line-strong.
+        const string Boundary = "1px solid var(--control-border)";
+        Assert.Equal(Boundary, Css.Rules.Single(r => r.Selector == ".input" && r.Media.Count == 0).Value("border"));
+        Assert.Equal(Boundary, Css.Rules.Single(r => r.Selector == ".track" && r.Media.Count == 0).Value("border"));
+        Assert.Equal(Boundary, Css.Rules.Single(r => r.Selector == ".level input[type=\"range\"]::-webkit-slider-runnable-track" && r.Media.Count == 0).Value("border"));
+        Assert.Equal(Boundary, Css.Rules.Single(r => r.Selector == ".level input[type=\"range\"]::-moz-range-track" && r.Media.Count == 0).Value("border"));
+        Assert.Equal("var(--muted)", Css.Rules.Single(r => r.Selector == ".row.is-quiet .level").Value("--fill-color"));
+
+
+        // Busy buttons are aria-disabled (they keep the focus) and look like disabled ones.
+        foreach (var selector in new[] { ".btn[aria-disabled=\"true\"]", ".step[aria-disabled=\"true\"]", ".play[aria-disabled=\"true\"]" })
+        {
+            Assert.Contains(Css.Rules, r => r.Media.Count == 0 && r.Value("opacity") == ".5" && r.Selector.Split(',').Select(s => s.Trim()).Contains(selector));
+        }
+
+        // 4.11: the dialog role sits on a div; the form inside it is display: contents (the flex / grid items stay).
+        Assert.Equal("contents", Css.Rules.Single(r => r.Selector == ".dialog__form").Value("display"));
     }
 
     [Fact]
@@ -277,7 +338,16 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
         yield return new("--accent", "--bg", Kind.NonText);        // focus ring
         yield return new("--accent", "--accent-soft", Kind.NonText, Over: "--surface-2"); // .theme-btn.is-active icon
         yield return new("--on-accent", "--accent", Kind.NonText); // brand glyph, placeholder note
-        yield return new("--line-strong", "--surface", Kind.Report); // decorative control borders: printed only
+        // The unselected .radio ring: the colour of its border declaration in app.css (a color-mix of two tokens).
+        var radioBorder = Css.Rules.Single(r => r.Selector == ".radio" && r.Media.Count == 0).Value("border")
+            ?? throw new InvalidOperationException(".radio has no border");
+        yield return new(radioBorder[radioBorder.IndexOf("color-mix(", StringComparison.Ordinal)..], "--surface", Kind.NonText);
+        yield return new("--line-strong", "--surface", Kind.Report); // decorative borders (pills, labelled buttons): printed only
+        // The boundary of text fields, selects, slider tracks and read-only bars (WCAG 1.4.11) on every backdrop.
+        yield return new("--control-border", "--surface", Kind.NonText);
+        yield return new("--control-border", "--surface-2", Kind.NonText);
+        yield return new("--control-border", "--bg", Kind.NonText);
+        yield return new("--muted", "--surface-2", Kind.NonText); // the quiet slider fill of Output rows on its track
     }
 
     private static Dictionary<string, string> Tokens(string theme)
@@ -298,6 +368,17 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
 
     private static Rgba Resolve(Dictionary<string, string> tokens, string name)
     {
+        var mix = ColorMix().Match(name);
+        if (mix.Success)
+        {
+            // color-mix(in srgb, A p%, B): per channel p·A + (1 − p)·B, both opaque.
+            var a = Resolve(tokens, mix.Groups[1].Value);
+            var b = Resolve(tokens, mix.Groups[3].Value);
+            var p = double.Parse(mix.Groups[2].Value, CultureInfo.InvariantCulture) / 100.0;
+            int Channel(int x, int y) => (int)Math.Round((p * x) + ((1 - p) * y), MidpointRounding.AwayFromZero);
+            return new Rgba(Channel(a.R, b.R), Channel(a.G, b.G), Channel(a.B, b.B), 1.0);
+        }
+
         var value = name.StartsWith("--", StringComparison.Ordinal) ? $"var({name})" : name;
         for (var depth = 0; depth < 8; depth++)
         {
@@ -351,6 +432,9 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
 
     [GeneratedRegex(@"^\s*var\(\s*(--[\w-]+)\s*\)\s*$")]
     private static partial Regex VarReference();
+
+    [GeneratedRegex(@"^color-mix\(in srgb,\s*var\((--[\w-]+)\)\s+(\d+(?:\.\d+)?)%,\s*var\((--[\w-]+)\)\s*\)$")]
+    private static partial Regex ColorMix();
 
     /// <summary>An sRGB colour with alpha, channels 0-255.</summary>
     private readonly partial record struct Rgba(int R, int G, int B, double A)

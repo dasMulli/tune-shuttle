@@ -94,17 +94,13 @@
             return;
         }
 
-        // Captured before the first await: the base class disposes its CancellationTokenSource on Dispose, after which
-        // reading Lifetime would throw; the captured token still answers IsCancellationRequested.
-        var lifetime = Lifetime;
-
         // The module exists only after the first render; until it answers, the picker shows "system" and treats the
         // pointer as hover-capable (a click selects at once).
         try
         {
             var stored = await Browser.GetThemeAsync();
             _hoverCapable = await Browser.HoverCapableAsync();
-            if (lifetime.IsCancellationRequested)
+            if (Lifetime.IsCancellationRequested)
             {
                 return;
             }
@@ -130,7 +126,7 @@
                 // A module without the export (a cached older app.js): the keys still select, they also scroll.
             }
 
-            if (lifetime.IsCancellationRequested)
+            if (Lifetime.IsCancellationRequested)
             {
                 // Disposed while the listener was being registered: release it now.
                 ReleaseListeners();
@@ -141,7 +137,7 @@
             {
                 _self = DotNetObjectReference.Create(this);
                 _outsideClick = await Browser.OnOutsideClickAsync(_picker, _self, nameof(CollapseFromOutside));
-                if (lifetime.IsCancellationRequested)
+                if (Lifetime.IsCancellationRequested)
                 {
                     ReleaseListeners();
                 }
@@ -156,7 +152,7 @@
         {
             // the page is going away
         }
-        catch (ObjectDisposedException) when (lifetime.IsCancellationRequested)
+        catch (ObjectDisposedException) when (Lifetime.IsCancellationRequested)
         {
             // torn down while a call was in flight; Dispose released what was registered
             ReleaseListeners();

@@ -13,7 +13,7 @@
       - overflow > 0 (horizontal scroll: document scrollWidth - innerWidth),
       - unnamed is not empty (a control without an accessible name), or
       - small (interactive elements under 44 x 44 CSS px; computed at innerWidth <= 699 or with a coarse pointer, which
-        -Pointer emulates below 1024px wide by default) has an entry that is not one of the allow-listed controls .theme-btn and .lang-select (UI-SPEC 2.4 / 5.4),
+        -Pointer emulates below 1024px wide by default) has an entry that is not the allow-listed .theme-btn (UI-SPEC 2.4 / 5.4),
       - truncated is not empty (the top bar's connection word .status__text cut by an ellipsis, from 360px wide;
         REVIEW-2 #12), or
       - the open-pill probe fails: with the top-bar theme picker unfolded (theme-picker--open added for one
@@ -86,7 +86,7 @@ $ErrorActionPreference = 'Stop'
 
 $repo = Split-Path -Parent $PSScriptRoot
 $baseUrl = "http://localhost:$Port"
-$allowSmall = '.theme-btn, .lang-select'
+$allowSmall = '.theme-btn'
 
 function Split-List([string[]] $values) {
     @($values | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
@@ -277,7 +277,7 @@ function Get-Audit([System.Net.WebSockets.ClientWebSocket] $socket, [string] $ur
     $open = [string](Invoke-CdpEval $socket $probe) | ConvertFrom-Json
 
     # The allow-list is decided in the page: an entry is allowed when every element its selector names is a
-    # .theme-btn or a .lang-select (the selector of the top-bar language select is select#lang-select, for example).
+    # .theme-btn (the top-bar .lang-select is 44px tall on touch since review cycle 1 of the redesign and no longer allowed).
     $notAllowed = @()
     foreach ($selector in @($audit.small)) {
         $quoted = ConvertTo-Json -InputObject ([string]$selector) -Compress

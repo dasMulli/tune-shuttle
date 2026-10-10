@@ -133,7 +133,7 @@
     "receiversFact": "Receptores",
     "receiversOnline_one": "{{count}} de {{total}} en línea",
     "receiversOnline_other": "{{count}} de {{total}} en línea",
-    "liveUpdates": "Tiempo real"
+    "liveUpdates": "Actualizaciones en directo"
   },
   "receivers": {
     "title": "Receptores",
@@ -231,7 +231,7 @@
     "deviceNameHint": "El nombre que aparece en las apps de Spotify. Cambiarlo reinicia el dispositivo de Spotify Connect.",
     "latency": "Latencia L (tramas)",
     "latencyHint": "= {{ms}} ms a 44,1 kHz ({{min}}–{{max}}).",
-    "latencyHint2": "Con cuánta antelación a la reproducción reciben el audio los receptores; el valor predeterminado de 77175 tramas (1,75 s) sirve para la mayoría. Cambiarlo reconstruye la salida.",
+    "latencyHint2": "Con cuánta antelación a la reproducción reciben el audio los receptores; el valor predeterminado de 77.175 tramas (1,75 s) sirve para la mayoría. Cambiarlo reconstruye la salida.",
     "stream": "Tipo de flujo",
     "streamRealtime": "Tiempo real",
     "streamBuffered": "Con búfer",
@@ -245,9 +245,9 @@
     "validation": {
       "nameEmpty": "El nombre del dispositivo está vacío.",
       "nameTooLong": "El nombre del dispositivo tiene más de 64 caracteres.",
-      "latencyRange": "La latencia debe estar entre 22050 y 176400 tramas.",
+      "latencyRange": "La latencia debe estar entre 22.050 y 176.400 tramas.",
       "latencyNumber": "Introduce la latencia como un número entero de tramas.",
-      "stream": "El tipo de flujo es Realtime o Buffered."
+      "stream": "El tipo de flujo es Tiempo real o Con búfer."
     },
     "appearance": "Apariencia",
     "theme": "Tema",
@@ -313,7 +313,8 @@
     "spotifyForgotten": "Se ha olvidado el inicio de sesión de Spotify; elige el Bridge en una app de Spotify para volver a iniciar sesión.",
     "connectFailed": "{{name}}: {{error}}",
     "connectFailedDefault": "la conexión ha fallado.",
-    "unreachable": "No se puede acceder al Bridge: {{error}}",
+    "unreachable": "No se puede acceder al Bridge.",
+    "unreadable": "No se pudo leer la respuesta del Bridge.",
     "timeout": "El Bridge no ha respondido a tiempo."
   },
   "actions": {
