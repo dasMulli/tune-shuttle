@@ -8,7 +8,7 @@
   read byte for byte (Latin-1), so captured binary plists are covered too. Checks:
 
     subnet        the home network's subnets (192.168.x.x)
-    host          the home network's domain and host names (example.com, the PC and TV host names, the cluster names);
+    host          the home network's domain (the PC, TV and cluster host names come from the patterns file);
                   the public repository URL github.com/dasMulli/tune-shuttle is allowed
     device-name   the TV's user-given name
     mac           a MAC address (6 or 8 groups) that is globally administered: captured from real hardware. Synthetic
@@ -58,7 +58,9 @@ $allowedClientIds = @(
 
 $patternChecks = @(
     @{ Name = "subnet"; Regex = '192\.168\.\d{1,3}\.' },
-    @{ Name = "host"; Regex = '(?i)(?<!github\.com/)dasmulli|desktop-pc-?DESKTOP|\bdesktop-pc\b|laptop-pc|living-room-tv|home-cluster|other-cluster|speakera' },
+    # The owner's own domain outside the public repository URL; concrete host and cluster names are literals in the
+    # git-ignored patterns file, so the script itself publishes none of them.
+    @{ Name = "host"; Regex = '(?i)(?<!github\.com/)dasmulli' },
     @{ Name = "device-name"; Regex = 'Martin.{1,3}s TV' }
 )
 
