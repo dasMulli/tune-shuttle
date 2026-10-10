@@ -1,0 +1,55 @@
+@* The live-updates pill of the top bar (UI-SPEC 7): the state of the event connection (/ws/events) as one of four
+   classes, a short word and a longer title. role="status" so a transition is announced. Only "live" pulses (CSS). *@
+@inherits BridgeComponentBase
+
+<span class="@CssClass" role="status" title="@Title"><span class="status__text">@Text</span></span>
+
+@code {
+    /// <summary>The four states of section 7.</summary>
+    internal enum Kind
+    {
+        Connecting,
+        Live,
+        Paused,
+        Offline,
+    }
+
+    /// <summary>The section-7 mapping of <see cref="BridgeState.Connection"/> and <see cref="BridgeState.NextAttemptAt"/>.</summary>
+    internal static Kind KindOf(BridgeState state) => state.Connection switch
+    {
+        EventConnectionState.Connected => Kind.Live,
+        EventConnectionState.Connecting => Kind.Connecting,
+        _ when state.NextAttemptAt is not null => Kind.Paused,
+        _ => Kind.Offline,
+    };
+
+    private Kind Current => KindOf(State);
+
+    private string CssClass => Current switch
+    {
+        Kind.Live => "status status--live",
+        Kind.Connecting => "status status--connecting",
+        Kind.Paused => "status status--paused",
+        _ => "status status--error",
+    };
+
+    private string Text => Current switch
+    {
+        Kind.Live => L["status.live"],
+        Kind.Connecting => L["status.connecting"],
+        Kind.Paused => L["status.paused"],
+        _ => L["status.offline"],
+    };
+
+    // The titles of paused/offline embed the error; without one (rare: the state before the first attempt) the
+    // banner's error-less sentences say the same thing without a dangling colon.
+    private string Title => (Current, State.ConnectionError) switch
+    {
+        (Kind.Live, _) => L["status.title.live"],
+        (Kind.Connecting, _) => L["status.title.connecting"],
+        (Kind.Paused, { Length: > 0 } error) => L.Format("status.title.paused", ("error", error)),
+        (Kind.Paused, _) => L["banner.paused"] + " " + L["banner.retrying"],
+        (_, { Length: > 0 } error) => L.Format("status.title.offline", ("error", error)),
+        _ => L["banner.offline"],
+    };
+}

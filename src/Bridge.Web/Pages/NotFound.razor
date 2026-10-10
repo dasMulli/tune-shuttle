@@ -1,0 +1,38 @@
+@* The not-found page (UI-SPEC 4.1), rendered by App.razor's <NotFound> inside MainLayout; it has no route. Router's
+   FocusOnNavigate only exists for a found route, so the page moves focus to its own <h1> (UI-SPEC 6.1: focus goes to
+   the page's <h1> after every navigation). It re-renders on a language switch (BridgeComponentBase). *@
+@inherits BridgeComponentBase
+@using Microsoft.JSInterop
+
+<PageTitle>@L.Format("app.pageTitle", ("page", L["app.notFoundTitle"]))</PageTitle>
+<div class="stack stack--narrow">
+    <h1 @ref="_heading" tabindex="-1">@L["app.notFoundTitle"]</h1>
+    <p>@L["app.notFound"]</p>
+    <p><a href="./">@L["nav.player"]</a></p>
+</div>
+
+@code {
+    private ElementReference _heading;
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            await _heading.FocusAsync();
+        }
+        catch (JSException)
+        {
+            // the heading went away (another navigation); nothing to focus
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+    }
+}

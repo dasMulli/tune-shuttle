@@ -1,97 +1,250 @@
 @page "/settings"
 @inherits BridgeComponentBase
+@inject BrowserBridge Browser
 
-<PageTitle>Settings · AirPlay Bridge</PageTitle>
+@* UI-SPEC 4.6: one narrow column of four cards (Bridge form, Appearance, Spotify, Diagnostics link). *@
 
-<h1>Settings</h1>
+<PageTitle>@L.Format("app.pageTitle", ("page", L["nav.settings"]))</PageTitle>
 
-@if (_model is null)
-{
-    <p class="muted">@(_loadError ?? "Loading…")</p>
-    @if (_loadError is not null)
+<div class="stack stack--narrow">
+    <h1>@L["settings.title"]</h1>
+
+    @if (_editContext is null || _model is null)
     {
-        <button type="button" @onclick="LoadAsync">Retry</button>
-    }
-}
-else
-{
-    <EditForm Model="_model" OnValidSubmit="SaveAsync" class="card settings">
-        <DataAnnotationsValidator />
-
-        <div class="field">
-            <label for="device-name">Spotify device name</label>
-            <InputText id="device-name" @bind-Value="_model.DeviceName" maxlength="64" />
-            <ValidationMessage For="() => _model.DeviceName" />
-            <p class="hint">The name shown in Spotify apps. Changing it restarts the Spotify Connect device.</p>
-        </div>
-
-        <div class="field">
-            <label for="latency">Latency L (frames)</label>
-            <InputNumber id="latency" @bind-Value="_model.LatencyFrames" min="@SettingsModel.MinLatencyFrames" max="@SettingsModel.MaxLatencyFrames" step="441" />
-            <ValidationMessage For="() => _model.LatencyFrames" />
-            <p class="hint">
-                = @Format.FramesAsMs(_model.LatencyFrames) ms at 44.1 kHz (@SettingsModel.MinLatencyFrames–@SettingsModel.MaxLatencyFrames).
-                How far ahead of playback the receivers get the audio (SPEC-audio.md 1.5); the default 77175 frames (1.75 s)
-                fits most receivers. Changing it rebuilds the output.
-            </p>
-        </div>
-
-        <div class="field">
-            <label for="stream">Stream type</label>
-            <InputSelect id="stream" @bind-Value="_model.PreferredStream">
-                <option value="Realtime">Realtime (RTP over UDP, NTP or PTP timing)</option>
-                <option value="Buffered">Buffered (TCP, PTP timing)</option>
-            </InputSelect>
-            <p class="hint">Realtime is what the bridge was built and tested with first; Buffered is used only for receivers that support it.</p>
-        </div>
-
-        <div class="field checkbox">
-            <InputCheckbox id="poll" @bind-Value="_model.PollReceiverVolume" />
-            <label for="poll">Poll receiver volume</label>
-            <p class="hint">Reads the volume back from receivers every few seconds, for receivers whose own buttons do not report changes over the event channel (SPEC-audio.md 6.2).</p>
-        </div>
-
-        <div class="actions">
-            <button type="submit" class="primary" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
-            <button type="button" class="subtle" @onclick="LoadAsync" disabled="@_saving">Reset</button>
-        </div>
-    </EditForm>
-}
-
-<section class="card spotify">
-    <h2>Spotify</h2>
-    @if (State.Status is { } status)
-    {
-        <p>
-            @(status.SpotifyConnected
-                ? $"Connected{(status.SpotifyUser is { } user ? " as " + user : string.Empty)}."
-                : "Not connected. Select the bridge in a Spotify app to log in.")
-        </p>
-    }
-    @if (_confirmForget)
-    {
-        <p>Forget the cached Spotify login? The bridge then needs a new hand-off from a Spotify app.</p>
-        <div class="actions">
-            <button type="button" class="danger" @onclick="ForgetSpotifyAsync" disabled="@_saving">Forget</button>
-            <button type="button" @onclick="() => _confirmForget = false">Keep</button>
-        </div>
+        <section class="card" aria-labelledby="settings-bridge">
+            <div class="card__head"><h2 id="settings-bridge">@L["settings.bridge"]</h2></div>
+            @if (_loadError is null)
+            {
+                <p class="meta">@L["common.loading"]</p>
+            }
+            else
+            {
+                <p class="meta text-err" role="alert">@L.Format("settings.loadFailed", ("detail", _loadError))</p>
+                <div class="actions">
+                    <button type="button" class="btn" @onclick="LoadAsync">@L["common.retry"]</button>
+                </div>
+            }
+        </section>
     }
     else
     {
-        <button type="button" class="subtle" @onclick="() => _confirmForget = true">Forget Spotify login</button>
+        <EditForm EditContext="_editContext" OnValidSubmit="SaveAsync" class="card settings" aria-labelledby="settings-bridge">
+            <DataAnnotationsValidator />
+            <div class="card__head"><h2 id="settings-bridge">@L["settings.bridge"]</h2></div>
+            @if (_loadError is not null)
+            {
+                @* A failed reload (Reset) while the form is shown: say so above the values it could not replace. *@
+                <p class="meta text-err" role="alert">@L.Format("settings.loadFailed", ("detail", _loadError))</p>
+                <div class="actions">
+                    <button type="button" class="btn settings-retry" @onclick="LoadAsync" disabled="@_saving">@L["common.retry"]</button>
+                </div>
+            }
+
+            <div class="field">
+                <label for="device-name">@L["settings.deviceName"]</label>
+                <InputText id="device-name" class="input" @bind-Value="_model.DeviceName" maxlength="64" autocomplete="off" aria-describedby="device-name-hint" />
+                <ValidationMessage For="() => _model.DeviceName" role="alert" />
+                <p class="hint" id="device-name-hint">@L["settings.deviceNameHint"]</p>
+            </div>
+
+            <div class="field">
+                <label for="latency">@L["settings.latency"]</label>
+                <InputNumber id="latency" class="input" @bind-Value="_model.LatencyFrames" inputmode="numeric"
+                             min="@SettingsModel.MinLatencyFrames" max="@SettingsModel.MaxLatencyFrames" step="441" aria-describedby="latency-hint" />
+                <ValidationMessage For="() => _model.LatencyFrames" role="alert" />
+                <p class="hint" id="latency-hint">
+                    @L.Format("settings.latencyHint",
+                        ("ms", Format.Milliseconds(_model.LatencyFrames)),
+                        ("min", Format.Integer(SettingsModel.MinLatencyFrames)),
+                        ("max", Format.Integer(SettingsModel.MaxLatencyFrames)))
+                    @L["settings.latencyHint2"]
+                </p>
+            </div>
+
+            <div class="field">
+                <label for="stream">@L["settings.stream"]</label>
+                <InputSelect id="stream" class="input" @bind-Value="_model.PreferredStream" aria-describedby="stream-hint">
+                    <option value="Realtime">@L["settings.streamRealtime"]</option>
+                    <option value="Buffered">@L["settings.streamBuffered"]</option>
+                </InputSelect>
+                <ValidationMessage For="() => _model.PreferredStream" role="alert" />
+                <p class="hint" id="stream-hint">@L["settings.streamHint"]</p>
+            </div>
+
+            @* Built like the Appearance radios: the label wraps the checkbox and is the whole 44px row on phones (5.4/5.6),
+               and both kinds of check rows share one typography. The hint sits under the text column (box + gap). *@
+            <div class="field">
+                <label class="field--check" for="poll">
+                    <InputCheckbox id="poll" @bind-Value="_model.PollReceiverVolume" aria-describedby="poll-hint" />
+                    <span>@L["settings.poll"]</span>
+                </label>
+                <p class="hint" id="poll-hint" style="padding-inline-start: calc(18px + .6rem)">@L["settings.pollHint"]</p>
+            </div>
+
+            <div class="actions">
+                <button type="submit" class="btn btn--primary" disabled="@_saving">@(_saving ? L["settings.saving"] : L["settings.save"])</button>
+                <button type="button" class="btn btn--ghost" @onclick="LoadAsync" disabled="@_saving">@L["settings.reset"]</button>
+            </div>
+        </EditForm>
     }
-</section>
+
+    <section class="card" aria-labelledby="settings-appearance">
+        <div class="card__head"><h2 id="settings-appearance">@L["settings.appearance"]</h2></div>
+        <fieldset class="field">
+            <legend>@L["settings.theme"]</legend>
+            @* The whole row is the label (it wraps its radio and names it with for=), so the full 44px row is the target. *@
+            <label class="field--check" for="settings-theme-light">
+                <input id="settings-theme-light" type="radio" name="settings-theme" value="light" checked="@(_theme == Light)" @onchange="() => ChooseThemeAsync(Light)" />
+                <span>@L["theme.light"]</span>
+            </label>
+            <label class="field--check" for="settings-theme-dark">
+                <input id="settings-theme-dark" type="radio" name="settings-theme" value="dark" checked="@(_theme == Dark)" @onchange="() => ChooseThemeAsync(Dark)" />
+                <span>@L["theme.dark"]</span>
+            </label>
+            <label class="field--check" for="settings-theme-system">
+                <input id="settings-theme-system" type="radio" name="settings-theme" value="system" checked="@(_theme == SystemTheme)" @onchange="() => ChooseThemeAsync(SystemTheme)" />
+                <span>@L["theme.system"]</span>
+            </label>
+        </fieldset>
+        <div class="field">
+            <label for="settings-language">@L["settings.language"]</label>
+            <LanguageSelect Variant="@LanguageSelect.Field" Id="settings-language" />
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="settings-spotify">
+        <div class="card__head"><h2 id="settings-spotify">@L["settings.spotify"]</h2></div>
+        @if (State.Status is { } status)
+        {
+            <p>@SpotifyLine(status)</p>
+        }
+        else
+        {
+            <p class="meta">@L["common.loading"]</p>
+        }
+        @if (_confirmForget)
+        {
+            <p>@L["settings.forgetConfirm"]</p>
+            <div class="actions">
+                <button type="button" class="btn btn--danger" @onclick="ForgetSpotifyAsync" disabled="@_forgetting">@L["settings.forget"]</button>
+                <button type="button" class="btn" @onclick="() => _confirmForget = false" disabled="@_forgetting">@L["common.keep"]</button>
+            </div>
+        }
+        else
+        {
+            <div class="actions">
+                <button type="button" class="btn btn--ghost" @onclick="() => _confirmForget = true">@L["settings.forgetSpotify"]</button>
+            </div>
+        }
+    </section>
+
+    <section class="card" aria-labelledby="settings-diagnostics">
+        <a class="row" href="settings/diagnostics">
+            <span class="row__main">
+                <strong id="settings-diagnostics">@L["settings.diagnosticsLink"]</strong>
+                <span class="meta">@L["settings.diagnosticsHint"]</span>
+            </span>
+            <span class="row__chevron" aria-hidden="true">›</span>
+        </a>
+    </section>
+</div>
 
 @code {
+    // The values app.js stores and answers (UI-SPEC 2.1/2.3), not user-visible text.
+    private const string Light = "light";
+    private const string Dark = "dark";
+    private const string SystemTheme = "system";
+
     private SettingsModel? _model;
+    private EditContext? _editContext;
     private string? _loadError;
     private bool _saving;
+    private bool _forgetting;
     private bool _confirmForget;
+    private string? _theme;
+    private bool _disposed;
 
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()
     {
+        // A choice made in the top-bar theme picker (UI-SPEC 2.4: one choice, one BrowserBridge) checks the radio here.
+        Browser.ThemeChanged += OnThemeChanged;
         await LoadAsync();
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        _disposed = true;
+        Browser.ThemeChanged -= OnThemeChanged;
+    }
+
+    private void OnThemeChanged(string theme)
+    {
+        if (theme is not (Light or Dark or SystemTheme))
+        {
+            return;
+        }
+
+        Observe(InvokeAsync(() =>
+        {
+            if (_disposed || theme == _theme)
+            {
+                return;
+            }
+
+            _theme = theme;
+            StateHasChanged();
+        }));
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _theme = await Browser.GetThemeAsync();
+            StateHasChanged();
+        }
+        catch (JSException)
+        {
+            // The module could not answer (blocked storage is handled in app.js); the radios stay unchecked.
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnLanguageChanged()
+    {
+        // Messages are translated when they are produced: produce the shown ones again in the new language.
+        if (_editContext is not null && _editContext.GetValidationMessages().Any())
+        {
+            _editContext.Validate();
+        }
+    }
+
+    private string SpotifyLine(StatusDto status) => status switch
+    {
+        { SpotifyConnected: true, SpotifyUser: { Length: > 0 } user } => L.Format("settings.spotifyConnected", ("user", user)),
+        { SpotifyConnected: true } => L["settings.spotifyConnectedNoUser"],
+        _ => L["settings.spotifyNotConnected"],
+    };
+
+    private async Task ChooseThemeAsync(string theme)
+    {
+        _theme = theme;
+        try
+        {
+            await Browser.SetThemeAsync(theme);
+        }
+        catch (JSException)
+        {
+            // Applying failed in the browser; the choice is still shown here.
+        }
     }
 
     private async Task LoadAsync()
@@ -100,16 +253,18 @@ else
         try
         {
             _model = SettingsModel.From(await Commands.Api.GetSettingsAsync(Lifetime));
+            _editContext = new EditContext(_model);
         }
         catch (Exception ex) when (ex is BridgeApiException or HttpRequestException or System.Text.Json.JsonException)
         {
-            _loadError = "The settings could not be loaded. " + BridgeCommands.Describe(ex);
+            _loadError = BridgeCommands.Describe(ex, L);
         }
         catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
         {
             // the page went away
         }
     }
+
 
     private async Task SaveAsync()
     {
@@ -121,9 +276,16 @@ else
         _saving = true;
         try
         {
-            if (await Commands.SaveSettingsAsync(_model.ToDto(), Lifetime) is { } saved)
+            if (await Commands.SaveSettingsAsync(_model.ToDto(), Lifetime) is { } saved && _editContext is not null)
             {
-                _model = SettingsModel.From(saved);
+                // Keep the EditContext (EditForm re-creates its inputs for a new one, which drops the focus): take the
+                // saved values into the same model and mark the form clean.
+                _model.DeviceName = saved.DeviceName;
+                _model.LatencyFrames = saved.LatencyFrames;
+                _model.PollReceiverVolume = saved.PollReceiverVolume;
+                _model.PreferredStream = saved.PreferredStream;
+                _editContext.MarkAsUnmodified();
+                _editContext.NotifyValidationStateChanged();
             }
         }
         finally
@@ -134,15 +296,18 @@ else
 
     private async Task ForgetSpotifyAsync()
     {
-        _saving = true;
+        _forgetting = true;
         try
         {
-            await Commands.ForgetSpotifyAsync(Lifetime);
-            _confirmForget = false;
+            // On failure BridgeCommands raises the notice and the confirm stays open, so trying again is one tap.
+            if (await Commands.ForgetSpotifyAsync(Lifetime))
+            {
+                _confirmForget = false;
+            }
         }
         finally
         {
-            _saving = false;
+            _forgetting = false;
         }
     }
 }

@@ -302,10 +302,14 @@ legend { padding: 0; }
 
 /* ── 4.10 Connection banner ───────────────────────────────────────────────────────────────────────── */
 
-.banner {
+/* The slot (always in the DOM, empty while connected) is what sticks: a sticky element only sticks inside its parent,
+   and the slot is the banner's parent with exactly its height. The shell measures it as --banner-h. */
+.banner-slot {
     position: sticky;
     top: var(--topbar-h);
     z-index: 19;
+}
+.banner {
     display: flex;
     flex-wrap: wrap;
     gap: .6rem;
@@ -730,7 +734,7 @@ select.input {
 .toasts {
     position: fixed;
     z-index: 30;
-    top: calc(var(--topbar-h) + .75rem);
+    top: calc(var(--topbar-h) + var(--banner-h, 0px) + .75rem);
     right: 1.25rem;
     width: min(26rem, calc(100vw - 2rem));
     display: flex;
@@ -865,9 +869,10 @@ select.input {
 
     .status { font-size: .74rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
-    .banner { top: 0; padding: .45rem .875rem; }
+    .banner-slot { top: 0; }
+    .banner { padding: .45rem .875rem; }
 
-    .main { padding: 1rem .875rem calc(1rem + var(--tabbar-h) + env(safe-area-inset-bottom)); }
+    .main { padding: 1rem .875rem calc(1rem + var(--tabbar-h)); }
 
     .card { padding: 1rem; gap: .8rem; }
     .row { gap: .6rem; padding: .6rem .2rem; }
@@ -900,7 +905,7 @@ select.input {
         left: .75rem;
         right: .75rem;
         width: auto;
-        bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + .75rem);
+        bottom: calc(var(--tabbar-h) + .75rem);
         flex-direction: column-reverse;
     }
 

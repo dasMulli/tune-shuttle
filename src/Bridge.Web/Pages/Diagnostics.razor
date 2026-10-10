@@ -2,151 +2,176 @@
 @inherits BridgeComponentBase
 @inject BridgeEventClient Events
 
-<PageTitle>Diagnostics · AirPlay Bridge</PageTitle>
+@* UI-SPEC 4.7: back link, then a grid of three fact cards and the full-width live log. Values that originate in the
+   service (version, device and receiver names, addresses, probe names, log lines) are shown as sent (3.5). *@
 
-<h1>Diagnostics</h1>
+<PageTitle>@L.Format("app.pageTitle", ("page", L["nav.diagnostics"]))</PageTitle>
 
-<div class="cards">
-    <section class="card">
-        <h2>Status</h2>
-        @if (State.Status is { } status)
-        {
-            <dl class="facts">
-                <dt>Version</dt><dd>@status.Version</dd>
-                <dt>Running since</dt><dd>@status.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)</dd>
-                <dt>Spotify</dt><dd>@(status.SpotifyConnected ? "connected" + (status.SpotifyUser is { } user ? " as " + user : string.Empty) : "not connected")</dd>
-                <dt>Device name</dt><dd>@status.DeviceName</dd>
-                <dt>Output</dt><dd>@(status.OutputConnected ? "connected" : "not connected")</dd>
-                <dt>Receivers on the network</dt><dd>@status.Receivers</dd>
-                <dt>Live updates</dt><dd>@State.Connection.ToString().ToLowerInvariant() (@Events.Connections connection(s), @Events.EventsReceived events)</dd>
-            </dl>
-        }
-        else
-        {
-            <p class="muted">Loading…</p>
-        }
-    </section>
+<div class="stack">
+    <div>
+        <a class="btn btn--ghost" href="settings"><span aria-hidden="true">←</span> @L["nav.backToSettings"]</a>
+    </div>
+    <h1>@L["diagnostics.title"]</h1>
 
-    <section class="card">
-        <h2>Network and statistics</h2>
-        @if (_diagnostics is { } d)
-        {
-            <dl class="facts">
-                <dt>Timing port (UDP)</dt><dd>@Port(d.TimingPort)</dd>
-                <dt>Control port (UDP)</dt><dd>@Port(d.ControlPort)</dd>
-                <dt>Packets sent</dt><dd>@d.PacketsSent.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</dd>
-                <dt>Retransmit requests</dt><dd>@d.RetransmitRequests.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</dd>
-                <dt>Late pacer wake-ups</dt><dd>@d.LateWakeups.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</dd>
-            </dl>
-            <h3>Local addresses</h3>
-            @if (d.LocalAddresses.Count == 0)
+    <div class="cards">
+        <section class="card" aria-labelledby="diagnostics-status">
+            <div class="card__head"><h2 id="diagnostics-status">@L["diagnostics.status"]</h2></div>
+            @if (State.Status is { } status)
             {
-                <p class="muted">None reported.</p>
+                <dl class="facts">
+                    <dt>@L["diagnostics.version"]</dt><dd>@status.Version</dd>
+                    <dt>@L["diagnostics.runningSince"]</dt><dd>@Format.DateTime(status.StartedAt)</dd>
+                    <dt>@L["diagnostics.spotify"]</dt><dd>@SpotifyText(status)</dd>
+                    <dt>@L["diagnostics.deviceName"]</dt><dd>@status.DeviceName</dd>
+                    <dt>@L["diagnostics.output"]</dt><dd>@OutputText()</dd>
+                    <dt>@L["diagnostics.receiversOnNetwork"]</dt><dd>@Format.Integer(status.Receivers)</dd>
+                    <dt>@L["diagnostics.liveUpdates"]</dt><dd>@LiveUpdatesText()</dd>
+                </dl>
             }
             else
             {
-                var ordered = OrderAddresses(d.LocalAddresses);
-                <ul class="plain addresses">
-                    @foreach (var address in ordered.Take(ShownAddresses))
-                    {
-                        <li><code>@address</code></li>
-                    }
-                </ul>
-                @if (ordered.Count > ShownAddresses)
-                {
-                    <details>
-                        <summary>@(ordered.Count - ShownAddresses) more</summary>
-                        <ul class="plain addresses">
-                            @foreach (var address in ordered.Skip(ShownAddresses))
+                <p class="meta">@L["common.loading"]</p>
+            }
+        </section>
+
+        <section class="card" aria-labelledby="diagnostics-network">
+            <div class="card__head"><h2 id="diagnostics-network">@L["diagnostics.network"]</h2></div>
+            @if (_diagnostics is { } d)
+            {
+                <dl class="facts">
+                    <dt>@L["diagnostics.timingPort"]</dt><dd>@Port(d.TimingPort)</dd>
+                    <dt>@L["diagnostics.controlPort"]</dt><dd>@Port(d.ControlPort)</dd>
+                    <dt>@L["diagnostics.packetsSent"]</dt><dd>@Format.Integer(d.PacketsSent)</dd>
+                    <dt>@L["diagnostics.retransmits"]</dt><dd>@Format.Integer(d.RetransmitRequests)</dd>
+                    <dt>@L["diagnostics.lateWakeups"]</dt><dd>@Format.Integer(d.LateWakeups)</dd>
+                    <dt>@L["diagnostics.retransmitRatio"]</dt><dd class="retransmit-ratio">@RetransmitRatio(d)</dd>
+                    <dt>@L["diagnostics.localAddresses"]</dt>
+                    <dd class="addresses">
+                        @if (d.LocalAddresses.Count == 0)
+                        {
+                            @L["diagnostics.noneReported"]
+                        }
+                        else
+                        {
+                            var ordered = OrderAddresses(d.LocalAddresses);
+                            @foreach (var address in ordered.Take(ShownAddresses))
                             {
-                                <li><code>@address</code></li>
+                                <div class="mono">@address</div>
                             }
-                        </ul>
-                    </details>
+                            @if (ordered.Count > ShownAddresses)
+                            {
+                                <details class="details">
+                                    <summary>@L.Plural("diagnostics.more", ordered.Count - ShownAddresses)</summary>
+                                    @foreach (var address in ordered.Skip(ShownAddresses))
+                                    {
+                                        <div class="mono">@address</div>
+                                    }
+                                </details>
+                            }
+                        }
+                    </dd>
+                </dl>
+                @if (_error is not null)
+                {
+                    <p class="meta text-err" role="alert">@L.Format("diagnostics.unavailable", ("detail", _error))</p>
+                }
+                @if (_updated is { } updated)
+                {
+                    <p class="meta">@L.Format("diagnostics.updated", ("time", Format.Time(updated)))</p>
                 }
             }
-            <p class="muted small">Updated @_updated?.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)</p>
-        }
-        else
-        {
-            <p class="muted">@(_error ?? "Loading…")</p>
-        }
-    </section>
+            else if (_error is not null)
+            {
+                <p class="meta text-err" role="alert">@L.Format("diagnostics.unavailable", ("detail", _error))</p>
+                <div class="actions">
+                    <button type="button" class="btn" @onclick="RetryAsync">@L["common.retry"]</button>
+                </div>
+            }
+            else
+            {
+                <p class="meta">@L["common.loading"]</p>
+            }
+        </section>
 
-    <section class="card">
-        <h2>Pending probes</h2>
-        @if (_diagnostics is { OpenQuestionsPending.Count: > 0 } pending)
-        {
-            <ul>
+        <section class="card" aria-labelledby="diagnostics-probes">
+            <div class="card__head"><h2 id="diagnostics-probes">@L["diagnostics.pendingProbes"]</h2></div>
+            @if (_diagnostics is { OpenQuestionsPending.Count: > 0 } pending)
+            {
                 @foreach (var probe in pending.OpenQuestionsPending)
                 {
-                    <li>@probe</li>
+                    <p class="meta probe">@probe</p>
                 }
-            </ul>
-        }
-        else
-        {
-            <p class="muted">None.</p>
-        }
-    </section>
-</div>
-
-<section class="card log">
-    <header class="card-header">
-        <h2>Live log</h2>
-        <div class="log-controls">
-            <label for="log-level">Level</label>
-            <select id="log-level" @bind="_minimumLevel">
-                <option value="0">All</option>
-                <option value="2">Information</option>
-                <option value="3">Warning</option>
-                <option value="4">Error</option>
-            </select>
-            <button type="button" class="subtle" @onclick="() => _paused = !_paused">@(_paused ? "Resume" : "Pause")</button>
-            <button type="button" class="subtle" @onclick="State.ClearLog">Clear</button>
-        </div>
-    </header>
-    @{
-        var lines = Lines();
-    }
-    @if (lines.Count == 0)
-    {
-        @if (_diagnostics is { RecentLog.Count: > 0 } recent && State.Log.Count == 0)
-        {
-            <div class="log-lines" role="log">
-                @foreach (var text in recent.RecentLog)
-                {
-                    <div class="log-line">@text</div>
-                }
-            </div>
-        }
-        else
-        {
-            <p class="muted">No log lines yet.</p>
-        }
-    }
-    else
-    {
-        <div class="log-lines" role="log">
-            @foreach (var line in lines)
-            {
-                <div class="log-line level-@line.Level.ToLowerInvariant()">@line.At.ToLocalTime().ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) @line.Level @line.Category: @line.Message</div>
             }
-        </div>
-    }
-</section>
+            else if (_diagnostics is not null)
+            {
+                <p class="meta">@L["diagnostics.noneReported"]</p>
+            }
+            else
+            {
+                <p class="meta">@L["common.loading"]</p>
+            }
+        </section>
+
+        <section class="card card--wide" aria-labelledby="diagnostics-log">
+            <div class="card__head">
+                <h2 id="diagnostics-log">@L["diagnostics.log"]</h2>
+                <div class="card__actions">
+                    <div class="field field--inline">
+                        <label for="log-level">@L["diagnostics.level"]</label>
+                        <select id="log-level" class="input" @bind="_minimumLevel">
+                            <option value="0">@L["diagnostics.levels.all"]</option>
+                            <option value="2">@L["diagnostics.levels.info"]</option>
+                            <option value="3">@L["diagnostics.levels.warning"]</option>
+                            <option value="4">@L["diagnostics.levels.error"]</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn--ghost btn--sm log-pause" @onclick="TogglePause">
+                        @(_paused ? L["diagnostics.resume"] : L["diagnostics.pause"])
+                    </button>
+                    <button type="button" class="btn btn--ghost btn--sm log-clear" @onclick="Clear">@L["diagnostics.clear"]</button>
+                </div>
+            </div>
+            @{
+                var lines = Lines();
+            }
+            @if (lines.Count == 0)
+            {
+                <p class="meta">@L["diagnostics.noLines"]</p>
+            }
+            else
+            {
+                <div class="log" role="log" tabindex="0" aria-labelledby="diagnostics-log">
+                    @foreach (var line in lines)
+                    {
+                        <p class="@LineClass(line.Level)">@line.Text</p>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+</div>
 
 @code {
     /// <summary>How often the statistics refresh.</summary>
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
+
+    /// <summary>Addresses listed before the rest is folded away (UI-SPEC 4.7: the first five).</summary>
+    public const int ShownAddresses = 5;
+
+    /// <summary>The value shown while a ratio has no denominator (U+2013).</summary>
+    public const string NoValue = "–";
 
     private DiagnosticsDto? _diagnostics;
     private DateTimeOffset? _updated;
     private string? _error;
     private int _minimumLevel;
     private bool _paused;
-    private IReadOnlyList<BridgeEvent.LogLine> _frozen = [];
+    private bool _historyCleared;
+    private IReadOnlyList<ShownLine>? _pausedView;
     private bool _subscribed;
+
+    /// <summary>A log line as shown: its level (for the class and the filter) and its text.</summary>
+    private readonly record struct ShownLine(string Level, string Text);
 
     /// <summary>
     /// Severity rank of a log level name: the service writes the console's short forms (trce, dbug, info, warn, fail,
@@ -163,8 +188,16 @@
         _ => 2,
     };
 
-    /// <summary>Addresses listed before the rest is folded away.</summary>
-    public const int ShownAddresses = 4;
+    /// <summary>The <c>.log__line</c> classes of a level (UI-SPEC 1.5), by its <see cref="Rank"/>.</summary>
+    public static string LineClass(string level) => Rank(level) switch
+    {
+        0 => "log__line log__line--trce",
+        1 => "log__line log__line--dbug",
+        3 => "log__line log__line--warn",
+        4 => "log__line log__line--fail",
+        5 => "log__line log__line--crit",
+        _ => "log__line",
+    };
 
     /// <summary>
     /// IPv4 first (what receivers on a home LAN use), then the rest in the service's order. Entries read
@@ -184,8 +217,6 @@
 
         return parsed.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 0 : 1;
     }
-
-    private static string Port(int port) => port == 0 ? "not bound yet" : port.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()
@@ -210,14 +241,98 @@
         }
     }
 
-    private IReadOnlyList<BridgeEvent.LogLine> Lines()
+    private string Port(int port) => port == 0 ? L["diagnostics.notBound"] : port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private string SpotifyText(StatusDto status) => status switch
     {
-        if (!_paused)
+        { SpotifyConnected: true, SpotifyUser: { Length: > 0 } user } => L.Format("diagnostics.spotifyConnectedAs", ("user", user)),
+        { SpotifyConnected: true } => L["diagnostics.connected"],
+        _ => L["diagnostics.notConnected"],
+    };
+
+    private string OutputText()
+    {
+        var output = State.Output;
+        if (output.GroupId is { } groupId)
         {
-            _frozen = State.Log;
+            return State.Group(groupId)?.Name ?? groupId;
         }
 
-        return _minimumLevel == 0 ? _frozen : [.. _frozen.Where(l => Rank(l.Level) >= _minimumLevel)];
+        return output.ReceiverId is { } receiverId ? State.NameOf(receiverId) : L["common.none"];
+    }
+
+    /// <summary>The word of the live pill (UI-SPEC 7) for the event connection.</summary>
+    private string ConnectionWord() => State.Connection switch
+    {
+        EventConnectionState.Connected => L["status.live"],
+        EventConnectionState.Connecting => L["status.connecting"],
+        _ when State.NextAttemptAt is not null => L["status.paused"],
+        _ => L["status.offline"],
+    };
+
+    private string LiveUpdatesText() => L.Plural(
+        "diagnostics.liveUpdatesValue",
+        Events.Connections,
+        ("state", ConnectionWord()),
+        ("events", Format.Integer(Events.EventsReceived)));
+
+    private string RetransmitRatio(DiagnosticsDto d) => d.PacketsSent == 0
+        ? NoValue
+        : L.Format(
+            "diagnostics.retransmitRatioValue",
+            ("percent", Format.Percent(d.RetransmitRequests / (double)d.PacketsSent, 1)),
+            ("late", Format.Integer(d.LateWakeups)));
+
+    private void Clear()
+    {
+        _historyCleared = true;
+        _pausedView = _paused ? [] : null;
+        State.ClearLog();
+    }
+
+    /// <summary>
+    /// Pausing takes a snapshot of what is shown (live lines or the REST history), so neither new live lines nor the
+    /// periodic refresh change it until resume; resuming drops the snapshot and catches up.
+    /// </summary>
+    private void TogglePause()
+    {
+        _paused = !_paused;
+        _pausedView = _paused ? CurrentLines() : null;
+    }
+
+    /// <summary>The paused snapshot or the current lines, filtered by the chosen minimum level.</summary>
+    private IReadOnlyList<ShownLine> Lines()
+    {
+        var lines = _pausedView ?? CurrentLines();
+        return _minimumLevel == 0 ? lines : [.. lines.Where(l => Rank(l.Level) >= _minimumLevel)];
+    }
+
+    /// <summary>
+    /// The live lines, or the service's recent history from the REST answer until the first live line arrives (and
+    /// not again after Clear); unfiltered.
+    /// </summary>
+    private IReadOnlyList<ShownLine> CurrentLines()
+    {
+        var live = State.Log;
+        IEnumerable<ShownLine> lines = live.Count > 0 || _historyCleared || _diagnostics is null
+            ? live.Select(l => new ShownLine(
+                l.Level,
+                $"{l.At.ToLocalTime().ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture)} {l.Level} {l.Category}: {l.Message}"))
+            : _diagnostics.RecentLog.Select(text => new ShownLine(HistoryLevel(text), text));
+        return [.. lines];
+    }
+
+    /// <summary>The level of a history line "HH:mm:ss.fff level Category: message" (info when it does not parse).</summary>
+    private static string HistoryLevel(string text)
+    {
+        var parts = text.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 ? parts[1] : string.Empty;
+    }
+
+    private async Task RetryAsync()
+    {
+        _error = null;
+        await RefreshAsync(Lifetime);
     }
 
     private async Task RefreshAsync(CancellationToken ct)
@@ -230,7 +345,11 @@
         }
         catch (Exception ex) when (ex is BridgeApiException or HttpRequestException or System.Text.Json.JsonException)
         {
-            _error = "Diagnostics unavailable. " + BridgeCommands.Describe(ex);
+            _error = BridgeCommands.Describe(ex, L);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // the page went away
         }
     }
 }

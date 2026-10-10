@@ -1,22 +1,37 @@
-@* Shows when the live event connection is down (the pages still work over REST, but do not update by themselves). *@
+@* The strip under the top bar while live updates do not flow (UI-SPEC 4.10). The pages still work over REST, but do
+   not update by themselves: connecting (info), paused with a retry pending (warn), offline without a retry (error,
+   with a reload button). The `.banner-slot` wrapper is always there (empty while connected): it is the role="status"
+   region, which screen readers only announce reliably when it exists before its text arrives, and the element the
+   shell measures as --banner-h, so the desktop toasts sit below a visible banner. *@
 @inherits BridgeComponentBase
+@inject NavigationManager Navigation
 
-@if (State.Connection != EventConnectionState.Connected)
-{
-    <div class="connection-banner" role="status">
-        @if (State.Connection == EventConnectionState.Connecting)
-        {
-            <span>Connecting to the bridge for live updates…</span>
-        }
-        else
-        {
-            <span>
-                Live updates paused@(State.ConnectionError is { } error ? ": " + error : ".")
-                @if (State.NextAttemptAt is not null)
-                {
-                    <text> Retrying shortly.</text>
-                }
-            </span>
-        }
-    </div>
+<div class="banner-slot" role="status">
+    @switch (StatusPill.KindOf(State))
+    {
+        case StatusPill.Kind.Connecting:
+            <div class="banner banner--connecting">
+                <span class="banner__text">@L["banner.connecting"]</span>
+            </div>
+            break;
+        case StatusPill.Kind.Paused:
+            <div class="banner banner--paused">
+                <span class="banner__text">@PausedText @L["banner.retrying"]</span>
+            </div>
+            break;
+        case StatusPill.Kind.Offline:
+            <div class="banner banner--offline">
+                <span class="banner__text">@L["banner.offline"]</span>
+                <button type="button" class="btn btn--sm" @onclick="Reload">@L["common.reload"]</button>
+            </div>
+            break;
+    }
+</div>
+
+@code {
+    private string PausedText => State.ConnectionError is { Length: > 0 } error
+        ? L.Format("banner.pausedError", ("error", error))
+        : L["banner.paused"];
+
+    private void Reload() => Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
 }

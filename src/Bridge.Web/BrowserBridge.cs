@@ -19,8 +19,28 @@ public sealed class BrowserBridge(IJSRuntime js) : IAsyncDisposable
     /// <summary>The stored theme choice: <c>"light"</c>, <c>"dark"</c> or <c>"system"</c>.</summary>
     public async Task<string> GetThemeAsync() => await (await ModuleAsync().ConfigureAwait(false)).InvokeAsync<string>("getTheme").ConfigureAwait(false);
 
-    /// <summary>Applies and stores a theme choice (<c>data-theme</c>, the theme-color override, localStorage).</summary>
-    public async Task SetThemeAsync(string theme) => await (await ModuleAsync().ConfigureAwait(false)).InvokeVoidAsync("setTheme", theme).ConfigureAwait(false);
+    /// <summary>
+    /// Raised at the end of every <see cref="SetThemeAsync"/> with the new choice, so every control that shows the
+    /// choice (the top-bar theme picker, the Settings Appearance card) follows a choice made in another one. Raised even
+    /// when the module call fails, so the controls still agree with each other. Handlers may run on any thread.
+    /// </summary>
+    public event Action<string>? ThemeChanged;
+
+    /// <summary>
+    /// Applies and stores a theme choice (<c>data-theme</c>, the theme-color override, localStorage), then raises
+    /// <see cref="ThemeChanged"/>.
+    /// </summary>
+    public async Task SetThemeAsync(string theme)
+    {
+        try
+        {
+            await (await ModuleAsync().ConfigureAwait(false)).InvokeVoidAsync("setTheme", theme).ConfigureAwait(false);
+        }
+        finally
+        {
+            ThemeChanged?.Invoke(theme);
+        }
+    }
 
     /// <summary>True when the primary pointer can hover (<c>(hover: hover)</c>); false on touch screens.</summary>
     public async Task<bool> HoverCapableAsync() => await (await ModuleAsync().ConfigureAwait(false)).InvokeAsync<bool>("hoverCapable").ConfigureAwait(false);
@@ -43,6 +63,18 @@ public sealed class BrowserBridge(IJSRuntime js) : IAsyncDisposable
     {
         var module = await ModuleAsync().ConfigureAwait(false);
         var handle = await module.InvokeAsync<IJSObjectReference>("onOutsideClick", element, target, method).ConfigureAwait(false);
+        return new JsHandle(handle);
+    }
+
+    /// <summary>
+    /// Keeps the given <c>KeyboardEvent.key</c> values from doing their default action (scrolling the page)
+    /// while they are pressed inside <paramref name="element"/>; Blazor's own key handlers still see them. Blazor's
+    /// <c>@onkeydown:preventDefault</c> cannot pick keys. Dispose the result to remove the listener.
+    /// </summary>
+    public async Task<IAsyncDisposable> PreventKeysAsync(ElementReference element, string[] keys)
+    {
+        var module = await ModuleAsync().ConfigureAwait(false);
+        var handle = await module.InvokeAsync<IJSObjectReference>("preventKeys", element, keys).ConfigureAwait(false);
         return new JsHandle(handle);
     }
 
@@ -86,7 +118,7 @@ public sealed class BrowserBridge(IJSRuntime js) : IAsyncDisposable
         return _module;
     }
 
-    /// <summary>The <c>{ dispose() }</c> object of <c>onOutsideClick</c> as an <see cref="IAsyncDisposable"/>.</summary>
+    /// <summary>The <c>{ dispose() }</c> object of <c>onOutsideClick</c> / <c>preventKeys</c> as an <see cref="IAsyncDisposable"/>.</summary>
     private sealed class JsHandle(IJSObjectReference handle) : IAsyncDisposable
     {
         private int _disposed;

@@ -99,6 +99,24 @@ export function onOutsideClick(element, dotnetRef, method) {
     };
 }
 
+/**
+ * Calls preventDefault on keydown events inside element whose key is one of keys (the theme picker's arrows, Home and
+ * End, which would otherwise also scroll the page). Propagation is untouched, so Blazor's handlers still run.
+ * Returns { dispose() }.
+ */
+export function preventKeys(element, keys) {
+    const wanted = new Set(keys || []);
+    const handler = (e) => {
+        if (wanted.has(e.key)) e.preventDefault();
+    };
+    if (element) element.addEventListener("keydown", handler);
+    return {
+        dispose() {
+            if (element) element.removeEventListener("keydown", handler);
+        }
+    };
+}
+
 const measured = new Map();
 
 /**

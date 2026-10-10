@@ -1,35 +1,59 @@
+@* The shell (UI-SPEC 4.2, 5.2): the top bar (brand, section tabs, tools), the connection banner, the page, the toasts,
+   the phone tab bar and the pairing dialog. The elements are direct children of #app so the sticky top bar and the
+   banner slot stick for the whole page. The measured heights of the top bar, the tab bar (its whole height, the
+   safe-area padding included) and the banner slot (0 while connected) are published as --topbar-h, --tabbar-h and
+   --banner-h, which the banner, the toasts and main's bottom padding follow (text-size changes included). *@
 @inherits LayoutComponentBase
 @implements IDisposable
+@using Bridge.Web.Localization
+@using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
 @inject BridgeState State
 @inject BridgeCommands Commands
+@inject BrowserBridge Browser
+@inject I18n L
+@inject ILogger<MainLayout> Logger
 
-<div class="page">
-    <nav class="sidebar" aria-label="Main">
-        <div class="brand">
-            <span class="brand-name">AirPlay Bridge</span>
-            <LiveIndicator />
-        </div>
-        <NavLink href="receivers">Receivers</NavLink>
-        <NavLink href="groups">Groups</NavLink>
-        <NavLink href="" Match="NavLinkMatch.All">Now Playing</NavLink>
-        <NavLink href="settings">Settings</NavLink>
-        <NavLink href="settings/diagnostics">Diagnostics</NavLink>
+<header class="topbar">
+    <a class="brand" href="./" aria-label="@L["app.name"]">
+        <span class="brand__tile" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a8 8 0 0 1 16 0" /><path d="M7 12.5a5 5 0 0 1 10 0" /><circle cx="12" cy="15" r="1.6" /><path d="m8.5 21 3.5-5 3.5 5z" /></svg>
+        </span>
+        <span class="brand__name">@L["app.name"]</span>
+    </a>
+    <nav class="tabs" aria-label="@L["nav.sections"]">
+        <TabLink Href="" Also="TabBar.PlayerAlso">@L["nav.player"]</TabLink>
+        <TabLink Href="receivers">@L["nav.receivers"]</TabLink>
+        <TabLink Href="settings">@L["nav.settings"]</TabLink>
     </nav>
-    <main>
-        <ConnectionBanner />
-        <NoticeArea />
-        @Body
-    </main>
-</div>
-
+    <div class="tools">
+        <LanguageSelect />
+        <ThemePicker />
+        <StatusPill />
+    </div>
+</header>
+<ConnectionBanner />
+<main class="main">
+    @Body
+</main>
+<NoticeArea />
+<TabBar />
 <PairingDialog />
 
 @code {
     private readonly CancellationTokenSource _lifetime = new();
+    private bool _disposed;
 
     /// <inheritdoc />
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        L.Changed -= OnLanguageChanged;
         _lifetime.Cancel();
         _lifetime.Dispose();
     }
@@ -37,10 +61,65 @@
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()
     {
+        // The brand, the tab labels and the page fragment re-render in the new language without a reload.
+        L.Changed += OnLanguageChanged;
+
         // REST first: the pages show data even before (or without) the WebSocket; the WebSocket snapshot supersedes it.
         if (!State.Loaded)
         {
             await Commands.RefreshAsync(_lifetime.Token);
         }
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            await Browser.MeasureAsync("header.topbar", "--topbar-h");
+            await Browser.MeasureAsync("nav.tabbar", "--tabbar-h");
+            await Browser.MeasureAsync("div.banner-slot", "--banner-h");
+        }
+        catch (JSException)
+        {
+            // No module: the stylesheet's fallbacks apply.
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+    }
+
+    private void OnLanguageChanged()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var refresh = InvokeAsync(StateHasChanged);
+        if (refresh.IsCompletedSuccessfully)
+        {
+            return;
+        }
+
+        // Observed: a layout torn down between the event and the dispatch is not an error, anything else is logged.
+        _ = refresh.ContinueWith(
+            static (t, state) =>
+            {
+                if (t.Exception?.GetBaseException() is { } ex and not (OperationCanceledException or ObjectDisposedException))
+                {
+                    ((ILogger)state!).LogError(ex, "Re-rendering the shell after a language switch failed");
+                }
+            },
+            Logger,
+            CancellationToken.None,
+            TaskContinuationOptions.NotOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 }

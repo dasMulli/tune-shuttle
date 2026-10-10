@@ -1,0 +1,17 @@
+@page "/"
+@* The Player page (UI-SPEC 4.3, phone 5.3): the now-playing hero (with the master volume) on the left, the Output and
+   Status cards stacked on the right at >= 1024px; one column below, in the order hero, Output, Status. The <h1> is
+   visually hidden (the hero is the visible title) and focusable for FocusOnNavigate. *@
+@inherits BridgeComponentBase
+
+<PageTitle>@L.Format("app.pageTitle", ("page", L["nav.player"]))</PageTitle>
+
+<h1 class="visually-hidden" tabindex="-1">@L["nav.player"]</h1>
+
+<div class="player">
+    <NowPlayingHero />
+    <div class="player__side">
+        <OutputList />
+        <StatusCard />
+    </div>
+</div>

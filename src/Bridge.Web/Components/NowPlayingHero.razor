@@ -1,0 +1,138 @@
+@* The now-playing hero of the Player page (UI-SPEC 4.3, phone layout 5.3): artwork or the gradient placeholder, the
+   Spotify chip, title / artist / album meta (or the nothing-playing texts), the read-only progress bar (no knob and
+   no seeking: there is no seek API, 8.1), the transport and the master volume block. The Spotify volume meter of the
+   old NowPlaying page is gone (8.1): the master slider follows the Spotify slider. *@
+@inherits BridgeComponentBase
+
+@{
+    var playback = State.Playback;
+    var status = State.Status;
+    var spotifyConnected = status?.SpotifyConnected == true;
+    var playing = playback?.Playing == true;
+    var transportDisabled = !spotifyConnected || _busy;
+}
+
+<section class="card hero" aria-label="@L["player.nowPlaying"]">
+    <div class="hero__top">
+        @if (playback?.ArtworkUrl is { Length: > 0 } artwork)
+        {
+            <img class="art" src="@artwork" alt="@L.Format("player.artworkAlt", ("album", playback.Album ?? playback.Title ?? string.Empty))" />
+        }
+        else
+        {
+            <div class="art art--placeholder" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+            </div>
+        }
+        <div class="hero__info">
+            @if (spotifyConnected)
+            {
+                <span class="chip chip--accent">@(status!.SpotifyUser is { Length: > 0 } user ? L.Format("player.spotifyChip", ("user", user)) : L["player.spotifyOnly"])</span>
+            }
+            @if (playback?.Title is { Length: > 0 } title)
+            {
+                <strong id="hero-title" class="hero__title">@title</strong>
+                @if (playback.Artist is { Length: > 0 } artist)
+                {
+                    <span class="hero__artist">@artist</span>
+                }
+                @if (playback.Album is { Length: > 0 } album)
+                {
+                    <span class="meta">@(playback.DurationMs > 0 ? L.Format("player.albumMeta", ("album", album), ("duration", Format.PlaybackTime(playback.DurationMs))) : album)</span>
+                }
+                else if (playback.DurationMs > 0)
+                {
+                    @* Episodes and some tracks come without an album: the length alone. *@
+                    <span class="meta">@Format.PlaybackTime(playback.DurationMs)</span>
+                }
+            }
+            else
+            {
+                <strong id="hero-title" class="hero__title text-muted">@L["player.nothingPlaying"]</strong>
+                <span class="meta">@(spotifyConnected
+                    ? L["player.startInSpotify"]
+                    : L.Format("player.selectDevice", ("device", status?.DeviceName is { Length: > 0 } device ? device : L["player.bridgeFallback"])))</span>
+            }
+        </div>
+    </div>
+
+    @if (playback is not null && playback.DurationMs > 0)
+    {
+        var position = State.PlaybackPositionMs();
+        var elapsed = Format.PlaybackTime(position);
+        <div class="hero__progress">
+            <span class="meta">@elapsed</span>
+            <div class="track" role="progressbar" aria-labelledby="hero-title"
+                 aria-valuemin="0" aria-valuemax="@Seconds(playback.DurationMs)" aria-valuenow="@Seconds(position)"
+                 aria-valuetext="@L.Format("player.progressText", ("elapsed", elapsed), ("total", Format.PlaybackTime(playback.DurationMs)))">
+                <div class="track__fill" style="@FillStyle(position, playback.DurationMs)"></div>
+            </div>
+            @* From the whole elapsed seconds, so elapsed + remaining always add up to the duration on screen. *@
+            <span class="meta">@Format.Remaining(playback.DurationMs - position / 1000 * 1000)</span>
+        </div>
+    }
+
+    <div class="transport">
+        <button type="button" class="step step--lg" aria-label="@L["player.previous"]" disabled="@transportDisabled" @onclick='() => CommandAsync("prev")'>
+            <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
+        </button>
+        @if (playing)
+        {
+            <button type="button" class="play" aria-label="@L["player.pause"]" disabled="@transportDisabled" @onclick='() => CommandAsync("pause")'>
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+            </button>
+        }
+        else
+        {
+            <button type="button" class="play" aria-label="@L["player.play"]" disabled="@transportDisabled" @onclick='() => CommandAsync("play")'>
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+        }
+        <button type="button" class="step step--lg" aria-label="@L["player.next"]" disabled="@transportDisabled" @onclick='() => CommandAsync("next")'>
+            <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
+        </button>
+    </div>
+
+    <MasterVolume />
+</section>
+
+@code {
+    private bool _busy;
+
+    private static string Seconds(long ms) => (Math.Max(0, ms) / 1000).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string FillStyle(long position, long duration) =>
+        "width: " + (duration <= 0 ? 0 : Math.Clamp(position * 100.0 / duration, 0, 100)).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        // The position is extrapolated between playbackChanged events; redraw once a second while playing.
+        Every(TimeSpan.FromSeconds(1), async _ =>
+        {
+            if (State.Playback?.Playing == true)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+    }
+
+    private async Task CommandAsync(string command)
+    {
+        _busy = true;
+        try
+        {
+            await Commands.PlaybackAsync(command, Lifetime);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the page went away
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

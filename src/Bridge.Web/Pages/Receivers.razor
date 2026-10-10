@@ -1,142 +1,238 @@
 @page "/receivers"
+@using System.Globalization
 @inherits BridgeComponentBase
 
-<PageTitle>Receivers · AirPlay Bridge</PageTitle>
+@* The Receivers page (UI-SPEC 4.4): one card per receiver in an auto-fill grid (one column on phones, two from 700px,
+   three at 1280px), each with its state pill, the hero volume slider, the capability/pairing/group/output chips, the
+   connect/pair actions and a collapsed <details> holding the offset form and the raw facts. Every text comes from the
+   catalog; receiver names, models, addresses and errors are service text (UI-SPEC 3.5). *@
 
-<h1>Receivers</h1>
+<PageTitle>@L.Format("app.pageTitle", ("page", L["nav.receivers"]))</PageTitle>
 
-@if (State.Status is { } status)
-{
-    <p class="lead">
-        Spotify device <strong>@status.DeviceName</strong>,
-        @(status.SpotifyConnected ? $"connected{(status.SpotifyUser is { } user ? " as " + user : string.Empty)}" : "not connected to Spotify").
-        @OutputSummary()
-    </p>
-}
+<div class="stack">
+    <h1>@L["receivers.title"]</h1>
 
-@if (!State.Loaded)
-{
-    <p class="muted">Connecting to the bridge…</p>
-}
-else if (State.Receivers.Count == 0)
-{
-    <div class="empty">
-        <p>No AirPlay receivers found yet.</p>
-        <p class="muted">Receivers appear here as soon as the bridge sees them on the network (mDNS). Check that the speaker is on and in the same network as the bridge.</p>
-    </div>
-}
-else
-{
-    <div class="cards">
-        @foreach (var receiver in State.Receivers)
-        {
-            var busy = _busy.Contains(receiver.Id);
-            var inOutput = State.IsInOutput(receiver.Id);
-            <article class="card receiver" data-receiver-id="@receiver.Id" @key="receiver.Id">
-                <header class="card-header">
-                    <h2>@receiver.Name</h2>
-                    <StateBadge State="receiver.State" />
-                </header>
+    @if (State.Status is { } status)
+    {
+        <p class="meta">@Lead(status)</p>
+    }
 
-                <p class="meta">
-                    @(receiver.Model ?? "Unknown model")
-                    @if (receiver.Address is not null)
+    @if (!State.Loaded)
+    {
+        <p class="meta" role="status">@L["common.connecting"]</p>
+    }
+    else if (State.Receivers.Count == 0)
+    {
+        <div class="empty">
+            <strong>@L["receivers.empty"]</strong>
+            <span>@L["receivers.emptyHint"]</span>
+        </div>
+    }
+    else
+    {
+        <div class="cards">
+            @foreach (var receiver in State.Receivers)
+            {
+                var busy = _busy.Contains(receiver.Id);
+                var inOutput = State.IsInOutput(receiver.Id);
+                var session = receiver.State is ReceiverConnectionState.Connected or ReceiverConnectionState.Streaming or ReceiverConnectionState.Connecting;
+                var headingId = "receiver-" + Slug(receiver.Id);
+                <article class="card receiver" data-receiver-id="@receiver.Id" aria-labelledby="@headingId" @key="receiver.Id">
+                    <div class="card__head">
+                        <h2 id="@headingId">@receiver.Name</h2>
+                        <StatePill Receiver="receiver" />
+                    </div>
+
+                    <p class="meta">@Meta(receiver)</p>
+
+                    <div class="field">
+                        <span class="label">@L["receivers.volume"]</span>
+                        <LevelSlider Variant="LevelSlider.LevelVariant.Hero" HideLabel="true"
+                                     Label="@L.Format("receivers.volumeOf", ("name", receiver.Name))"
+                                     ValueText="@LevelText" Value="State.LevelOf(receiver)"
+                                     Send="(level, ct) => Commands.SetReceiverLevelAsync(receiver.Id, level, ct)" />
+                    </div>
+
+                    <div class="tags">
+                        @if (receiver.Capabilities.AirPlay2)
+                        {
+                            <span class="chip">@L["receivers.tags.airplay2"]</span>
+                        }
+                        @if (receiver.Capabilities.Ptp)
+                        {
+                            <span class="chip">@L["receivers.tags.ptp"]</span>
+                        }
+                        @if (receiver.Capabilities.Buffered)
+                        {
+                            <span class="chip">@L["receivers.tags.buffered"]</span>
+                        }
+                        @switch (receiver.Pairing)
+                        {
+                            case PairingState.Paired:
+                                <span class="chip chip--accent" data-pairing="paired" title="@L["pills.title.paired"]">@L["pills.paired"]</span>
+                                break;
+                            case PairingState.PinRequired:
+                                <span class="chip chip--warn" data-pairing="pin" title="@L["pills.title.pinNeeded"]">@L["pills.pinNeeded"]</span>
+                                break;
+                            case PairingState.Disabled:
+                                <span class="chip" data-pairing="homekit" title="@L["pills.title.homekitOnly"]">@L["pills.homekitOnly"]</span>
+                                break;
+                            default:
+                                <span class="chip" data-pairing="transient" title="@L["pills.title.noPin"]">@L["pills.noPin"]</span>
+                                break;
+                        }
+                        @if (receiver.GroupId is { } groupId && State.Group(groupId) is { } group)
+                        {
+                            <span class="chip" data-tag="group">@L.Format("receivers.tags.group", ("name", group.Name))</span>
+                        }
+                        @if (inOutput)
+                        {
+                            <span class="chip chip--accent" data-tag="output">@L["receivers.tags.output"]</span>
+                        }
+                    </div>
+
+                    @if (receiver.Error is { } error && receiver.State == ReceiverConnectionState.Error)
                     {
-                        <span> · @receiver.Address:@receiver.Port</span>
-                    }
-                </p>
-
-                <p class="tags">
-                    @if (receiver.Capabilities.AirPlay2) { <span class="tag">AirPlay 2</span> }
-                    @if (receiver.Capabilities.Ptp) { <span class="tag">PTP</span> }
-                    @if (receiver.Capabilities.Buffered) { <span class="tag">Buffered</span> }
-                    <span class="tag pairing-@receiver.Pairing.ToString().ToLowerInvariant()">@PairingText(receiver.Pairing)</span>
-                    @if (receiver.GroupId is { } groupId && State.Group(groupId) is { } group)
-                    {
-                        <span class="tag group">Group: @group.Name</span>
-                    }
-                    @if (inOutput)
-                    {
-                        <span class="tag output">Output</span>
-                    }
-                </p>
-
-                @if (receiver.Error is { } error && receiver.State == ReceiverConnectionState.Error)
-                {
-                    <p class="error">@error</p>
-                }
-
-                <div class="actions">
-                    @if (receiver.State is ReceiverConnectionState.Connected or ReceiverConnectionState.Streaming or ReceiverConnectionState.Connecting)
-                    {
-                        <button type="button" @onclick="() => DisconnectAsync(receiver.Id)" disabled="@busy">Disconnect</button>
-                    }
-                    else
-                    {
-                        <button type="button" class="primary" @onclick="() => ConnectAsync(receiver.Id)"
-                                disabled="@(busy || !receiver.Online || receiver.Pairing == PairingState.Disabled)"
-                                title="@(receiver.Online ? "Play to this receiver alone" : "The receiver is offline")">
-                            @(busy ? "Working…" : "Connect")
-                        </button>
+                        <p class="meta text-err" role="alert">@error</p>
                     }
 
-                    @if (receiver.Pairing == PairingState.PinRequired)
-                    {
-                        <button type="button" @onclick="() => PairAsync(receiver.Id)" disabled="@(busy || !receiver.Online)">Pair with PIN</button>
-                    }
-                    else if (receiver.Pairing == PairingState.Paired)
-                    {
-                        <button type="button" class="subtle" @onclick="() => ForgetAsync(receiver.Id)" disabled="@busy">Forget pairing</button>
-                    }
-                </div>
+                    <div class="actions">
+                        @if (session)
+                        {
+                            <button type="button" class="btn" data-action="disconnect" disabled="@busy"
+                                    @onclick="() => DisconnectAsync(receiver.Id)">@L["receivers.disconnect"]</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn--primary" data-action="connect"
+                                    disabled="@(busy || !receiver.Online || receiver.Pairing == PairingState.Disabled)"
+                                    title="@ConnectTitle(receiver)"
+                                    @onclick="() => ConnectAsync(receiver.Id)">@(busy ? L["receivers.connecting"] : L["receivers.connect"])</button>
+                        }
 
-                <LevelSlider Value="State.LevelOf(receiver)" Label="Volume"
-                             Send="(level, ct) => Commands.SetReceiverLevelAsync(receiver.Id, level, ct)" />
+                        @if (receiver.Pairing == PairingState.PinRequired)
+                        {
+                            <button type="button" class="btn" data-action="pair" disabled="@(busy || !receiver.Online)"
+                                    @onclick="() => PairAsync(receiver.Id)">@L["receivers.pairWithPin"]</button>
+                        }
+                        else if (receiver.Pairing == PairingState.Paired)
+                        {
+                            <button type="button" class="btn btn--ghost" data-action="forget" disabled="@busy"
+                                    @onclick="() => ForgetAsync(receiver.Id)">@L["receivers.forgetPairing"]</button>
+                        }
+                    </div>
 
-                <form class="offset" @onsubmit="() => ApplyOffsetAsync(receiver)" @onsubmit:preventDefault>
-                    <label for="offset-@receiver.Id">Offset</label>
-                    <input id="offset-@receiver.Id" type="number" step="1" min="@(-MaxOffsetFrames)" max="@MaxOffsetFrames"
-                           value="@OffsetDraft(receiver)" @onchange="e => SetOffsetDraft(receiver.Id, e)"
-                           aria-describedby="offset-hint-@receiver.Id" />
-                    <button type="submit" class="subtle" disabled="@(busy || OffsetDraft(receiver) == receiver.OffsetFrames)">Apply</button>
-                    <span id="offset-hint-@receiver.Id" class="offset-hint muted small">frames = @Format.FramesAsMs(OffsetDraft(receiver)) ms (latency trim, ±2 s)</span>
-                </form>
-                @if (_offsetErrors.TryGetValue(receiver.Id, out var offsetError))
-                {
-                    <p class="error">@offsetError</p>
-                }
-            </article>
-        }
-    </div>
-}
+                    <details class="details">
+                        <summary>@L["receivers.details"]</summary>
+                        @{
+                            var draft = OffsetDraft(receiver);
+                            var inputId = "offset-" + Slug(receiver.Id);
+                            var hintId = inputId + "-hint";
+                            var hasError = _offsetErrors.TryGetValue(receiver.Id, out var offsetError);
+                            var errorId = inputId + "-error";
+                        }
+                        @* novalidate: the browser's own constraint bubble (in the browser's language) would block the
+                           submit; the catalog texts receivers.offsetInvalid / receivers.offsetRange are shown instead. *@
+                        <form class="offset" novalidate @onsubmit="() => ApplyOffsetAsync(receiver)" @onsubmit:preventDefault>
+                            <label for="@inputId" class="label">@L["receivers.offset"]</label>
+                            <input id="@inputId" type="number" class="input input--narrow"
+                                   step="1" min="@(-MaxOffsetFrames)" max="@MaxOffsetFrames"
+                                   value="@draft.ToString(CultureInfo.InvariantCulture)"
+                                   aria-invalid="@(hasError ? "true" : null)"
+                                   aria-describedby="@(hasError ? hintId + " " + errorId : hintId)"
+                                   @onchange="e => SetOffsetDraft(receiver.Id, e)" />
+                            <button type="submit" class="btn btn--sm" disabled="@(busy || draft == receiver.OffsetFrames)">@L["receivers.apply"]</button>
+                        </form>
+                        <p id="@hintId" class="hint">@L.Format("receivers.offsetHint", ("frames", Format.Integer(draft)), ("ms", Format.Milliseconds(draft)))</p>
+                        @if (hasError)
+                        {
+                            <p id="@errorId" class="validation-message" role="alert">@offsetError</p>
+                        }
+                        <dl class="facts">
+                            <dt>@L["receivers.facts.id"]</dt>
+                            <dd class="mono">@receiver.Id</dd>
+                            <dt>@L["receivers.facts.manufacturer"]</dt>
+                            <dd>@(receiver.Manufacturer ?? Dash)</dd>
+                            <dt>@L["receivers.facts.port"]</dt>
+                            <dd class="mono">@receiver.Port.ToString(CultureInfo.InvariantCulture)</dd>
+                            <dt>@L["receivers.facts.features"]</dt>
+                            <dd class="mono">@receiver.Capabilities.Features</dd>
+                            <dt>@L["receivers.facts.flags"]</dt>
+                            <dd class="mono">@receiver.Capabilities.Flags</dd>
+                        </dl>
+                    </details>
+                </article>
+            }
+        </div>
+    }
+</div>
 
 @code {
     /// <summary>Largest offset the service accepts (2 s at 44.1 kHz, SPEC-audio.md 3.3).</summary>
     public const int MaxOffsetFrames = 88200;
 
+    /// <summary>Shown for a missing value (a glyph, not catalog text).</summary>
+    private const string Dash = "–";
+
     private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _offsetDrafts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _offsetErrors = new(StringComparer.Ordinal);
 
-    /// <summary>Label of a pairing state.</summary>
-    public static string PairingText(PairingState pairing) => pairing switch
-    {
-        PairingState.Transient => "No PIN needed",
-        PairingState.PinRequired => "PIN pairing needed",
-        PairingState.Paired => "Paired",
-        PairingState.Disabled => "HomeKit home only",
-        _ => pairing.ToString(),
-    };
+    private string LevelText(int value) => L.Format("common.levelText", ("value", value));
 
-    private string OutputSummary()
+    /// <summary>"Spotify device {{device}}, {{spotify}}. {{output}}" (receivers.lead).</summary>
+    private string Lead(StatusDto status)
     {
+        var spotify = status.SpotifyConnected
+            ? status.SpotifyUser is { Length: > 0 } user
+                ? L.Format("receivers.leadSpotifyConnected", ("user", user))
+                : L["receivers.leadSpotifyConnectedNoUser"]
+            : L["receivers.leadSpotifyNotConnected"];
         var output = State.Output;
-        if (output.GroupId is { } groupId)
+        var outputText = output.GroupId is { } groupId
+            ? L.Format("receivers.leadOutputGroup", ("name", State.Group(groupId)?.Name ?? groupId))
+            : output.ReceiverId is { } receiverId
+                ? L.Format("receivers.leadOutputReceiver", ("name", State.NameOf(receiverId)))
+                : L["receivers.leadOutputNone"];
+        return L.Format("receivers.lead", ("device", status.DeviceName), ("spotify", spotify), ("output", outputText));
+    }
+
+    /// <summary>"{{model}} · {{address}}:{{port}}"; the address part is left out while the receiver has none.</summary>
+    private string Meta(ReceiverDto receiver)
+    {
+        var model = string.IsNullOrWhiteSpace(receiver.Model) ? L["receivers.unknownModel"] : receiver.Model;
+        return receiver.Address is { Length: > 0 } address
+            ? model + " · " + address + ":" + receiver.Port.ToString(CultureInfo.InvariantCulture)
+            : model;
+    }
+
+    /// <summary>
+    /// The Connect button's title: receivers.offlineTitle while it is disabled because the receiver is offline, the
+    /// HomeKit explanation while pairing is disabled, receivers.connectTitle otherwise.
+    /// </summary>
+    private string ConnectTitle(ReceiverDto receiver)
+    {
+        if (!receiver.Online)
         {
-            return $"Output: group {State.Group(groupId)?.Name ?? groupId}.";
+            return L["receivers.offlineTitle"];
         }
 
-        return output.ReceiverId is { } receiverId ? $"Output: {State.NameOf(receiverId)}." : "No output selected; audio is discarded.";
+        return receiver.Pairing == PairingState.Disabled ? L["pills.title.homekitOnly"] : L["receivers.connectTitle"];
+    }
+
+    /// <summary>An id fragment for element ids (receiver ids are MAC-like, "02:FA:CE:00:00:01").</summary>
+    private static string Slug(string id)
+    {
+        var chars = id.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (!char.IsAsciiLetterOrDigit(chars[i]))
+            {
+                chars[i] = '-';
+            }
+        }
+
+        return new string(chars);
     }
 
     private int OffsetDraft(ReceiverDto receiver) => _offsetDrafts.TryGetValue(receiver.Id, out var draft) ? draft : receiver.OffsetFrames;
@@ -144,22 +240,27 @@ else
     private void SetOffsetDraft(string receiverId, ChangeEventArgs e)
     {
         _offsetErrors.Remove(receiverId);
-        if (int.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var frames))
+        if (int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var frames))
         {
             _offsetDrafts[receiverId] = frames;
         }
         else
         {
-            _offsetErrors[receiverId] = "Enter a whole number of frames.";
+            _offsetErrors[receiverId] = L["receivers.offsetInvalid"];
         }
     }
 
     private async Task ApplyOffsetAsync(ReceiverDto receiver)
     {
+        if (_offsetErrors.ContainsKey(receiver.Id))
+        {
+            return;
+        }
+
         var frames = OffsetDraft(receiver);
         if (Math.Abs(frames) > MaxOffsetFrames)
         {
-            _offsetErrors[receiver.Id] = $"The offset must be within ±{MaxOffsetFrames} frames (2 s).";
+            _offsetErrors[receiver.Id] = L.Format("receivers.offsetRange", ("max", Format.Integer(MaxOffsetFrames)));
             return;
         }
 

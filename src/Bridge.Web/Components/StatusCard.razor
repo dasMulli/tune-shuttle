@@ -1,0 +1,59 @@
+@* The Status card of the Player page (UI-SPEC 4.3): exactly four facts (Spotify, Output, Receivers, Live updates) and
+   a link to Diagnostics. The mockups' Stream and Retransmits facts are deliberately not built (8.1). Values are set in
+   the ink tokens (6.3) through the text-* utilities. *@
+@inherits BridgeComponentBase
+
+@{
+    var status = State.Status;
+    var receivers = State.Receivers;
+    var online = receivers.Count(r => r.Online);
+    // From the live member states (StatusDto.OutputConnected lags behind). Selected but not (yet) connected reads as the
+    // pill words connecting… / error, so the fact never says "none" under an active row of the Output card.
+    var output = State.Output;
+    var memberStates = output.Members.Select(m => State.Receiver(m.ReceiverId)?.State ?? m.State).ToList();
+    var (outputClass, outputText) = (output.GroupId ?? output.ReceiverId, memberStates) switch
+    {
+        (_, var states) when states.Any(s => s is ReceiverConnectionState.Connected or ReceiverConnectionState.Streaming) => ("fact__value text-ok", L["player.outputConnected"]),
+        (null, _) => ("fact__value text-muted", L["player.outputNone"]),
+        (_, var states) when states.Contains(ReceiverConnectionState.Error) && !states.Contains(ReceiverConnectionState.Connecting) => ("fact__value text-err", L["pills.error"]),
+        _ => ("fact__value text-accent", L["pills.connecting"]),
+    };
+    var (spotifyClass, spotifyText) = status switch
+    {
+        { SpotifyConnected: true, SpotifyUser: { Length: > 0 } user } => ("fact__value text-ok", L.Format("player.connectedAs", ("user", user))),
+        { SpotifyConnected: true } => ("fact__value text-ok", L["player.connected"]),
+        _ => ("fact__value text-muted", L["player.notConnected"]),
+    };
+    var (liveClass, liveText) = State.Connection switch
+    {
+        EventConnectionState.Connected => ("fact__value text-ok", L["status.live"]),
+        EventConnectionState.Connecting => ("fact__value text-accent", L["status.connecting"]),
+        _ when State.NextAttemptAt is not null => ("fact__value text-warn", L["status.paused"]),
+        _ => ("fact__value text-err", L["status.offline"]),
+    };
+}
+
+<section class="card" aria-labelledby="player-status-title">
+    <div class="card__head">
+        <h2 id="player-status-title">@L["player.status"]</h2>
+        <a href="settings/diagnostics">@L["player.diagnostics"]</a>
+    </div>
+    <div class="fact-grid">
+        <div class="fact" data-fact="spotify">
+            <span class="label">@L["player.spotify"]</span>
+            <span class="@spotifyClass">@spotifyText</span>
+        </div>
+        <div class="fact" data-fact="output">
+            <span class="label">@L["player.outputFact"]</span>
+            <span class="@outputClass">@outputText</span>
+        </div>
+        <div class="fact" data-fact="receivers">
+            <span class="label">@L["player.receiversFact"]</span>
+            <span class="fact__value">@L.Plural("player.receiversOnline", online, ("total", receivers.Count.ToString("N0", L.Culture)))</span>
+        </div>
+        <div class="fact" data-fact="live">
+            <span class="label">@L["player.liveUpdates"]</span>
+            <span class="@liveClass">@liveText</span>
+        </div>
+    </div>
+</section>

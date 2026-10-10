@@ -1,0 +1,140 @@
+@* The master volume block of the now-playing hero (UI-SPEC 4.3 item 4, phone 5.3). The target is the selected output:
+   the active group (G, Commands.SetGroupLevelAsync) or the single receiver (its level, Commands.SetReceiverLevelAsync);
+   with nothing selected the slider and the steppers are disabled and the number shows "–" (a glyph, not catalog text).
+   The −/+ steppers call the slider's StepAsync(±5) through @ref (the contract with LevelSlider, 1.6), so a step goes
+   through the same coalescing sender as a drag. For a group, the members' levels follow the dragged master live
+   (GroupVolumePreview): as .track bars on wide screens, as one wrapping members chip on phones. *@
+@inherits BridgeComponentBase
+
+@{
+    var target = Target();
+    var label = target.Name is { } name ? L.Format("player.masterVolume", ("output", name)) : L["player.masterVolumeNone"];
+    var none = target.Kind == TargetKind.None;
+    var draft = _draftKey == target.Key ? _draft : null;
+    var members = target.Group is { } group ? (draft is { } dragged ? GroupVolumePreview.Preview(group, dragged) : group.Members) : null;
+}
+
+<div class="master">
+    <div class="master__head">
+        <span class="label">@label</span>
+        <span class="meta">@L["player.followsSpotify"]</span>
+    </div>
+    <div class="master__row">
+        <LevelSlider @key="target.Key" @ref="_slider" Variant="LevelSlider.LevelVariant.Hero" Label="@label" HideLabel="true"
+                     Value="target.Level" Disabled="none" Send="SendAsync" DraftChanged="OnDraftChanged"
+                     ValueText="@(v => L.Format("common.levelText", ("value", v)))"
+                     OutputText="@(none ? s_dash : null)">
+            <Before>
+                <button type="button" class="step" aria-label="@L["player.quieter"]" disabled="@none" @onclick="() => StepAsync(-5)"><span aria-hidden="true">−</span></button>
+            </Before>
+            <After>
+                <button type="button" class="step" aria-label="@L["player.louder"]" disabled="@none" @onclick="() => StepAsync(5)"><span aria-hidden="true">+</span></button>
+            </After>
+        </LevelSlider>
+    </div>
+    @if (members is { Count: > 0 })
+    {
+        <div class="members only-wide">
+            @foreach (var member in members)
+            {
+                <div class="member" @key="member.ReceiverId">
+                    <span class="meta member__name" title="@member.Name">@member.Name</span>
+                    <div class="track" aria-hidden="true"><div class="track__fill" style="@FillStyle(member.Level)"></div></div>
+                    <span class="meta member__level">@member.Level.ToString(L.Culture)</span>
+                </div>
+            }
+        </div>
+        @if (draft is { } previewed && GroupVolumePreview.Clamps(target.Group!, previewed))
+        {
+            <p class="meta only-wide">@L["groups.clampHint"]</p>
+        }
+        <span class="chip chip--accent chip--members only-phone">@L.Format("player.membersChip", ("output", target.Name), ("members", MembersText(members)))</span>
+    }
+</div>
+
+@code {
+    private static readonly Func<int, string> s_dash = _ => "–"; // nothing to control: a glyph, not catalog text
+    private LevelSlider? _slider;
+    private int? _draft;
+    private string? _draftKey;
+
+    private enum TargetKind
+    {
+        None,
+        Group,
+        Receiver,
+    }
+
+    private readonly record struct OutputTarget(TargetKind Kind, string? Id, string? Name, int Level, GroupDto? Group)
+    {
+        public string Key => Kind + ":" + Id;
+    }
+
+    /// <summary>The selected output as the master slider sees it, with the level that settles at once after a send.</summary>
+    private OutputTarget Target()
+    {
+        var output = State.Output;
+        if (output.GroupId is { } groupId)
+        {
+            var group = State.Group(groupId);
+            return new OutputTarget(TargetKind.Group, groupId, group?.Name ?? groupId, group?.MasterLevel ?? output.MasterLevel, group);
+        }
+
+        if (output.ReceiverId is { } receiverId)
+        {
+            // The receiver's own level: Commands.SetReceiverLevelAsync applies the answer to it at once.
+            return new OutputTarget(TargetKind.Receiver, receiverId, State.NameOf(receiverId), State.Receiver(receiverId)?.Level ?? output.MasterLevel, null);
+        }
+
+        return new OutputTarget(TargetKind.None, null, null, 0, null);
+    }
+
+    private static string FillStyle(int level) =>
+        "width: " + Math.Clamp(level, 0, 100).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private string MembersText(IReadOnlyList<GroupMemberDto> members) =>
+        string.Join(" · ", members.Select(m => m.Name + " " + m.Level.ToString(L.Culture)));
+
+    private Task StepAsync(int delta)
+    {
+        var target = Target();
+        if (_slider is null || target.Kind == TargetKind.None)
+        {
+            return Task.CompletedTask;
+        }
+
+        // At a bound the step would only repeat the level: send nothing.
+        var shown = _draft is { } draft && _draftKey == target.Key ? draft : target.Level;
+        return Math.Clamp(shown + delta, 0, 100) == shown ? Task.CompletedTask : _slider.StepAsync(delta);
+    }
+
+    /// <inheritdoc />
+    protected override void OnBridgeStateChanged()
+    {
+        // An output switch disposes the slider (@key) with a send pending: it never reports DraftChanged(null), so the
+        // draft of the old target would come back with that target.
+        if (_draftKey is not null && _draftKey != Target().Key)
+        {
+            _draft = null;
+            _draftKey = null;
+        }
+    }
+
+    private Task OnDraftChanged(int? draft)
+    {
+        _draft = draft;
+        _draftKey = draft is null ? null : Target().Key;
+        return Task.CompletedTask;
+    }
+
+    private Task<bool> SendAsync(int level, CancellationToken cancellationToken)
+    {
+        var target = Target();
+        return target.Kind switch
+        {
+            TargetKind.Group => Commands.SetGroupLevelAsync(target.Id!, level, cancellationToken),
+            TargetKind.Receiver => Commands.SetReceiverLevelAsync(target.Id!, level, cancellationToken),
+            _ => Task.FromResult(false),
+        };
+    }
+}

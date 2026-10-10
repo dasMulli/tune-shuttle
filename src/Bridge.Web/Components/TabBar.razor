@@ -1,0 +1,23 @@
+@* The phone navigation (UI-SPEC 5.2): a fixed bottom bar with the three sections, icon over label. Hidden at
+   >= 700px by the stylesheet, where the top bar's tabs take over. *@
+@inherits BridgeComponentBase
+
+<nav class="tabbar" aria-label="@L["nav.sections"]">
+    <TabLink Href="" Also="PlayerAlso">
+        <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+        <span>@L["nav.player"]</span>
+    </TabLink>
+    <TabLink Href="receivers">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10a8 8 0 0 1 16 0" /><path d="M7 12.5a5 5 0 0 1 10 0" /><circle cx="12" cy="15" r="1.6" /></svg>
+        <span>@L["nav.receivers"]</span>
+    </TabLink>
+    <TabLink Href="settings">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></svg>
+        <span>@L["nav.settings"]</span>
+    </TabLink>
+</nav>
+
+@code {
+    /// <summary>The Player tab also owns the group pages (UI-SPEC 4.1).</summary>
+    internal static readonly IReadOnlyList<string> PlayerAlso = ["groups"];
+}

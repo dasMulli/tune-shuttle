@@ -1,12 +1,15 @@
+@* The router. Pages write their own <PageTitle> (UI-SPEC 4.1); FocusOnNavigate moves focus to the page's <h1> after a
+   navigation to a route. An unknown address renders Pages/NotFound inside the shell, which writes its own title,
+   focuses its own <h1> (FocusOnNavigate needs route data) and re-renders on a language switch itself. *@
+
 <Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)" />
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
     <NotFound>
-        <PageTitle>Not found</PageTitle>
         <LayoutView Layout="@typeof(Layout.MainLayout)">
-            <p role="alert">There is nothing at this address.</p>
+            <Bridge.Web.Pages.NotFound />
         </LayoutView>
     </NotFound>
 </Router>

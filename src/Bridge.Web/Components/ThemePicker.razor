@@ -1,0 +1,285 @@
+@* The theme picker of the top bar (UI-SPEC 2.4), the reference apps' control: a role="radiogroup" pill of three
+   role="radio" buttons (light / dark / system). Collapsed it shows only the checked option; hover or focus-within
+   unfolds it (CSS). Keyboard: one Tab stop (roving tabindex on the checked button), arrows/Home/End move focus and
+   selection, Escape collapses. Touch (no hover): the first pointer tap opens the pill (theme-picker--open) instead of
+   selecting, the next tap selects; a document click outside (BrowserBridge.OnOutsideClickAsync, a bubbling click
+   listener) or Escape collapses it. Selecting stores and applies the choice through BrowserBridge.SetThemeAsync; a choice
+   made elsewhere (the Settings Appearance card) arrives through BrowserBridge.ThemeChanged. The navigation keys are
+   kept from scrolling the page (BrowserBridge.PreventKeysAsync). *@
+@inherits BridgeComponentBase
+@using Microsoft.JSInterop
+@inject BrowserBridge Browser
+
+<div @ref="_picker" class="@(_open ? "theme-picker theme-picker--open" : "theme-picker")" role="radiogroup" aria-label="@L["theme.groupLabel"]" @onkeydown="OnKeyDownAsync">
+    @for (var i = 0; i < Themes.Length; i++)
+    {
+        var index = i;
+        var theme = Themes[index];
+        var active = theme == _theme;
+        <button @ref="_buttons[index]" type="button" class="@(active ? "theme-btn is-active" : "theme-btn")" role="radio"
+                aria-checked="@(active ? "true" : "false")" tabindex="@(active ? 0 : -1)" aria-label="@NameOf(theme)" title="@NameOf(theme)"
+                @onclick="e => OnClickAsync(theme, e)" @onfocus="() => _focused = index">
+            @Icon(theme)
+        </button>
+    }
+</div>
+
+@code {
+    /// <summary>The three choices in their order (light, dark, system); the values app.js stores.</summary>
+    public static readonly string[] Themes = ["light", "dark", "system"];
+
+    /// <summary>The keys that move the choice (UI-SPEC 6.2); app.js keeps them from also scrolling the page.</summary>
+    public static readonly string[] NavigationKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"];
+
+    private readonly ElementReference[] _buttons = new ElementReference[3];
+    private ElementReference _picker;
+    private string _theme = "system";
+    private bool _open;
+    private bool _hoverCapable = true;
+    private int _focused = -1;
+    private DotNetObjectReference<ThemePicker>? _self;
+    private IAsyncDisposable? _outsideClick;
+    private IAsyncDisposable? _preventKeys;
+    private bool _disposed;
+
+    /// <summary>The current choice (<c>"light"</c>, <c>"dark"</c> or <c>"system"</c>).</summary>
+    public string Theme => _theme;
+
+    /// <summary>True while the touch "open" state unfolds the pill (<c>theme-picker--open</c>).</summary>
+    public bool IsOpen => _open;
+
+    /// <summary>
+    /// Called by app.js for a document click outside the picker (registered on touch screens only, where the pill can
+    /// be opened by a tap): collapses the open pill.
+    /// </summary>
+    [JSInvokable]
+    public Task CollapseFromOutside() => InvokeAsync(() =>
+    {
+        if (_open)
+        {
+            _open = false;
+            StateHasChanged();
+        }
+    });
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Browser.ThemeChanged += OnThemeChanged;
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        // Captured before the first await: the base class disposes its CancellationTokenSource on Dispose, after which
+        // reading Lifetime would throw; the captured token still answers IsCancellationRequested.
+        var lifetime = Lifetime;
+
+        // The module exists only after the first render; until it answers, the picker shows "system" and treats the
+        // pointer as hover-capable (a click selects at once).
+        try
+        {
+            var stored = await Browser.GetThemeAsync();
+            _hoverCapable = await Browser.HoverCapableAsync();
+            if (lifetime.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (Array.IndexOf(Themes, stored) >= 0 && stored != _theme)
+            {
+                _theme = stored;
+                StateHasChanged();
+            }
+
+            try
+            {
+                _preventKeys = await Browser.PreventKeysAsync(_picker, NavigationKeys);
+            }
+            catch (JSException)
+            {
+                // A module without the export (a cached older app.js): the keys still select, they also scroll.
+            }
+
+            if (lifetime.IsCancellationRequested)
+            {
+                // Disposed while the listener was being registered: release it now.
+                ReleaseListeners();
+                return;
+            }
+
+            if (!_hoverCapable)
+            {
+                _self = DotNetObjectReference.Create(this);
+                _outsideClick = await Browser.OnOutsideClickAsync(_picker, _self, nameof(CollapseFromOutside));
+                if (lifetime.IsCancellationRequested)
+                {
+                    ReleaseListeners();
+                }
+            }
+        }
+        catch (JSException)
+        {
+            // No module (blocked script, old browser): the picker still works for this page, it just cannot read the
+            // stored choice.
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+        catch (ObjectDisposedException) when (lifetime.IsCancellationRequested)
+        {
+            // torn down while a call was in flight; Dispose released what was registered
+            ReleaseListeners();
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        _disposed = true;
+        Browser.ThemeChanged -= OnThemeChanged;
+        ReleaseListeners();
+    }
+
+    private void ReleaseListeners()
+    {
+        if (_preventKeys is { } keys)
+        {
+            _preventKeys = null;
+            Observe(keys.DisposeAsync().AsTask());
+        }
+
+        if (_outsideClick is { } handle)
+        {
+            _outsideClick = null;
+            Observe(handle.DisposeAsync().AsTask());
+        }
+
+        _self?.Dispose();
+        _self = null;
+    }
+
+    private void OnThemeChanged(string theme)
+    {
+        // A choice made elsewhere (the Settings Appearance card, UI-SPEC 4.6). The picker's own choice arrives here too:
+        // _theme already equals it, so nothing re-renders and nothing is written back.
+        if (Array.IndexOf(Themes, theme) < 0)
+        {
+            return;
+        }
+
+        Observe(InvokeAsync(() =>
+        {
+            if (_disposed || theme == _theme)
+            {
+                return;
+            }
+
+            _theme = theme;
+            StateHasChanged();
+        }));
+    }
+
+    private async Task OnClickAsync(string theme, MouseEventArgs e)
+    {
+        // Touch: the collapsed pill shows only the active option, so the first pointer tap unfolds the choices instead
+        // of re-selecting what is already active. Keyboard activation (Enter/Space: detail 0) always selects.
+        if (!_hoverCapable && e.Detail != 0 && !_open)
+        {
+            _open = true;
+            return;
+        }
+
+        await SelectAsync(theme);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            _open = false;
+            return;
+        }
+
+        var current = _focused >= 0 ? _focused : Array.IndexOf(Themes, _theme);
+        var next = e.Key switch
+        {
+            "ArrowRight" or "ArrowDown" => (current + 1) % Themes.Length,
+            "ArrowLeft" or "ArrowUp" => (current - 1 + Themes.Length) % Themes.Length,
+            "Home" => 0,
+            "End" => Themes.Length - 1,
+            _ => -1,
+        };
+        if (next < 0)
+        {
+            return;
+        }
+
+        // A radio group: moving the focus moves the choice.
+        _focused = next;
+        await SelectAsync(Themes[next], keepOpen: _open);
+        try
+        {
+            await _buttons[next].FocusAsync();
+        }
+        catch (JSException)
+        {
+            // the button went away (re-render race); the choice is made
+        }
+    }
+
+    private async Task SelectAsync(string theme, bool keepOpen = false)
+    {
+        _theme = theme;
+        _open = keepOpen;
+        try
+        {
+            await Browser.SetThemeAsync(theme);
+        }
+        catch (JSException)
+        {
+            // Applying failed (no module); the picker shows the choice, the page keeps its scheme.
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+    }
+
+    private string NameOf(string theme) => theme switch
+    {
+        "light" => L["theme.light"],
+        "dark" => L["theme.dark"],
+        _ => L["theme.system"],
+    };
+
+    private static RenderFragment Icon(string theme) => theme switch
+    {
+        "light" => SunIcon,
+        "dark" => MoonIcon,
+        _ => SystemIcon,
+    };
+
+    // The reference apps' icons (ButtonWeb _Layout): sun, moon, half-disc.
+    private static readonly RenderFragment SunIcon = __builder =>
+    {
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2L19 19M19 5l-1.8 1.8M6.8 17.2L5 19" /></svg>
+    };
+
+    private static readonly RenderFragment MoonIcon = __builder =>
+    {
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" /></svg>
+    };
+
+    private static readonly RenderFragment SystemIcon = __builder =>
+    {
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" /></svg>
+    };
+}

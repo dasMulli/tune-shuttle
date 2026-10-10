@@ -58,7 +58,7 @@ set in an ink token; dots, borders, fills and large glyphs use the raw token.**
 | `--font` | `system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` | same | everything |
 | `--font-mono` | `ui-monospace, "Cascadia Mono", Consolas, monospace` | same | log, addresses, ids |
 | `--topbar-h` | `56px` | same | fallback; the shell publishes the measured height (5.2) |
-| `--tabbar-h` | `56px` | same | phone tab bar without the safe-area inset |
+| `--tabbar-h` | `56px` | same | fallback; the shell publishes the measured phone tab bar height, safe-area padding included (5.2) |
 
 `--line` against `--surface` is 1.42:1 (light) / 1.51:1 (dark): separators are decoration, never the only cue.
 
@@ -299,7 +299,8 @@ packages can build on them. The theme and language components call it; the modul
 | `setLang(code)` | stores `airplay-bridge-lang` (or removes it when `code === ""`) and sets `document.documentElement.lang = code` |
 | `setDocumentLang(code)` | `document.documentElement.lang = code` only (start-up) |
 | `onOutsideClick(element, dotnetRef, method)` | registers a document **`click`** listener (bubbling phase, like both reference pickers' `document.addEventListener("click", …)`) that invokes `dotnetRef.invokeMethodAsync(method)` when `!element.contains(e.target)`; returns `{ dispose() }`. A `click` is used, not `pointerdown`: the tap that opens the picker is itself a click inside `element`, so the handler never fires for it and the open-then-close-on-the-same-tap sequence cannot happen |
-| `measure(selector, cssVar)` | ResizeObserver that writes `Math.ceil(height) + "px"` of the element to `--cssVar` on `<html>` (the shell publishes `--topbar-h` and `--tabbar-h`) |
+| `measure(selector, cssVar)` | ResizeObserver that writes `Math.ceil(height) + "px"` of the element to `--cssVar` on `<html>` (the shell publishes `--topbar-h`, `--banner-h` (the `.banner-slot`) and `--tabbar-h`) |
+| `preventKeys(element, keys)` | a `keydown` listener on `element` that calls `preventDefault()` when `e.key` is one of `keys` (propagation untouched, so Blazor's handlers still run); returns `{ dispose() }`. The theme picker uses it so its arrows/Home/End do not also scroll the page |
 | `rememberActive()` | stores `document.activeElement` and returns `{ restore() }`, which focuses it again if it is still in the document (the pairing dialog, 4.11) |
 | `audit()` | the layout audit of 5.6; returns the JSON object described there |
 
@@ -510,8 +511,7 @@ two pages ever claim `/` and the old links never 404 during later waves.
 <PairingDialog/>
 ```
 
-`main`: `max-width: 1440px; margin: 0 auto; padding: 1.25rem; padding-bottom: calc(1.25rem + var(--tabbar-h) +
-env(safe-area-inset-bottom))` at < 700px, `padding-bottom: 2rem` otherwise. Every page starts with an `<h1>` (the
+`main`: `max-width: 1440px; margin: 0 auto; padding: 1.25rem; padding-bottom: calc(1.25rem + var(--tabbar-h))` at < 700px (`--tabbar-h` already includes the bar's safe-area padding), `padding-bottom: 2rem` otherwise. Every page starts with an `<h1>` (the
 page name; `FocusOnNavigate` keeps targeting it); on the Player page the `<h1>` is visually hidden (the hero is the
 title), elsewhere it is shown.
 
@@ -744,9 +744,9 @@ no members → pills.empty (`.pill`); any member's receiver `PinRequired` and no
 
 ### 4.9 Notices → toasts (`Components/NoticeArea.razor`)
 
-A fixed `aside.toasts` (`aria-live="polite"`): desktop/tablet `top: calc(var(--topbar-h) + .75rem); right: 1.25rem;
-width: min(26rem, calc(100vw - 2rem))`; phone `left: .75rem; right: .75rem; bottom: calc(var(--tabbar-h) +
-env(safe-area-inset-bottom) + .75rem); top: auto`. Each `.toast` = `.card` padding `.75rem 2.6rem .75rem 1rem`, with a
+A fixed `aside.toasts` (`aria-live="polite"`): desktop/tablet `top: calc(var(--topbar-h) + var(--banner-h, 0px) + .75rem); right: 1.25rem;
+width: min(26rem, calc(100vw - 2rem))`; phone `left: .75rem; right: .75rem; bottom: calc(var(--tabbar-h) + .75rem);
+top: auto`. Each `.toast` = `.card` padding `.75rem 2.6rem .75rem 1rem`, with a
 kind class `.toast--ok` / `.toast--err` / `.toast--info` that sets border and background (`--ok-fill`/`--err-fill`/
 `--info-fill`, border `color-mix(in srgb, var(--ok|err|accent) 40%, var(--line-strong))`), `box-shadow:
 var(--shadow-lift)`, `role="alert"` for errors, `role="status"` otherwise, a `.toast__close` icon button
@@ -762,8 +762,10 @@ the four transport buttons are the only callers), so no raw command word is inte
 
 ### 4.10 Connection banner (`Components/ConnectionBanner.razor`)
 
-A full-width strip directly under the top bar (`position: sticky; top: var(--topbar-h); z-index: 19`; `top: 0` at
-≤ 699px where the top bar is not sticky, 5.2), `role="status"`,
+A full-width strip directly under the top bar, inside an always-present `div.banner-slot` (empty while `Connected`)
+that carries `role="status"` and the sticky positioning (`position: sticky; top: var(--topbar-h); z-index: 19`; `top: 0`
+at ≤ 699px where the top bar is not sticky, 5.2), so the live region exists before its text arrives; the `.banner` has
+no role of its own,
 font `.85rem`, padding `.45rem 1.25rem`, `display: flex; gap: .6rem; align-items: center`, hidden while `Connected`:
 - `Connecting` → background `--info-fill`, border-bottom `color-mix(in srgb, var(--accent) 40%, var(--line))`, text
   banner.connecting.
@@ -858,8 +860,9 @@ three receiver cards per row at ≥ 1280px come from the `auto-fill` grid of 4.4
   above it; browsers that do not know it ignore it); the tab bar and the toasts pad with
   `env(safe-area-inset-bottom)`, the top bar with `env(safe-area-inset-top)` (`padding-top: calc(10px +
   env(safe-area-inset-top))`).
-- The shell publishes `--topbar-h` and `--tabbar-h` from the measured elements (`BrowserBridge.MeasureAsync`) so the
-  banner, toasts and `main` padding follow text-size changes.
+- The shell publishes `--topbar-h`, `--banner-h` (`div.banner-slot`) and `--tabbar-h` (the whole `nav.tabbar`, its
+  safe-area padding included, so nothing adds the inset again) from the measured elements (`BrowserBridge.MeasureAsync`)
+  so the banner, toasts and `main` padding follow text-size changes.
 - `html, body { overflow-x: hidden }` is **not** used to hide overflow; the audit (5.6) must pass without it.
   Every flex child that holds text has `min-width: 0`; grids use `minmax(0, 1fr)`.
 
@@ -882,7 +885,7 @@ The phone keeps every desktop component value of 1.5–1.7 **except** the overri
 | master row | `.step` 40px, hero slider, `.big` 1.3rem; row 3 replaced by `.chip--members` (4.3) |
 | Output card | `padding: .8rem 1rem`; rows: radio, name + `.meta.only-phone`, pill (compact slider hidden); head actions per 4.3 (player.editGroups link, Stop output only while selected) |
 | Status card | one column of facts |
-| `main` | `padding: 1rem .875rem calc(1rem + var(--tabbar-h) + env(safe-area-inset-bottom))` |
+| `main` | `padding: 1rem .875rem calc(1rem + var(--tabbar-h))` |
 | `.cards` (Receivers), Diagnostics grid | one column (`grid-template-columns: 1fr`) |
 | `.level--compact` in Output rows | `display: none` |
 | `.toasts`, `.scrim`/`.dialog`, `.banner` | the phone positions of 4.9, 4.11, 4.10/5.2 |

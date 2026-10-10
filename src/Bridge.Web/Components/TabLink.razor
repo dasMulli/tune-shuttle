@@ -1,0 +1,54 @@
+@* One section link of the top-bar tabs and the phone tab bar (UI-SPEC 4.1): an <a> that carries class="active" and
+   aria-current="page" while the current address belongs to its section. A section is its own path plus everything
+   under it ("settings" covers /settings/diagnostics) and the extra prefixes of Also (the Player tab also owns
+   /groups*). The empty Href is the Player at the app's root. *@
+@implements IDisposable
+@inject NavigationManager Navigation
+
+<a href="@(Href.Length == 0 ? "./" : Href)" class="@(IsActive ? "active" : null)" aria-current="@(IsActive ? "page" : null)">@ChildContent</a>
+
+@code {
+    /// <summary>The section's base-relative path without slashes: <c>""</c> (the Player), <c>"receivers"</c>, <c>"settings"</c>.</summary>
+    [Parameter, EditorRequired]
+    public string Href { get; set; } = "";
+
+    /// <summary>Further base-relative path prefixes that belong to the section (e.g. <c>"groups"</c> for the Player).</summary>
+    [Parameter]
+    public IReadOnlyList<string> Also { get; set; } = [];
+
+    /// <summary>The link's content (the label, and on the tab bar the icon).</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>True when the current address is in this section.</summary>
+    public bool IsActive => IsInSection(CurrentPath(), Href, Also);
+
+    /// <inheritdoc />
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+
+    /// <inheritdoc />
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    /// <summary>
+    /// True when <paramref name="path"/> (base-relative, no query, no slashes at the ends) is <paramref name="href"/> or
+    /// lies under it, or under one of <paramref name="also"/>. The root (<c>""</c>) matches only itself, so the Player tab
+    /// does not light up for every page.
+    /// </summary>
+    internal static bool IsInSection(string path, string href, IEnumerable<string> also)
+    {
+        return Matches(href) || also.Any(Matches);
+
+        bool Matches(string prefix) => prefix.Length == 0
+            ? path.Length == 0
+            : path.Equals(prefix, StringComparison.OrdinalIgnoreCase) || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string CurrentPath()
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var end = path.IndexOfAny(['?', '#']);
+        return (end >= 0 ? path[..end] : path).Trim('/');
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => _ = InvokeAsync(StateHasChanged);
+}

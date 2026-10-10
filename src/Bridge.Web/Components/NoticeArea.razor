@@ -1,22 +1,25 @@
-@* Banner notices (errors from the API, confirmations). Success and info notices go away after a few seconds. *@
+@* The toasts (UI-SPEC 4.9): API errors and confirmations from BridgeCommands. A fixed region (top right under the
+   bar on desktop, above the tab bar on phones); the region is always in the DOM so it is a live region before the
+   first toast arrives. Errors are role="alert" and stay until dismissed; success and info toasts go away by themselves. *@
 @inherits BridgeComponentBase
 
-@if (State.Notices.Count > 0)
-{
-    <div class="notices" aria-live="polite">
-        @foreach (var notice in State.Notices)
-        {
-            <div class="notice notice-@notice.Kind.ToString().ToLowerInvariant()" role="@(notice.Kind == NoticeKind.Error ? "alert" : "status")">
-                <span>@notice.Text</span>
-                <button type="button" class="dismiss" aria-label="Dismiss" @onclick="() => State.Dismiss(notice.Id)">×</button>
-            </div>
-        }
-    </div>
-}
+<aside class="toasts" aria-live="polite">
+    @foreach (var notice in State.Notices)
+    {
+        <div @key="notice.Id" class="@ClassOf(notice.Kind)" role="@(notice.Kind == NoticeKind.Error ? "alert" : "status")">
+            <span>@notice.Text</span>
+            <button type="button" class="toast__close" aria-label="@L["common.dismiss"]" title="@L["common.dismiss"]" @onclick="() => State.Dismiss(notice.Id)"><span aria-hidden="true">×</span></button>
+        </div>
+    }
+</aside>
 
 @code {
-    /// <summary>How long success and info notices stay.</summary>
+    /// <summary>How long success and info notices stay (the default of <see cref="DismissAfter"/>).</summary>
     public static readonly TimeSpan AutoDismiss = TimeSpan.FromSeconds(6);
+
+    /// <summary>How long success and info notices stay; errors stay until dismissed. Tests shorten it.</summary>
+    [Parameter]
+    public TimeSpan DismissAfter { get; set; } = AutoDismiss;
 
     private readonly HashSet<long> _scheduled = [];
 
@@ -32,18 +35,29 @@
         }
     }
 
+    private static string ClassOf(NoticeKind kind) => kind switch
+    {
+        NoticeKind.Error => "toast toast--err",
+        NoticeKind.Success => "toast toast--ok",
+        _ => "toast toast--info",
+    };
+
     private async Task DismissLaterAsync(long id, CancellationToken cancellationToken)
     {
         try
         {
-            await Task.Delay(AutoDismiss, cancellationToken);
+            await Task.Delay(DismissAfter, cancellationToken);
         }
         catch (OperationCanceledException)
         {
             return;
         }
 
-        State.Dismiss(id);
-        _scheduled.Remove(id);
+        // Back on the renderer's context: _scheduled is also read by OnAfterRender.
+        await InvokeAsync(() =>
+        {
+            _scheduled.Remove(id);
+            State.Dismiss(id);
+        });
     }
 }

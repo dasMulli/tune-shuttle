@@ -1,0 +1,249 @@
+@* The Output card of the Player page (UI-SPEC 4.3, phone 5.3): every group, then every receiver, as one native radio
+   set inside a fieldset named by its visually-hidden legend (no role or aria-label on the fieldset, 6.1). Each row is
+   a label around a visually-hidden radio and the .radio glyph, so arrow keys, Space and screen readers work natively;
+   checking a row activates the group / connects the receiver (selection follows = activation). While that request
+   runs the row carries aria-busy and its pill says "connecting…"; the radio stays enabled (a radio disabled under the
+   keyboard focus drops the focus to <body>) and a repeat on the busy row is ignored. Clicks inside a receiver row's
+   level block (compact slider, its number, the Pair button) never activate the label. Head actions and the metas
+   differ between phones and wider screens through .only-phone / .only-wide. *@
+@inherits BridgeComponentBase
+
+@{
+    var output = State.Output;
+    var selected = output.GroupId is not null || output.ReceiverId is not null;
+    var receivers = State.Receivers;
+    var groups = State.Groups;
+}
+
+<section class="card output" aria-labelledby="player-output-title">
+    <div class="card__head">
+        <h2 id="player-output-title">@L["player.output"]</h2>
+        <div class="card__actions">
+            <a class="btn btn--ghost btn--sm only-wide" href="groups/new">@L["player.newGroup"]</a>
+            <a class="only-phone" href="groups">@L["player.editGroups"]</a>
+            @if (selected)
+            {
+                <button type="button" class="btn btn--sm" disabled="@_stopping" @onclick="StopAsync">@L["player.stopOutput"]</button>
+            }
+            else
+            {
+                <button type="button" class="btn btn--sm only-wide" disabled>@L["player.stopOutput"]</button>
+            }
+        </div>
+    </div>
+
+    @if (!State.Loaded)
+    {
+        <p class="meta">@L["common.connecting"]</p>
+    }
+    else
+    {
+        @if (receivers.Count > 0 && !selected)
+        {
+            <p class="meta output__none" role="status">@L["player.noOutput"]</p>
+        }
+
+        @if (receivers.Count == 0)
+        {
+            <div class="empty">
+                <p>@L["receivers.empty"]</p>
+                <p class="meta">@L["receivers.emptyHint"]</p>
+            </div>
+        }
+
+        @if (groups.Count > 0 || receivers.Count > 0)
+        {
+            <fieldset class="output__list">
+                <legend class="visually-hidden">@L["player.outputChoice"]</legend>
+                @foreach (var group in groups)
+                {
+                    var active = output.GroupId == group.Id;
+                    var key = GroupKey(group.Id);
+                    var busy = _busy.Contains(key);
+                    var reachable = group.Members.Any(m => State.Receiver(m.ReceiverId)?.Online ?? m.State != ReceiverConnectionState.Offline);
+                    var names = string.Join(", ", group.Members.Select(m => State.Receiver(m.ReceiverId)?.Name ?? m.Name));
+                    var nameId = "output-group-" + group.Id;
+                    var metaId = nameId + "-meta";
+                    var pillId = nameId + "-pill";
+                    <label class="@(active ? "row is-active" : "row")" data-group-id="@group.Id" aria-busy="@(busy ? "true" : null)" @key="key">
+                        <input type="radio" name="output" class="visually-hidden" checked="@Checked(key, active)"
+                               disabled="@(group.Members.Count == 0 || !reachable)"
+                               aria-labelledby="@nameId" aria-describedby="@(metaId + " " + pillId)"
+                               @onchange="() => ActivateAsync(group)" />
+                        <span class="@(active ? "radio is-on" : "radio")" aria-hidden="true"></span>
+                        <span class="row__main">
+                            <strong id="@nameId">@group.Name</strong>
+                            <span id="@metaId" class="meta only-wide">@(group.Members.Count > 0 ? L.Format("player.groupMeta", ("members", names)) : L["player.groupEmpty"])</span>
+                            <span class="meta only-phone">@(group.Members.Count > 0 ? names : L["player.groupEmptyShort"])</span>
+                        </span>
+                        <span id="@pillId">
+                            @if (busy)
+                            {
+                                <span class="pill pill--accent" title="@L["pills.title.connecting"]">@L["pills.connecting"]</span>
+                            }
+                            else
+                            {
+                                <StatePill Group="group" />
+                            }
+                        </span>
+                        <a class="btn btn--sm" href="@("groups/" + Uri.EscapeDataString(group.Id))" aria-label="@L.Format("player.editGroup", ("name", group.Name))">@L["player.edit"]</a>
+                    </label>
+                }
+                @foreach (var receiver in receivers)
+                {
+                    var active = output.GroupId is null && output.ReceiverId == receiver.Id;
+                    var inOutput = output.ReceiverId == receiver.Id || State.IsInOutput(receiver.Id);
+                    var key = ReceiverKey(receiver.Id);
+                    var busy = _busy.Contains(key);
+                    var model = receiver.Model is { Length: > 0 } m ? m : L["player.unknownModel"];
+                    var nameId = "output-receiver-" + receiver.Id;
+                    var metaId = nameId + "-meta";
+                    var pillId = nameId + "-pill";
+                    <label class="@RowClass(active, inOutput)" data-receiver-id="@receiver.Id" aria-busy="@(busy ? "true" : null)" @key="key">
+                        <input type="radio" name="output" class="visually-hidden" checked="@Checked(key, active)"
+                               disabled="@(!receiver.Online || receiver.Pairing == PairingState.Disabled)"
+                               aria-labelledby="@nameId" aria-describedby="@(metaId + " " + pillId)"
+                               @onchange="() => ConnectAsync(receiver)" />
+                        <span class="@(active ? "radio is-on" : "radio")" aria-hidden="true"></span>
+                        <span class="row__main">
+                            <strong id="@nameId">@receiver.Name</strong>
+                            <span id="@metaId" class="meta only-wide">@(receiver.Address is { Length: > 0 } address ? L.Format("player.receiverMeta", ("model", model), ("address", address)) : model)</span>
+                            <span class="meta only-phone">@model</span>
+                        </span>
+                        <span id="@pillId">
+                            @if (busy)
+                            {
+                                <span class="pill pill--accent" title="@L["pills.title.connecting"]">@L["pills.connecting"]</span>
+                            }
+                            else
+                            {
+                                <StatePill Receiver="receiver" />
+                            }
+                        </span>
+                        @* display: contents keeps the row's flex layout; preventDefault keeps a click on the level number (a
+                           labelable <output>) or beside the slider from checking the row's radio. *@
+                        <span class="row__level" style="display: contents" @onclick:preventDefault>
+                            @if (receiver.Pairing == PairingState.PinRequired)
+                            {
+                                <button type="button" class="btn btn--ghost btn--sm" disabled="@(!receiver.Online)" @onclick="() => PairAsync(receiver)">@L["player.pair"]</button>
+                            }
+                            else
+                            {
+                                <LevelSlider Variant="LevelSlider.LevelVariant.Compact"
+                                             Label="@L.Format("receivers.volumeOf", ("name", receiver.Name))" HideLabel="true"
+                                             Value="State.LevelOf(receiver)" Disabled="!receiver.Online"
+                                             ValueText="@(v => L.Format("common.levelText", ("value", v)))"
+                                             Send="@((level, ct) => Commands.SetReceiverLevelAsync(receiver.Id, level, ct))" />
+                            }
+                        </span>
+                    </label>
+                }
+            </fieldset>
+        }
+    }
+</section>
+
+@code {
+    private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
+    private bool _stopping;
+
+    // The row whose radio the browser checked last (the user's pick). When the selections settle and the output is not
+    // that row (a failed request, a connect answered with State == Error or PinRequired, a member of the active group
+    // connected again), the browser's checked radio and the render tree disagree, and the unchanged render tree emits no
+    // diff. One render with the pick checked (what the browser shows) followed by one with the output checked makes
+    // Blazor set the radios' checked properties again without replacing the inputs, so the keyboard focus stays put.
+    private string? _picked;
+    private string? _echo;
+
+    private static string GroupKey(string id) => "g:" + id;
+
+    private static string ReceiverKey(string id) => "r:" + id;
+
+    // Receiver rows that do not play as (part of) the output are quiet: their compact slider has the grey fill (1.6).
+    private static string RowClass(bool active, bool inOutput) => (active, inOutput) switch
+    {
+        (true, _) => "row is-active",
+        (false, true) => "row",
+        _ => "row is-quiet",
+    };
+
+    private bool Checked(string key, bool active) => _echo is { } echo ? echo == key : active;
+
+    private string? OutputKey() => State.Output switch
+    {
+        { GroupId: { } groupId } => GroupKey(groupId),
+        { ReceiverId: { } receiverId } => ReceiverKey(receiverId),
+        _ => null,
+    };
+
+    private Task ActivateAsync(GroupDto group) => SelectAsync(GroupKey(group.Id), ct => Commands.ActivateGroupAsync(group.Id, ct));
+
+    private Task ConnectAsync(ReceiverDto receiver) => SelectAsync(ReceiverKey(receiver.Id), ct => Commands.ConnectAsync(receiver.Id, ct));
+
+    private async Task SelectAsync(string key, Func<CancellationToken, Task<bool>> select)
+    {
+        _picked = key;
+        if (!_busy.Add(key))
+        {
+            return; // already on its way
+        }
+
+        try
+        {
+            await select(Lifetime);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            return; // the page went away
+        }
+        finally
+        {
+            _busy.Remove(key);
+        }
+
+        // Whatever the outcome: once nothing is in flight, the native check must sit on the output.
+        if (_busy.Count > 0)
+        {
+            return; // the last one to settle checks
+        }
+
+        var picked = _picked;
+        _picked = null;
+        if (picked is not null && picked != OutputKey())
+        {
+            _echo = picked;
+            StateHasChanged();
+            await Task.Yield();
+            _echo = null; // the handler's own render puts the check back on the output
+        }
+    }
+
+    private async Task PairAsync(ReceiverDto receiver)
+    {
+        try
+        {
+            await Commands.StartPairingAsync(receiver.Id, Lifetime);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the page went away
+        }
+    }
+
+    private async Task StopAsync()
+    {
+        _stopping = true;
+        try
+        {
+            await Commands.ClearOutputAsync(Lifetime);
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the page went away
+        }
+        finally
+        {
+            _stopping = false;
+        }
+    }
+}
