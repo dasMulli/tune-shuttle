@@ -1,8 +1,12 @@
-# airplay2-streamer
+# TuneShuttle
 
-A Spotify Connect to AirPlay 2 bridge in C# (.NET 10). The bridge shows up in the Spotify app as a Connect device and
-forwards what it plays to one AirPlay 2 receiver or to a synchronized group of them. Everything a user does
-(discovering receivers, pairing, building groups, volumes) happens in a web app the bridge serves itself.
+TuneShuttle is a Spotify Connect to AirPlay 2 bridge in C# (.NET 10), developed at
+[github.com/dasMulli/tune-shuttle](https://github.com/dasMulli/tune-shuttle). It shows up in the Spotify app as a Connect device and forwards what it plays to one AirPlay 2 receiver
+or to a synchronized group of them. Everything a user does (discovering receivers, pairing, building groups, volumes)
+happens in a web app the bridge serves itself.
+
+Before 2026-10-10 the product was called "AirPlay Bridge" (service `AirplayBridge`, image `airplay2-bridge`), which
+older logs and installs still show.
 
 The repository holds three things:
 
@@ -41,8 +45,8 @@ The open items, and how to check them, are listed in [USER-VERIFICATION.md](docs
 ## Build and test
 
 ```powershell
-dotnet build AirplayBridge.sln
-dotnet test AirplayBridge.sln --filter "Category!=SpeakerALive&Category!=ShairportLive"
+dotnet build TuneShuttle.sln
+dotnet test TuneShuttle.sln --filter "Category!=SpeakerALive&Category!=ShairportLive"
 ```
 
 Warnings are errors in this solution. The test filter shown above leaves out the live tests. Even when they are
@@ -69,7 +73,7 @@ The CI script does the whole sequence:
 | Bridge (Windows, `bridge.exe` + web app) | `artifacts/bridge/` (the folder `install/windows/install-service.ps1` reads by default) |
 | CLI (`airplay2.exe`) | `artifacts/airplay2/` |
 | Test results (TRX) | `artifacts/test-results/` |
-| Container image | `airplay2-bridge:dev` (`-ImageTag` to change) |
+| Container image | `tune-shuttle:dev` (`-ImageTag` to change) |
 
 Parameters: `-Configuration Debug|Release`, `-Runtime` (default `win-x64`), `-SelfContained`, `-ImageTag`,
 `-SkipBuild`, `-SkipTests`, `-SkipPublish`, `-SkipContainer`, `-RequireContainer`, `-ExcludeTimingTests`.
@@ -214,7 +218,7 @@ overrides these defaults.
 |---|---|---|
 | `DataDirectory` | `<app>/data` | `bridge.db`, `logs/`, `tmp/` |
 | `Kestrel:Endpoints:Http:Url` | `http://0.0.0.0:8080` | Web app and API |
-| `Bridge:DeviceName` | `AirPlay Bridge` | Spotify Connect name until set in the web app |
+| `Bridge:DeviceName` | `TuneShuttle` | Spotify Connect name until set in the web app |
 | `Bridge:LatencyFrames` | `77175` | Sender latency L (1.75 s; SPEC.md D1) |
 | `Bridge:PreferredStream` | `Realtime` | `Buffered` only for receivers that play it (not the SpeakerA, probe P16) |
 | `Bridge:PollReceiverVolumeSeconds` | `3` | `GET_PARAMETER volume` poll while playing; 0 turns it off |
@@ -246,27 +250,29 @@ keeps the current value).
 ```powershell
 ./build.ps1 -SkipTests -SkipContainer                  # or -SelfContained if the target has no .NET 10 runtime
 # elevated PowerShell:
-./install/windows/install-service.ps1 -WebPort 8080 -DataDir "$env:ProgramData\AirplayBridge"
+./install/windows/install-service.ps1 -WebPort 8080 -DataDir "$env:ProgramData\TuneShuttle"
 ./install/windows/install-service.ps1 -Uninstall
 ```
 
-The script registers the service `AirplayBridge` (automatic start), passes the data directory and the web port on
+The script registers the service `TuneShuttle` (automatic start), passes the data directory and the web port on
 its command line, and adds inbound firewall rules for the Private and Domain profiles: one per-program rule for
 `bridge.exe`, plus UDP 5353 (mDNS) and the web port. The per-program rule matters because the timing, control and
-Zeroconf ports are chosen at run time.
+Zeroconf ports are chosen at run time. It also removes a service and firewall rules left by an install from before the
+rename (`AirplayBridge`); that install's data stays in `%ProgramData%\AirplayBridge`, so pass that folder as `-DataDir`
+(or move it) to keep receivers, groups, pairings and the Spotify login.
 
 ### On Linux with systemd
 
 Publish for `linux-x64` (`./build.ps1 -Runtime linux-x64 -SkipContainer`) and copy the output to
-`/opt/airplay-bridge`. Then install [`install/linux/airplay-bridge.service`](install/linux/airplay-bridge.service),
-which uses `Type=notify` and `BRIDGE_DataDirectory=/var/lib/airplay-bridge`.
+`/opt/tune-shuttle`. Then install [`install/linux/tune-shuttle.service`](install/linux/tune-shuttle.service),
+which uses `Type=notify` and `BRIDGE_DataDirectory=/var/lib/tune-shuttle`.
 
 ### In a container (Kubernetes)
 
 ```powershell
-docker build -f docker/Dockerfile -t airplay2-bridge .
+docker build -f docker/Dockerfile -t tune-shuttle .
 docker network create -d macvlan --subnet=192.0.2.0/24 --gateway=192.0.2.1 -o parent=eth0 lan
-docker run -d --network lan --ip 192.0.2.60 -v bridge-data:/data airplay2-bridge
+docker run -d --network lan --ip 192.0.2.60 -v bridge-data:/data tune-shuttle
 ```
 
 The image runs `bridge.dll` on the ASP.NET Core 10 runtime, keeps its data in `/data` (mount a volume there) and

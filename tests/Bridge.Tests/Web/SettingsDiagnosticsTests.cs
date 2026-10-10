@@ -34,12 +34,12 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         using var scope = new CultureScope("en");
         var api = UseApi((request, body) => (request.Method.Method, PathOf(request)) switch
         {
-            ("GET", "/api/settings") => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")),
+            ("GET", "/api/settings") => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")),
             ("PUT", "/api/settings") => StubHandler.Json(new SettingsDto("Küche", 88200, true, "Buffered")),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         });
         var cut = _ctx.Render<Settings>();
-        cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        cut.WaitForAssertion(() => Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value")));
         Assert.Equal("Settings", cut.Find("h1").TextContent);
         Assert.Contains("input", cut.Find("#device-name").ClassList);
         Assert.Contains("input", cut.Find("select#stream").ClassList);
@@ -75,8 +75,8 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         using var scope = new CultureScope("en");
         var api = UseApi((request, body) => (request.Method.Method, PathOf(request)) switch
         {
-            ("GET", "/api/settings") => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime", 3)),
-            ("PUT", "/api/settings") => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime", 0)),
+            ("GET", "/api/settings") => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime", 3)),
+            ("PUT", "/api/settings") => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime", 0)),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         });
         var cut = _ctx.Render<Settings>();
@@ -109,7 +109,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     public void An_answer_without_the_forget_field_shows_the_default()
     {
         using var scope = new CultureScope("en");
-        UseApi((_, _) => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+        UseApi((_, _) => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
         cut.WaitForAssertion(() => Assert.Equal("3", cut.Find("#forget-offline").GetAttribute("value")));
         Assert.Equal(3, SettingsModel.From(new SettingsDto("x", 77175, false, "Realtime")).ToDto().ForgetOfflineAfterDays);
@@ -119,7 +119,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     public void Poll_row_is_a_wrapping_label_like_the_theme_radios()
     {
         using var scope = new CultureScope("en");
-        UseApi((_, _) => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+        UseApi((_, _) => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
         cut.WaitForAssertion(() => cut.Find("#poll"));
 
@@ -147,9 +147,9 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         var pending = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var api = UseApi((request, _) => request.Method == HttpMethod.Put
             ? pending.Task
-            : Task.FromResult(StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime"))));
+            : Task.FromResult(StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime"))));
         var cut = _ctx.Render<Settings>();
-        cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        cut.WaitForAssertion(() => Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value")));
         var input = cut.FindComponent<InputText>().Instance;
         var editContext = cut.FindComponent<EditForm>().Instance.EditContext;
 
@@ -185,9 +185,9 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     public void Reset_reloads_from_the_service_and_discards_edits()
     {
         using var scope = new CultureScope("en");
-        var api = UseApi((_, _) => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+        var api = UseApi((_, _) => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
-        cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        cut.WaitForAssertion(() => Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value")));
 
         cut.Find("#device-name").Change("Edited");
         cut.Find("#poll").Change(true);
@@ -199,7 +199,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(2, api.Requests.Count(r => r.Method == HttpMethod.Get));
-            Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value"));
+            Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value"));
         });
         Assert.False(cut.Find("#poll").HasAttribute("checked"));
         Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Put);
@@ -212,9 +212,9 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         var calls = 0;
         UseApi((_, _) => ++calls == 2
             ? StubHandler.Problem(HttpStatusCode.InternalServerError, "Boom", "Disk full.")
-            : StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+            : StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
-        cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        cut.WaitForAssertion(() => Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value")));
         Assert.Empty(cut.FindAll("[role=alert]"));
 
         cut.Find("form .actions .btn--ghost").Click();
@@ -233,11 +233,11 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         using var scope = new CultureScope("de");
         var (ctx, _, api, _, _) = UiTest.Create("de", respond: (request, _) => Task.FromResult(
             request.Method == HttpMethod.Get
-                ? StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime"))
+                ? StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime"))
                 : new HttpResponseMessage(HttpStatusCode.NotFound)));
         await using var context = ctx;
         var cut = ctx.Render<Settings>();
-        cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        cut.WaitForAssertion(() => Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value")));
         Assert.Equal("Spotify-Gerätename", cut.Find("label[for=device-name]").TextContent);
         Assert.Contains("= 1.750 ms bei 44,1 kHz (22.050–176.400).", cut.Find("#latency-hint").TextContent, StringComparison.Ordinal);
 
@@ -260,7 +260,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     {
         using var scope = new CultureScope("en");
         var (ctx, _, _, l, _) = UiTest.Create("en", respond: (_, _) => Task.FromResult(
-            StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime"))));
+            StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime"))));
         await using var context = ctx;
         var cut = ctx.Render<Settings>();
         cut.WaitForAssertion(() => cut.Find("#latency"));
@@ -294,7 +294,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         using var scope = new CultureScope("de");
         var (ctx, _, api, l, _) = UiTest.Create("de", respond: (request, _) => Task.FromResult(
             request.Method == HttpMethod.Get
-                ? StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime"))
+                ? StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime"))
                 : new HttpResponseMessage(HttpStatusCode.NotFound)));
         await using var context = ctx;
         var cut = ctx.Render<Settings>();
@@ -329,7 +329,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         var calls = 0;
         UseApi((_, _) => ++calls == 1
             ? throw new TaskCanceledException(null, new TimeoutException())
-            : StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+            : StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
 
         // A request timeout is a failure like any other (not Blazor's unhandled-error strip): the catalog text and Retry.
@@ -337,7 +337,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         Assert.Empty(cut.FindAll("form"));
 
         cut.Find(".card .btn").Click();
-        cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        cut.WaitForAssertion(() => Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value")));
         Assert.Empty(cut.FindAll("[role=alert]"));
     }
 
@@ -348,13 +348,13 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         var calls = 0;
         UseApi((_, _) => ++calls == 1
             ? StubHandler.Problem(HttpStatusCode.InternalServerError, "Boom", "Disk full.")
-            : StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+            : StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
         cut.WaitForAssertion(() => Assert.StartsWith("The settings could not be loaded. Boom", cut.Find("[role=alert]").TextContent, StringComparison.Ordinal));
         Assert.Empty(cut.FindAll("form"));
 
         cut.Find(".card .btn").Click();
-        cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        cut.WaitForAssertion(() => Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value")));
         // The form replaced the pressed Retry button: the focus goes to its first field, not to <body>.
         cut.WaitForAssertion(() => Assert.Equal(ReferenceOf(cut, "#device-name"), LastFocusedId()));
     }
@@ -363,7 +363,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     public void Appearance_radios_show_the_stored_theme_and_call_setTheme()
     {
         using var scope = new CultureScope("en");
-        UseApi((_, _) => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+        UseApi((_, _) => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
 
         var fieldset = cut.Find("fieldset");
@@ -395,7 +395,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     public async Task Appearance_radios_follow_a_choice_made_in_the_theme_picker()
     {
         using var scope = new CultureScope("en");
-        UseApi((_, _) => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+        UseApi((_, _) => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
         cut.WaitForAssertion(() => Assert.True(cut.Find("#settings-theme-system").HasAttribute("checked")));
 
@@ -421,9 +421,9 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         using var scope = new CultureScope("en");
         _module.Setup<string>("getTheme").SetException(new JSException("storage blocked"));
         _module.SetupVoid("setTheme", _ => true).SetException(new JSException("storage blocked"));
-        UseApi((_, _) => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+        UseApi((_, _) => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
-        cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        cut.WaitForAssertion(() => Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value")));
 
         // getTheme failed: the three radios render, none checked.
         var radios = cut.FindAll("fieldset input[type=radio]");
@@ -440,7 +440,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     {
         using var scope = new CultureScope("en");
         var (ctx, _, _, l, module) = UiTest.Create("en", respond: (_, _) => Task.FromResult(
-            StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime"))));
+            StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime"))));
         await using var context = ctx;
         var cut = ctx.Render<Settings>();
 
@@ -464,7 +464,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         using var scope = new CultureScope("en");
         var api = UseApi((request, _) => (request.Method.Method, PathOf(request)) switch
         {
-            ("GET", "/api/settings") => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")),
+            ("GET", "/api/settings") => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")),
             ("DELETE", _) or ("POST", _) => new HttpResponseMessage(HttpStatusCode.NoContent),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         });
@@ -503,7 +503,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         using var scope = new CultureScope("en");
         var api = UseApi((request, _) => (request.Method.Method, PathOf(request)) switch
         {
-            ("GET", "/api/settings") => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")),
+            ("GET", "/api/settings") => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")),
             ("DELETE", _) or ("POST", _) => StubHandler.Problem(HttpStatusCode.InternalServerError, "Boom", "Disk full."),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         });
@@ -530,7 +530,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     public void Settings_links_to_diagnostics_and_titles_the_page()
     {
         using var scope = new CultureScope("en");
-        UseApi((_, _) => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+        UseApi((_, _) => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
         var cut = _ctx.Render<Settings>();
         var link = cut.Find("a.row[href='settings/diagnostics']");
         Assert.Equal("Diagnostics", link.QuerySelector("strong")!.TextContent);

@@ -1,16 +1,16 @@
-# systemd unit for the bridge (docs/PLAN.md "Deployment"). Install:
-#   sudo cp airplay-bridge.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now airplay-bridge
+# systemd unit for TuneShuttle (docs/PLAN.md "Deployment"). Install:
+#   sudo cp tune-shuttle.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now tune-shuttle
 [Unit]
-Description=Spotify Connect to AirPlay 2 bridge
+Description=TuneShuttle (Spotify Connect to AirPlay 2 bridge)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=notify
-User=airplay-bridge
-WorkingDirectory=/opt/airplay-bridge
-ExecStart=/opt/airplay-bridge/bridge
-Environment=BRIDGE_DataDirectory=/var/lib/airplay-bridge
+User=tune-shuttle
+WorkingDirectory=/opt/tune-shuttle
+ExecStart=/opt/tune-shuttle/bridge
+Environment=BRIDGE_DataDirectory=/var/lib/tune-shuttle
 # The web endpoint goes through the bridge's own configuration: appsettings.json has a Kestrel:Endpoints entry, which
 # overrides ASPNETCORE_URLS, so the port is set with the same key (BRIDGE_ prefix, __ as separator).
 Environment=BRIDGE_Kestrel__Endpoints__Http__Url=http://0.0.0.0:8080

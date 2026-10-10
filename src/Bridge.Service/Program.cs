@@ -33,7 +33,7 @@ public static class Program
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = AppContext.BaseDirectory });
         builder.Configuration.AddEnvironmentVariables("BRIDGE_");
         builder.Configuration.AddCommandLine(args); // command line wins over the BRIDGE_ variables (install-service.ps1 passes the endpoint)
-        builder.Host.UseWindowsService(o => o.ServiceName = "AirplayBridge");
+        builder.Host.UseWindowsService(o => o.ServiceName = "TuneShuttle");
         builder.Host.UseSystemd();
 
         // The web app's files: a published layout (artifacts/bridge, the container) has them in wwwroot/. A run from the

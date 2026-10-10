@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-  CI build of the AirPlay bridge: build, test without the live categories, publish win-x64, build the container image.
+  CI build of TuneShuttle (the Spotify Connect to AirPlay 2 bridge): build, test without the live categories, publish win-x64, build the container image.
 
 .DESCRIPTION
   Steps (each can be skipped):
-    1. build    dotnet build AirplayBridge.sln (warnings are errors in this solution, Directory.Build.props)
+    1. build    dotnet build TuneShuttle.sln (warnings are errors in this solution, Directory.Build.props)
     2. test     dotnet test with --filter "Category!=SpeakerALive&Category!=ShairportLive" (WORK-PLAN.md section 1:
                 live tests never run here; AIRPLAY_LIVE is cleared for the test step as a second guard).
                 -ExcludeTimingTests also drops the 30 s pacer accuracy run (Category=Timing) on loaded runners.
@@ -31,7 +31,7 @@ param(
     [string]$Output = (Join-Path $PSScriptRoot "artifacts"),
     [string]$Runtime = "win-x64",
     [switch]$SelfContained,
-    [string]$ImageTag = "airplay2-bridge:dev",
+    [string]$ImageTag = "tune-shuttle:dev",
     [switch]$SkipBuild,
     [switch]$SkipTests,
     [switch]$SkipPublish,
@@ -43,7 +43,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $repo = $PSScriptRoot
-$solution = Join-Path $repo "AirplayBridge.sln"
+$solution = Join-Path $repo "TuneShuttle.sln"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 $env:DOTNET_NOLOGO = "1"
 
@@ -108,7 +108,7 @@ try {
         # Publish always uses Release: Debug builds of the bridge reference the test-only fake receiver (Bridge:FakeReceivers).
         Invoke-Native "publish bridge ($Runtime)" "dotnet" @("publish", (Join-Path $repo "src/Bridge.Service/Bridge.Service.csproj"), "-c", "Release", "-r", $Runtime, "--self-contained", $sc, "-o", $bridgeOut, "-nologo")
         Invoke-Native "publish CLI ($Runtime)" "dotnet" @("publish", (Join-Path $repo "src/Airplay2.Sender.Cli/Airplay2.Sender.Cli.csproj"), "-c", "Release", "-r", $Runtime, "--self-contained", $sc, "-o", $cliOut, "-nologo")
-        # The apphosts the install scripts start (install/windows: bridge.exe, install/linux/airplay-bridge.service: bridge).
+        # The apphosts the install scripts start (install/windows: bridge.exe, install/linux/tune-shuttle.service: bridge).
         $exe = if ($Runtime -like "win-*") { ".exe" } else { "" }
         foreach ($required in @((Join-Path $bridgeOut "bridge$exe"), (Join-Path $bridgeOut "wwwroot/index.html"), (Join-Path $cliOut "airplay2$exe"))) {
             if (-not (Test-Path $required)) {

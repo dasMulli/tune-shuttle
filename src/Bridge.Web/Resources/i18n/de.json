@@ -1,7 +1,7 @@
 {
   "app": {
-    "name": "AirPlay Bridge",
-    "pageTitle": "{{page}} · AirPlay Bridge",
+    "name": "TuneShuttle",
+    "pageTitle": "{{page}} · TuneShuttle",
     "notFoundTitle": "Nicht gefunden",
     "notFound": "Unter dieser Adresse gibt es nichts."
   },

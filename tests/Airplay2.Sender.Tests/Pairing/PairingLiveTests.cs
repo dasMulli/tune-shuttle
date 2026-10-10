@@ -242,7 +242,7 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
         private static string FindRepositoryRoot()
         {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AirplayBridge.sln")))
+            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "TuneShuttle.sln")))
             {
                 dir = dir.Parent;
             }

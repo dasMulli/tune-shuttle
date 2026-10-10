@@ -47,7 +47,7 @@ public sealed class DeploymentTests
         Assert.Contains("BRIDGE_Kestrel__Endpoints__Http__Url=", dockerfile, StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(root, ".dockerignore")));
 
-        var unit = File.ReadAllText(Path.Combine(root, "install", "linux", "airplay-bridge.service"));
+        var unit = File.ReadAllText(Path.Combine(root, "install", "linux", "tune-shuttle.service"));
         Assert.Contains("Environment=BRIDGE_Kestrel__Endpoints__Http__Url=", unit, StringComparison.Ordinal);
         Assert.DoesNotContain("Environment=ASPNETCORE_URLS", unit, StringComparison.Ordinal);
     }
@@ -101,11 +101,11 @@ public sealed class DeploymentTests
     private static string RepositoryRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AirplayBridge.sln")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "TuneShuttle.sln")))
         {
             dir = dir.Parent;
         }
 
-        return dir?.FullName ?? throw new DirectoryNotFoundException("AirplayBridge.sln not found above the test output.");
+        return dir?.FullName ?? throw new DirectoryNotFoundException("TuneShuttle.sln not found above the test output.");
     }
 }

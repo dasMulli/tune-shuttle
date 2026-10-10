@@ -25,11 +25,11 @@ public sealed class BridgeApiTests
 
         var status = await client.GetJsonAsync<StatusDto>(ApiRoutes.Status);
         Assert.False(status.SpotifyConnected);
-        Assert.Equal("AirPlay Bridge", status.DeviceName);
+        Assert.Equal("TuneShuttle", status.DeviceName);
         Assert.False(status.OutputConnected);
 
         var settings = await client.GetJsonAsync<SettingsDto>(ApiRoutes.Settings);
-        Assert.Equal(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime", 3), settings);
+        Assert.Equal(new SettingsDto("TuneShuttle", 77175, false, "Realtime", 3), settings);
 
         using (var invalid = await client.SendJsonAsync(HttpMethod.Put, ApiRoutes.Settings, settings with { LatencyFrames = 10 }))
         {

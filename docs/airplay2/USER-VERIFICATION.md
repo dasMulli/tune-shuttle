@@ -30,7 +30,7 @@ Start every listening test at a low level (15-20) and raise it from the web app.
 2. [ ] In the web app, under **Receivers**, set the SpeakerA's level to 15, then press *Connect*. Expect state
        *Connected* within about 10 s. On a bad Wi-Fi day the SpeakerA answers RTSP slowly; up to 60 s
        (`Bridge:ConnectTimeout`) is still fine.
-3. [ ] In the Spotify app (phone, same LAN), open the device picker and choose "AirPlay Bridge". **Check**: the device
+3. [ ] In the Spotify app (phone, same LAN), open the device picker and choose "TuneShuttle". **Check**: the device
        appears, the handoff logs in (Diagnostics shows the Spotify user, and Status shows `spotifyConnected: true`).
 4. [ ] Play a track. **Check**: it is audible on the SpeakerA after about 2 s (L = 1.75 s plus the receiver's buffer).
        **Now Playing** shows the title and the artwork.

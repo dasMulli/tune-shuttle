@@ -1,4 +1,4 @@
-/* AirPlay Bridge web app, variant C (docs/web/UI-SPEC.md section 1).
+/* TuneShuttle web app, variant C (docs/web/UI-SPEC.md section 1).
 
    Rules that keep this file honest (tests/Bridge.Tests/Web/DesignTokenTests.cs checks them):
    - Colours live in the token blocks below and nowhere else; components use var(--token).

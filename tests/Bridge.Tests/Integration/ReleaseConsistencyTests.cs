@@ -85,7 +85,7 @@ public sealed class ReleaseConsistencyTests(ITestOutputHelper output)
         {
             for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
             {
-                if (File.Exists(Path.Combine(dir.FullName, "AirplayBridge.sln")))
+                if (File.Exists(Path.Combine(dir.FullName, "TuneShuttle.sln")))
                 {
                     return dir.FullName;
                 }

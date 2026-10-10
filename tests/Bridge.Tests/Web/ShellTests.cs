@@ -719,9 +719,9 @@ public sealed class ShellTests : ComponentTestBase
             var cut = ctx.Render<MainLayout>(p => p.Add(x => x.Body, (RenderFragment)(b => b.AddMarkupContent(0, "<h1>Body</h1>"))));
 
             var brand = cut.Find("header.topbar > a.brand");
-            Assert.Equal("AirPlay Bridge", brand.GetAttribute("aria-label"));
+            Assert.Equal("TuneShuttle", brand.GetAttribute("aria-label"));
             Assert.Equal("./", brand.GetAttribute("href"));
-            Assert.Equal("AirPlay Bridge", brand.QuerySelector(".brand__name")!.TextContent);
+            Assert.Equal("TuneShuttle", brand.QuerySelector(".brand__name")!.TextContent);
             Assert.Equal("true", brand.QuerySelector(".brand__tile")!.GetAttribute("aria-hidden"));
 
             var tabs = cut.Find("header.topbar > nav.tabs");
@@ -831,7 +831,7 @@ public sealed class ShellTests : ComponentTestBase
             var cut = ctx.Render<Bridge.Web.App>();
 
             cut.WaitForAssertion(() => Assert.Equal("Nicht gefunden", cut.Find("main.main h1").TextContent));
-            head.WaitForAssertion(() => Assert.Equal("Nicht gefunden \u00b7 AirPlay Bridge", head.Find("title").TextContent));
+            head.WaitForAssertion(() => Assert.Equal("Nicht gefunden \u00b7 TuneShuttle", head.Find("title").TextContent));
 
             // FocusOnNavigate needs route data; the not-found page focuses its own <h1> (UI-SPEC 6.1).
             var heading = cut.Find("main.main h1");
@@ -853,14 +853,14 @@ public sealed class ShellTests : ComponentTestBase
             var head = ctx.Render<HeadOutlet>();
             var cut = ctx.Render<Bridge.Web.App>();
             cut.WaitForAssertion(() => Assert.Equal("Not found", cut.Find("main.main h1").TextContent));
-            head.WaitForAssertion(() => Assert.Equal("Not found \u00b7 AirPlay Bridge", head.Find("title").TextContent));
+            head.WaitForAssertion(() => Assert.Equal("Not found \u00b7 TuneShuttle", head.Find("title").TextContent));
 
             l.SetLanguage("de");
 
             cut.WaitForAssertion(() => Assert.Equal("Nicht gefunden", cut.Find("main.main h1").TextContent));
             Assert.Equal("Unter dieser Adresse gibt es nichts.", cut.Find("main.main h1 + p").TextContent);
             Assert.Equal("Bereiche", cut.Find("nav.tabs").GetAttribute("aria-label"));
-            head.WaitForAssertion(() => Assert.Equal("Nicht gefunden \u00b7 AirPlay Bridge", head.Find("title").TextContent));
+            head.WaitForAssertion(() => Assert.Equal("Nicht gefunden \u00b7 TuneShuttle", head.Find("title").TextContent));
         }
     }
 

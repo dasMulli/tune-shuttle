@@ -293,7 +293,7 @@ public sealed class QuirkDefaultsTests
     }
 }
 
-/// <summary>Finds the repository root (the folder with <c>AirplayBridge.sln</c>) and lists its source files.</summary>
+/// <summary>Finds the repository root (the folder with <c>TuneShuttle.sln</c>) and lists its source files.</summary>
 internal static class RepositoryRoot
 {
     private static readonly string[] SkippedFolders = ["bin", "obj", "TestResults", "_framework", "node_modules", ".vs"];
@@ -305,7 +305,7 @@ internal static class RepositoryRoot
         {
             for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
             {
-                if (File.Exists(Path.Combine(dir.FullName, "AirplayBridge.sln")))
+                if (File.Exists(Path.Combine(dir.FullName, "TuneShuttle.sln")))
                 {
                     return dir.FullName;
                 }

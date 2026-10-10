@@ -29,7 +29,7 @@ internal static class Dto
     public static GroupDto Group(string id, string name, int master, bool active, params (string Id, string Name, int Level)[] members) =>
         new(id, name, master, active, [.. members.Select(m => new GroupMemberDto(m.Id, m.Name, m.Level, ReceiverConnectionState.Available))]);
 
-    public static StatusDto Status(string deviceName = "AirPlay Bridge", bool spotify = false) =>
+    public static StatusDto Status(string deviceName = "TuneShuttle", bool spotify = false) =>
         new("0.1.0", spotify, spotify ? "martin" : null, deviceName, false, 1, DateTimeOffset.UnixEpoch);
 
     public static PlaybackDto Playback(bool playing = false, long position = 0, long duration = 0, string? title = null, int volume = 40) =>

@@ -1,4 +1,4 @@
-# AirPlay Bridge web app: UI specification (variant C)
+# TuneShuttle web app: UI specification (variant C)
 
 Status: architecture, 2026-10-10, revised after review. Implementers follow this document; where it is silent, the
 mockups in `docs/web/mockups/` decide (`variant-c-desktop-light-en.html`, `variant-c-desktop-dark-de.html`,
@@ -253,6 +253,8 @@ updates the draft, raises `DraftChanged` and sends through the same `CoalescingS
 ### 2.1 Storage and attribute
 
 - `localStorage["airplay-bridge-theme"]` is `"light"` or `"dark"`; absent means system. Nothing else is stored.
+  The key (and `airplay-bridge-lang`, 3.2) keeps the product's name from before the rename to TuneShuttle
+  (2026-10-10), so that stored preferences survive it.
 - `<html data-theme="light|dark">` mirrors the stored value; no attribute for system.
 - `<meta name="theme-color">`: two media-scoped metas (`#eef1f6` for `(prefers-color-scheme: light)`, `#0d1117`
   for dark) plus, for an explicit choice, one media-less override meta inserted **before** them
@@ -1303,7 +1305,7 @@ problem details from the client's own wording.
 | Bottom-sheet pairing dialog on phones | 4.11 of the first draft | replaced by a top-anchored sheet (4.11) |
 | Spotify volume `<meter>` | today's NowPlaying page | dropped (4.3); `PlaybackDto.SpotifyVolume` is unused by the web app |
 | `/now-playing`, `/diagnostics` routes | today's pages | dropped in wave 0 (4.1), no redirects |
-| Static index.html texts ("Loading the AirPlay Bridge app…", "An unhandled error has occurred.", "Reload", "x" with aria-label "Dismiss") | `wwwroot/index.html` | not catalog keys: they render before the runtime and the catalog exist (app.loading/app.error do not exist). English stays in the markup as the no-script fallback; the language bootstrap sets `<html lang>` at once and an inline seven-language map at the end of `<body>` swaps the four texts for the resolved language (wording as in common.reload / common.dismiss) |
+| Static index.html texts ("Loading the TuneShuttle app…", "An unhandled error has occurred.", "Reload", "x" with aria-label "Dismiss") | `wwwroot/index.html` | not catalog keys: they render before the runtime and the catalog exist (app.loading/app.error do not exist). English stays in the markup as the no-script fallback; the language bootstrap sets `<html lang>` at once and an inline seven-language map at the end of `<body>` swaps the four texts for the resolved language (wording as in common.reload / common.dismiss) |
 | `Format.Seconds`, units.* keys | first draft | removed, no consumer (3.4) |
 
 Changed in a contained way:
@@ -1398,8 +1400,8 @@ actions.playback (→ the four actions.playback* keys).
 
 | Key | de | en |
 |---|---|---|
-| app.name | AirPlay Bridge | AirPlay Bridge |
-| app.pageTitle | {{page}} · AirPlay Bridge | {{page}} · AirPlay Bridge |
+| app.name | TuneShuttle | TuneShuttle |
+| app.pageTitle | {{page}} · TuneShuttle | {{page}} · TuneShuttle |
 | app.notFoundTitle | Nicht gefunden | Not found |
 | app.notFound | Unter dieser Adresse gibt es nichts. | There is nothing at this address. |
 | nav.sections | Bereiche | Sections |

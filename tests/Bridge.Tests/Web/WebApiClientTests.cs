@@ -26,7 +26,7 @@ public sealed class WebApiClientTests
         var ct = CancellationToken.None;
 
         var status = await api.GetStatusAsync(ct);
-        Assert.Equal("AirPlay Bridge", status.DeviceName);
+        Assert.Equal("TuneShuttle", status.DeviceName);
         Assert.False(status.SpotifyConnected);
 
         var settings = await api.GetSettingsAsync(ct);
@@ -140,7 +140,7 @@ public sealed class WebApiClientTests
 
         // The snapshot: status, receivers, groups, output, playback.
         await WebClients.WaitUntilAsync(() => state.Connection == EventConnectionState.Connected && state.Receiver(a.Id) is not null && state.Playback is not null, "the snapshot");
-        Assert.Equal("AirPlay Bridge", state.Status!.DeviceName);
+        Assert.Equal("TuneShuttle", state.Status!.DeviceName);
 
         // A change made by someone else (another tab, the API) arrives by itself.
         var commands = new BridgeCommands(api, new BridgeState(), new I18n(), NullLogger<BridgeCommands>.Instance);

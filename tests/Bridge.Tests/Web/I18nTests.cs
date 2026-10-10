@@ -148,7 +148,7 @@ public sealed partial class I18nTests
     }
 
     [Theory]
-    [InlineData("app.name", "AirPlay Bridge", "AirPlay Bridge")]
+    [InlineData("app.name", "TuneShuttle", "TuneShuttle")]
     [InlineData("nav.receivers", "Empfänger", "Receivers")]
     [InlineData("common.levelText", "{{value}} von 100", "{{value}} of 100")]
     [InlineData("receivers.connecting", "Verbinde…", "Connecting…")]
@@ -278,7 +278,7 @@ public sealed partial class I18nTests
         Assert.Equal(online, l.Plural("player.receiversOnline", 1, ("total", 2)));
         Assert.Equal(more, Spaces(l.Plural("diagnostics.more", 1234)));
         Assert.Equal(level, l.Format("common.levelText", ("value", 73)));
-        Assert.Equal(l["nav.receivers"] + " · AirPlay Bridge", l.Format("app.pageTitle", ("page", l["nav.receivers"])));
+        Assert.Equal(l["nav.receivers"] + " · TuneShuttle", l.Format("app.pageTitle", ("page", l["nav.receivers"])));
     }
 
     [Fact]
@@ -401,7 +401,7 @@ public sealed partial class I18nTests
         var real = new I18n("en");
         Assert.Equal("73 of 100", real.Format("common.levelText", ("value", 73)));
         Assert.Equal("Pair with {{name}}", real.Format("pairing.title"));
-        Assert.Equal("Receivers · AirPlay Bridge", real.Format("app.pageTitle", ("page", real["nav.receivers"])));
+        Assert.Equal("Receivers · TuneShuttle", real.Format("app.pageTitle", ("page", real["nav.receivers"])));
     }
 
     [Fact]

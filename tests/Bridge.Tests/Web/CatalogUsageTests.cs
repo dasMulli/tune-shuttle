@@ -186,7 +186,7 @@ public sealed partial class CatalogUsageTests
             for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
             {
                 var candidate = Path.Combine(dir.FullName, "src", "Bridge.Web");
-                if (File.Exists(Path.Combine(dir.FullName, "AirplayBridge.sln")) && Directory.Exists(candidate))
+                if (File.Exists(Path.Combine(dir.FullName, "TuneShuttle.sln")) && Directory.Exists(candidate))
                 {
                     return candidate;
                 }

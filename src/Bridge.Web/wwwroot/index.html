@@ -6,7 +6,7 @@
          Android shrinks the layout viewport when the on-screen keyboard opens, so fixed elements stay above it
          (UI-SPEC 5.2). Browsers that do not know a token ignore it. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-    <title>AirPlay Bridge</title>
+    <title>TuneShuttle</title>
     <base href="/" />
     <!-- theme-color is the page ground (--bg) per scheme. An explicit light/dark choice inserts a media-less
          #theme-color-override meta in front of these two (the browser takes the first matching one); "system"
@@ -17,6 +17,8 @@
         // Theme bootstrap (UI-SPEC 2.2): runs before the stylesheet so the first paint already has the right scheme.
         // localStorage["airplay-bridge-theme"] is "light" or "dark"; absent = follow the OS (no data-theme attribute).
         // ?theme=light|dark|system is a one-shot override for screenshots and shared links; it is never stored.
+        // The key keeps the product's old name (AirPlay Bridge, renamed TuneShuttle on 2026-10-10): renaming it would
+        // reset every user's stored theme.
         (function () {
             var KEY = "airplay-bridge-theme";
             function applyThemeColor(theme) {
@@ -57,7 +59,8 @@
         // Language bootstrap (UI-SPEC 3.2): Program.Main asks bridgeLang.get() before the first render, sets the
         // culture and then calls bridgeLang.setDocument(code) so <html lang> matches. Same logic as getLang() in
         // js/app.js: ?lang= (one-shot, never stored) -> localStorage["airplay-bridge-lang"] -> navigator.languages ->
-        // "" (the caller falls back to "en").
+        // "" (the caller falls back to "en"). The key keeps the product's old name (AirPlay Bridge, renamed TuneShuttle on
+        // 2026-10-10): renaming it would reset every user's stored language.
         (function () {
             var KEY = "airplay-bridge-lang";
             var SUPPORTED = ["de", "en", "fr", "es", "ru", "uk", "pt"];
@@ -108,7 +111,7 @@
 </head>
 <body>
     <div id="app">
-        <div class="splash" role="status"><p>Loading the AirPlay Bridge app…</p></div>
+        <div class="splash" role="status"><p>Loading the TuneShuttle app…</p></div>
     </div>
     <div id="blazor-error-ui" role="alert">
         <span>An unhandled error has occurred.</span>
@@ -120,12 +123,12 @@
         // these four texts live here; English stays in the markup as the fallback without script.
         (function () {
             var T = {
-                de: ["Die AirPlay-Bridge-App wird geladen…", "Ein unerwarteter Fehler ist aufgetreten.", "Neu laden", "Ausblenden"],
-                fr: ["Chargement de l’app AirPlay Bridge…", "Une erreur inattendue s’est produite.", "Recharger", "Masquer"],
-                es: ["Cargando la app AirPlay Bridge…", "Se ha producido un error inesperado.", "Recargar", "Descartar"],
-                ru: ["Загрузка приложения AirPlay Bridge…", "Произошла непредвиденная ошибка.", "Перезагрузить", "Скрыть"],
-                uk: ["Завантаження застосунку AirPlay Bridge…", "Сталася неочікувана помилка.", "Перезавантажити", "Сховати"],
-                pt: ["Carregando o app AirPlay Bridge…", "Ocorreu um erro inesperado.", "Recarregar", "Dispensar"]
+                de: ["Die TuneShuttle-App wird geladen…", "Ein unerwarteter Fehler ist aufgetreten.", "Neu laden", "Ausblenden"],
+                fr: ["Chargement de l’app TuneShuttle…", "Une erreur inattendue s’est produite.", "Recharger", "Masquer"],
+                es: ["Cargando la app TuneShuttle…", "Se ha producido un error inesperado.", "Recargar", "Descartar"],
+                ru: ["Загрузка приложения TuneShuttle…", "Произошла непредвиденная ошибка.", "Перезагрузить", "Скрыть"],
+                uk: ["Завантаження застосунку TuneShuttle…", "Сталася неочікувана помилка.", "Перезавантажити", "Сховати"],
+                pt: ["Carregando o app TuneShuttle…", "Ocorreu um erro inesperado.", "Recarregar", "Dispensar"]
             };
             var t = T[document.documentElement.lang];
             if (!t) return;

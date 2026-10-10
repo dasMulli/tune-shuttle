@@ -95,7 +95,7 @@ public sealed class BridgeLiveTests(ITestOutputHelper output)
         {
             _output = output;
             var root = new DirectoryInfo(AppContext.BaseDirectory);
-            while (root is not null && !File.Exists(Path.Combine(root.FullName, "AirplayBridge.sln")))
+            while (root is not null && !File.Exists(Path.Combine(root.FullName, "TuneShuttle.sln")))
             {
                 root = root.Parent;
             }

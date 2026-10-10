@@ -1,8 +1,10 @@
-// Browser plumbing of the AirPlay Bridge web app (UI-SPEC 2.3). An ES module, imported once by BrowserBridge.cs with
+// Browser plumbing of the TuneShuttle web app (UI-SPEC 2.3). An ES module, imported once by BrowserBridge.cs with
 // IJSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/app.js"); components never talk to IJSRuntime directly.
 // The module owns no UI. Theme state lives in the index.html bootstrap (window.bridgeTheme), which also applies it
 // before the first paint.
 
+// The key keeps the product's old name (AirPlay Bridge, renamed TuneShuttle on 2026-10-10): renaming it would reset
+// every user's stored language. Same key as the bootstrap in index.html.
 const LANG_KEY = "airplay-bridge-lang";
 const SUPPORTED_LANGS = ["de", "en", "fr", "es", "ru", "uk", "pt"];
 

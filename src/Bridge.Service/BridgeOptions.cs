@@ -12,7 +12,7 @@ namespace Bridge.Service;
 public sealed class BridgeOptions
 {
     /// <summary>Spotify Connect device name until the user sets one in the web app.</summary>
-    public string DeviceName { get; set; } = "AirPlay Bridge";
+    public string DeviceName { get; set; } = "TuneShuttle";
 
     /// <summary>Sender latency L in frames (SPEC-audio.md 1.5: 77 175 = 1.75 s).</summary>
     public int LatencyFrames { get; set; } = 77175;

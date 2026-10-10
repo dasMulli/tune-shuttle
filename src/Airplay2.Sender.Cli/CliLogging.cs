@@ -33,7 +33,7 @@ public static class CliLogging
 
     /// <summary>
     /// The repository's <c>artifacts/live</c> directory (WORK-PLAN.md section 4), found by walking up from the current
-    /// directory and then from the executable to <c>AirplayBridge.sln</c>; <c>./artifacts/live</c> when neither has it.
+    /// directory and then from the executable to <c>TuneShuttle.sln</c>; <c>./artifacts/live</c> when neither has it.
     /// </summary>
     public static string LiveLogDirectory()
     {
@@ -41,7 +41,7 @@ public static class CliLogging
         {
             for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
             {
-                if (File.Exists(Path.Combine(dir.FullName, "AirplayBridge.sln")))
+                if (File.Exists(Path.Combine(dir.FullName, "TuneShuttle.sln")))
                 {
                     return Path.Combine(dir.FullName, "artifacts", "live");
                 }

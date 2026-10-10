@@ -97,7 +97,7 @@ public class ReceiverBrowserLiveTests(ITestOutputHelper output)
         // WORK-PLAN.md section 4: live tests log to artifacts/live/<date>-<probe>.log at the repository root.
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "AirplayBridge.sln")))
+            if (File.Exists(Path.Combine(dir.FullName, "TuneShuttle.sln")))
             {
                 var folder = Path.Combine(dir.FullName, "artifacts", "live");
                 Directory.CreateDirectory(folder);

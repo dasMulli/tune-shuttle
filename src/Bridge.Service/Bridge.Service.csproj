@@ -4,7 +4,7 @@
     <RootNamespace>Bridge.Service</RootNamespace>
     <AssemblyName>bridge</AssemblyName>
     <UserSecretsId>airplay2-bridge</UserSecretsId>
-    <Description>Spotify Connect to AirPlay 2 bridge: hosts librespot with the AirPlay sink, the SQLite store, the REST/WebSocket API and the web app; runs as a Windows Service, under systemd or in a container.</Description>
+    <Description>TuneShuttle, a Spotify Connect to AirPlay 2 bridge: hosts librespot with the AirPlay sink, the SQLite store, the REST/WebSocket API and the web app; runs as a Windows Service, under systemd or in a container.</Description>
     <!-- The container image is produced by docker/Dockerfile (multi-stage); no SDK container tooling needed. -->
   </PropertyGroup>
 

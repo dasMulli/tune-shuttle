@@ -1,4 +1,4 @@
-# Project plan: Spotify Connect to AirPlay 2 bridge
+# Project plan: TuneShuttle, a Spotify Connect to AirPlay 2 bridge
 
 Status: agreed goals and decisions as of 2026-10-09. The librespot C# port (`librespot-dotnet/`) is complete and
 verified end to end; everything below builds on it.
