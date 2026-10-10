@@ -79,6 +79,12 @@ public sealed class BrowserBridge(IJSRuntime js) : IAsyncDisposable
     }
 
     /// <summary>
+    /// Moves the keyboard focus out of <paramref name="element"/> when it is inside (blurs the focused control), so a
+    /// <c>:focus-within</c> rule no longer applies; nothing happens when the focus is elsewhere.
+    /// </summary>
+    public async Task BlurAsync(ElementReference element) => await (await ModuleAsync().ConfigureAwait(false)).InvokeVoidAsync("blur", element).ConfigureAwait(false);
+
+    /// <summary>
     /// Publishes the rendered height of the element matching <paramref name="selector"/> as the CSS custom property
     /// <paramref name="cssVar"/> on <c>&lt;html&gt;</c> and keeps it current (e.g. <c>("header.topbar", "--topbar-h")</c>).
     /// </summary>

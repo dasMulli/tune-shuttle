@@ -464,6 +464,8 @@ public sealed class PlayerTests : ComponentTestBase
         Assert.Equal("Edit", edit.TextContent);
         Assert.Equal("Edit group Downstairs", edit.GetAttribute("aria-label"));
         Assert.Equal("groups/g", edit.GetAttribute("href"));
+        // Wide screens only: the phone row is radio, name, meta and pill; the head's "Edit groups" link leads to the editor.
+        Assert.Contains("only-wide", edit.ClassList);
         Assert.Null(group.QuerySelector("input[type=range]"));
 
         var empty = cut.Find("[data-group-id=e]");
@@ -670,21 +672,27 @@ public sealed class PlayerTests : ComponentTestBase
     }
 
     [Fact]
-    public void Clicks_inside_a_receiver_rows_level_block_do_not_activate_the_label()
+    public void Output_rows_keep_their_other_controls_outside_the_label()
     {
         UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
         _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("ok", "Kitchen")));
         _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("pin", "TV", pairing: PairingState.PinRequired)));
+        _state.Apply(new BridgeEvent.GroupChanged(Dto.Group("g", "Downstairs", 50, false, ("ok", "Kitchen", 30))));
         var cut = _ctx.Render<OutputList>();
 
-        // The slider (with its <output> number) and the Pair button sit in a display: contents wrapper whose clicks
-        // are preventDefault-ed, so the browser's label activation (which would check the radio) does not run.
-        foreach (var (id, inner) in new[] { ("ok", ".level--compact"), ("pin", "button") })
+        // A label holds no labelable control but its radio (HTML): the slider (with its <output>), the Pair button and
+        // the Edit link are siblings of the row's label, so they never check the radio and need no click workaround.
+        foreach (var (selector, inner) in new[] { ("[data-receiver-id=ok]", ".level--compact"), ("[data-receiver-id=pin]", "button"), ("[data-group-id=g]", "a.btn") })
         {
-            var wrapper = cut.Find($"[data-receiver-id={id}] .row__level");
-            Assert.Equal("display: contents", wrapper.GetAttribute("style"));
-            Assert.NotNull(wrapper.QuerySelector(inner));
-            Assert.Contains(wrapper.Attributes, a => a.Name.Contains("preventdefault", StringComparison.OrdinalIgnoreCase));
+            var row = cut.Find(selector);
+            Assert.Equal("DIV", row.TagName);
+            Assert.Contains("row--choice", row.ClassList);
+            var label = Assert.Single(row.Children, c => c.TagName == "LABEL");
+            Assert.Contains("row__label", label.ClassList);
+            Assert.Equal(["radio"], label.QuerySelectorAll("input, button, output, select, textarea, a").Select(e => e.GetAttribute("type")));
+            Assert.Contains(row.Children, c => c.Matches(inner));
+            Assert.Null(row.QuerySelector(inner)!.Closest("label"));
+            Assert.DoesNotContain(row.QuerySelectorAll("[style]"), e => !e.Matches("input[type=range]"));
         }
     }
 

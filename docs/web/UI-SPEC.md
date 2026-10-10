@@ -161,7 +161,7 @@ left: 50%; transform: translateX(-50%)`) so they never shift between pages.
 | `.pill--accent` | connecting…, active | `color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 40%, var(--line))` |
 | `.chip` | tag | `display: inline-flex; align-items: center; gap: .3rem; font-size: .78rem; font-weight: 600; padding: .28rem .65rem; border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line); color: var(--text)` |
 | `.chip--accent` | Spotify chip, output tag, members chip | `background: var(--accent-soft); border-color: transparent; color: var(--accent-ink)` (the mockups colour this text with the raw `--accent`; the ink token is used, see 6.3) |
-| `.chip--members` | phone members line (4.3) | `.chip.chip--accent` + `max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: center; line-height: 1.3; justify-content: center` so three long names wrap inside the card instead of overflowing it |
+| `.chip--members` | phone members line (4.3) | `.chip.chip--accent` + `align-self: center; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: center; line-height: 1.3; justify-content: center`: a centred pill as wide as its text (the phone mockup; the `.master` column would otherwise stretch it into a bar), and three long names wrap inside the card instead of overflowing it |
 | `.tools` | top-bar right cluster | `display: flex; align-items: center; gap: .5rem; min-width: 0` (also in 1.4) |
 | `.theme-picker` | theme radio group | `display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface-2)` |
 | `.theme-btn` | one theme option | `display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 0; background: transparent; color: var(--muted); overflow: hidden; transition: width .15s ease, opacity .15s ease` (ButtonWeb's values; `overflow: hidden` is what makes the collapse rule of 2.4 visible) ; `.theme-btn .ico { width: 15px; height: 15px }` (the reference apps' 15px, not the mockup's 18px; 18px inside the 34px phone button, 5.2); hover `color: var(--accent-ink)` under `(hover: hover)` |
@@ -172,16 +172,20 @@ left: 50%; transform: translateX(-50%)`) so they never shift between pages.
 | `.btn--primary` | main action | `background: var(--accent); border-color: var(--accent); color: var(--accent-contrast)` |
 | `.btn--ghost` | low-key action | `border-color: transparent; background: transparent; color: var(--accent-ink)` |
 | `.btn--danger` | delete/forget | light: `background: var(--err-ink); border-color: var(--err-ink); color: #fff`; dark: `background: var(--err); border-color: var(--err); color: var(--accent-contrast)` |
-| `.btn--sm` | row buttons | `padding: .25rem .6rem; font-size: .78rem; min-height: 30px` (44px hit area on touch via `::before`, 5.4) |
+| `.btn--sm` | row buttons | `padding: .25rem .6rem; font-size: .78rem; min-height: 30px` (a 44 × 44 box on touch, 5.4) |
+| `.btn--back` | back link at the top of a sub-page (4.5, 4.7) and the not-found page's link (4.1) | `.btn.btn--ghost` + `margin-inline-start: -.9rem` (`-.75rem` at ≤ 699px, where `main` has `.875rem` side padding) so the ← lines up with the `<h1>`; on touch also `margin-block: -.4rem`, so the 44px box adds no height above the heading |
+| `.input--sm` | a select beside `.btn--sm` buttons (the Diagnostics log level, 4.7) | `font-size: .85rem; min-height: 32px; padding-block: .3rem`; the touch block of 5.4 sets 44px and 16px again |
+| `.hint--check` | the hint under a check row (Settings poll, 4.6) | `padding-inline-start: calc(18px + .6rem)` (the 18px box and the `.6rem` gap of `.field--check`), so it starts under the text column |
 | `.btn--icon` | icon-only round | `width: 2.2rem; height: 2.2rem; padding: 0; border-radius: 50%; display: grid; place-items: center` |
 | `.step` | − / + and transport | `width: 2.2rem; height: 2.2rem; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--surface); font-weight: 700; font-size: 1.05rem; display: grid; place-items: center` |
 | `.step--lg` | prev/next | `width: 2.8rem; height: 2.8rem` |
 | `.play` | play/pause | `.btn--primary` + `width: 3.6rem; height: 3.6rem; border-radius: 50%; padding: 0; display: grid; place-items: center` |
 | `.row` | list row | `display: flex; align-items: center; gap: .8rem; padding: .7rem .4rem; border-top: 1px solid var(--line); min-height: 44px`; first row no border |
 | `.row.is-active` | selected output | `background: var(--accent-soft); border-radius: 10px; border-top-color: transparent; padding-left: .7rem; padding-right: .7rem` |
+| `.row--choice` / `.row__label` | an Output row (4.3): a `div.row.row--choice` whose `label.row__label` holds the radio, glyph, name, meta and pill | `.row.row--choice { padding-top: 0; padding-bottom: 0 }`; `.row__label { flex: 1; min-width: 0; min-height: 44px; align-self: stretch; display: flex; align-items: center; gap: inherit; padding-block: .7rem (.6rem at ≤ 699px); cursor: pointer }` (default cursor when its radio is disabled): the label fills the row's height, so the whole row checks the radio, and the row's other controls sit beside it; since the row has no block padding of its own, the touch `.btn--sm` negative margin (5.4) is inert here: the 44px label sets the row height and the button is simply centred |
 | `.radio` | custom radio glyph | `width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line-strong); background: var(--surface); display: grid; place-items: center; flex: none`; `.is-on { border-color: var(--accent) }`; `.is-on::after { content:""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent) }` |
 | `.art` | artwork | `width: 200px; height: 200px; border-radius: 16px; object-fit: cover; box-shadow: var(--shadow); flex: none`; placeholder: the mockup gradient `linear-gradient(135deg,#1d4ed8,#7c3aed 60%,#ec4899)` with the white note glyph |
-| `.big` | large number | `font-size: 1.7rem; font-weight: 700; color: var(--accent-ink); min-width: 2.6rem; text-align: right; font-variant-numeric: tabular-nums` |
+| `.big` | large number | `font-size: 1.7rem; font-weight: 700; color: var(--accent-ink); min-width: 2.6rem; text-align: right; font-variant-numeric: tabular-nums`; inside a disabled slider (`.level.is-disabled output.big`: no output, an offline receiver) `color: var(--muted)`, so the number or the `–` never reads as a third control |
 | `.field` | form field | `display: flex; flex-direction: column; gap: .3rem` ; `.field > label` is `.label`-like but `text-transform: none; font-size: .85rem; font-weight: 600; color: var(--text)` |
 | `.input` | text/number/select | `padding: .5rem .7rem; min-height: 40px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text)`; invalid `border-color: var(--err)` |
 | `.hint` | field hint | `.meta` + `margin: 0` |
@@ -302,13 +306,14 @@ packages can build on them. The theme and language components call it; the modul
 | `measure(selector, cssVar)` | ResizeObserver that writes `Math.ceil(height) + "px"` of the element to `--cssVar` on `<html>` (the shell publishes `--topbar-h`, `--banner-h` (the `.banner-slot`) and `--tabbar-h`) |
 | `preventKeys(element, keys)` | a `keydown` listener on `element` that calls `preventDefault()` when `e.key` is one of `keys` (propagation untouched, so Blazor's handlers still run); returns `{ dispose() }`. The theme picker uses it so its arrows/Home/End do not also scroll the page |
 | `rememberActive()` | stores `document.activeElement` and returns `{ restore() }`, which focuses it again if it is still in the document (the pairing dialog, 4.11) |
+| `blur(element)` | blurs `document.activeElement` when it is inside `element` (nothing otherwise); the theme picker calls it after a pointer selection and after Escape (2.4), because Chromium focuses a clicked button and `:focus-within` would keep the pill unfolded. Chromium keeps the sequential focus starting point, so the next Tab continues after the picker |
 | `audit()` | the layout audit of 5.6; returns the JSON object described there |
 
 `BrowserBridge` wraps these as `Task<string> GetThemeAsync()`, `Task SetThemeAsync(string)`, `Task<bool>
 HoverCapableAsync()`, `Task<string> GetLangAsync()`, `Task SetLangAsync(string)`, `Task<IAsyncDisposable>
 OnOutsideClickAsync(ElementReference, DotNetObjectReference<T>, string)`, `Task MeasureAsync(string, string)`,
-`Task<IJSObjectReference> RememberActiveAsync()` (call `restore` on it), `Task<string> AuditAsync()` (the JSON as a
-string). In bUnit the module is mocked (`JSInterop.SetupModule("./js/app.js")`), so components never call
+`Task<IJSObjectReference> RememberActiveAsync()` (call `restore` on it), `Task BlurAsync(ElementReference)`,
+`Task<string> AuditAsync()` (the JSON as a string). In bUnit the module is mocked (`JSInterop.SetupModule("./js/app.js")`), so components never call
 `IJSRuntime` directly.
 
 ### 2.4 The theme picker (component `Components/ThemePicker.razor`)
@@ -323,6 +328,13 @@ system, in that order, icons sun / moon / half-disc (the SVG paths of ButtonWeb'
   collapses it; a click outside (`onOutsideClick`, a document `click` listener that ignores targets inside the
   picker, 2.3) or Escape collapses it. The opening tap is inside the picker and therefore never collapses what it
   just opened; `ShellTests` covers both "a click outside collapses" and "a click inside does not".
+- Focus after a choice: Chromium (Android Chrome, desktop Chrome and Edge) focuses a clicked or tapped `<button>`, and
+  `:focus-within` would keep the pill unfolded until the next tap elsewhere. So a **pointer** selection
+  (`e.detail !== 0`, any device) and **Escape** also call `BrowserBridge.BlurAsync(picker)` (2.3), which moves the focus
+  out of the group; a keyboard selection (Enter/Space, arrows, Home/End) keeps the focus on the checked radio. The
+  opening tap does not blur (the pill is meant to stay open). `ShellTests` asserts the mocked `blur` call for both
+  paths and its absence for the keyboard and the opening tap. The collapse rule keeps `:focus-within` (not
+  `:has(:focus-visible)`): an engine without `:has()` would drop the whole rule and never collapse the pill.
 - `aria-checked="true|false"` follows the choice; the checked button has `tabindex="0"`, the others `-1` (roving
   tabindex: one Tab stop); Arrow Right/Down and Left/Up move focus **and** selection (wrapping), Home/End go to the
   first/last; `aria-label` on every button (theme.light / theme.dark / theme.system) and on the group (theme.groupLabel).
@@ -349,8 +361,12 @@ collapsing), driven by the same `BrowserBridge`; it is the thumb-friendly place 
 the embedded-JSON loading, the flattening and the fallback order. **New here, with no reference implementation:**
 `Plural`/`PluralRules`, `SetLanguage`, `Changed`, `Culture`, `Keys()`. Daikin's `Format` formats with
 `CultureInfo.CurrentCulture`; this `Format` uses the `Culture` property, and `SetLanguage` sets
-`CultureInfo.CurrentCulture`/`CurrentUICulture` and the `DefaultThreadCurrent*` to the same value, so the two agree
-(and the `Format` helpers of 3.4, which read `CurrentCulture`, print the same language as the catalog).
+`CultureInfo.DefaultThreadCurrentCulture`/`DefaultThreadCurrentUICulture` to the same value; it **never** sets the
+`AsyncLocal` `CurrentCulture`/`CurrentUICulture`: a value set there would be captured by every flow started afterwards
+(the `Every()` timer loops, pending continuations) and would pin the previous language in those flows after the next
+switch. The app never sets `CurrentCulture` anywhere, so it resolves to the default-thread culture in every flow, and
+the `Format` helpers of 3.4, which read `CurrentCulture`, print the same language as the catalog
+(`FormattingTests.A_flow_started_after_a_switch_follows_the_next_switch`).
 
 ```csharp
 public sealed record Language(string Code, string NativeName);
@@ -369,7 +385,7 @@ public sealed class I18n
     public string this[string key] { get; }                     // current language → German → the key itself
     public string Format(string key, params (string Name, object? Value)[] args);   // {{name}} replacement, values formatted with Culture
     public string Plural(string key, long count, params (string Name, object? Value)[] args); // picks key_one/_few/_many/_other, adds {{count}}
-    public void SetLanguage(string code);                       // resolves, sets CultureInfo.DefaultThreadCurrentCulture/UICulture and CurrentCulture/CurrentUICulture, raises Changed
+    public void SetLanguage(string code);                       // resolves, sets CultureInfo.DefaultThreadCurrentCulture/UICulture (never the AsyncLocal CurrentCulture, so every flow follows the latest switch), raises Changed
     public static string Resolve(string? code);                 // supported two-letter code or DefaultCulture
     public IReadOnlyDictionary<string, string> Keys(string code);  // tests: the flattened catalog
 }
@@ -457,6 +473,15 @@ Text that originates in the service stays as the service sends it (English): pro
 localized sentence for service-originated prompts (`pairing.prompt`) and shows `prompt.Message` only as the muted
 second line when the origin is `User`.
 
+Text that originates in the **client** is not service text and is never shown as English in another language. The one
+case is `BridgeState.ConnectionError`, which the unchanged `BridgeEventClient` (8) writes in English: its own sentence
+"The bridge closed the connection." or the runtime's exception message. `Components/ConnectionError.cs`
+(`ConnectionError.Text(error, L)`) decides what the banner (banner.pausedError, 4.10) and the status pill's title
+(status.title.paused/offline, 7) embed: the known sentence → banner.closedByBridge in the current language; any other
+text → shown as is while the language is English, left out otherwise (the error-free sentences banner.paused,
+banner.offline and banner.retrying are used, without a dangling colon; the client logs the detail to the browser
+console). `ShellTests` asserts both cases in German and that the constant matches the client's literal.
+
 ### 3.6 The catalog
 
 Section 10 lists every key with the German source text and the English text. `i18n-core` ships `de.json` and
@@ -485,7 +510,11 @@ every other catalog, including the plural variants required by that language's c
 Tab highlighting: `NavLink` with `Match="NavLinkMatch.Prefix"` on `/receivers` and `/settings`; the Player tab is
 active for `/` and `/groups*` (a small `TabLink` component computes `active` from `NavigationManager.Uri`).
 
-`App.razor` NotFound: `<h1>` app.notFoundTitle + `<p>` app.notFound + link to `/` (nav.player), inside MainLayout.
+`App.razor` NotFound renders `Pages/NotFound.razor` (no route) inside MainLayout: `<h1>` app.notFoundTitle + `<p>`
+app.notFound + a link to `/` (`<span aria-hidden="true">←</span>` nav.backToPlayer, like every other back link)
+styled `a.btn.btn--ghost.btn--back` (the page's only action, so a 44px
+target on phones, 5.4). Router's `FocusOnNavigate` only exists for a found route, so the component focuses its own
+`<h1>` after rendering, writes its own page title and follows a language switch (all in `ShellTests`).
 
 Page titles: every page writes `<PageTitle>@L.Format("app.pageTitle", ("page", L[key]))</PageTitle>` itself, with
 `key` = nav.player (`/`), nav.receivers, nav.groups (`/groups*`), nav.settings, nav.diagnostics
@@ -544,7 +573,8 @@ left, Output and Status stacked right. One column below.
    - Row 1: `.label` player.masterVolume "{{output}}" where output is the active group's name or the single
      receiver's name; player.masterVolumeNone when nothing is selected. Right: `.meta` player.followsSpotify.
    - Row 2: `.step` "−" (player.quieter), `LevelSlider Variant="Hero"` (`Label` = player.masterVolume text, hidden;
-     `ValueText` = common.levelText "{{value}} of 100"), `.step` "+" (player.louder), `.big` number. Steps are ±5,
+     `ValueText` = common.levelText "{{value}} of 100"), `.step` "+" (player.louder), `.big` number (muted while
+     disabled, 1.5). Steps are ±5,
      clamped 0..100: `MasterVolume` holds the slider in `@ref` and calls its public `StepAsync(±5)` (1.6), which
      clamps, updates the draft, raises `DraftChanged` and sends through the same `CoalescingSender` path as a drag.
      This is the contract between design-system and player-page; there is no second path. Target: group →
@@ -578,14 +608,20 @@ left, Output and Status stacked right. One column below.
   is discarded. Choose a receiver or a group."). This is the only place player.noOutput renders; `PlayerTests`
   asserts the English text contains "Nothing selected" (the existing test's phrase).
 - A `<fieldset class="output__list">` with a visually-hidden `<legend>` player.outputChoice (no `role`/`aria-label`:
-  a fieldset is named by its legend, 6.1) of `.row` labels, each wrapping a visually-hidden native `<input
-  type="radio" name="output">` and the `.radio` glyph (`.is-on` when checked), so arrow keys, Space and screen readers
-  work natively. Checking a row calls `Commands.ActivateGroupAsync(groupId)` or `Commands.ConnectAsync(receiverId)`;
-  the row shows `.is-active` for the current output (`State.Output.GroupId` / `ReceiverId`); while a request runs the
-  row's radio is disabled and the pill shows pills.connecting.
+  a fieldset is named by its legend, 6.1) of rows. Each row is a `div.row.row--choice` (1.5) holding a
+  `label.row__label` that wraps a visually-hidden native `<input type="radio" name="output">`, the `.radio` glyph
+  (`.is-on` when checked), the name, the meta and the pill, so arrow keys, Space and screen readers work natively and
+  the whole row height checks the radio. The row's other controls (a group's Edit link, a receiver's compact slider or
+  Pair button) are **siblings of the label, never inside it**: HTML allows a label no labelable descendant
+  (`button`, `input`, `output`) other than its own control. Checking a row calls `Commands.ActivateGroupAsync(groupId)`
+  or `Commands.ConnectAsync(receiverId)`; the row shows `.is-active` for the current output (`State.Output.GroupId` /
+  `ReceiverId`). While a request runs the row carries `aria-busy`, the pill shows pills.connecting and a repeated check
+  is ignored; the radio stays enabled so keyboard focus is kept (disabling the focused radio would drop the focus to
+  `<body>`; `PlayerTests.A_busy_row_says_connecting_and_keeps_its_radio_enabled`).
 - Order: groups (by name), then receivers (by name). Row content:
-  - Group: `<strong>` name, meta, pill (4.8), `.btn.btn--sm` player.edit (→ `/groups/{id}`; `aria-label`
-    player.editGroup "{{name}}"). Radio disabled when the group has no members or no member is online.
+  - Group: `<strong>` name, meta, pill (4.8), `.btn.btn--sm.only-wide` player.edit (→ `/groups/{id}`; `aria-label`
+    player.editGroup "{{name}}"; wide screens only: on phones the head's player.editGroups link leads to the editor,
+    5.3). Radio disabled when the group has no members or no member is online.
     Meta is two spans: `.meta.only-wide` player.groupMeta "Group · {{members}}" (names joined by ", "; player.groupEmpty
     when none) and `.meta.only-phone` with the member names joined by ", " alone (the phone mockup's "SpeakerA, Office";
     player.groupEmptyShort when none).
@@ -598,15 +634,21 @@ left, Output and Status stacked right. One column below.
     "Apple receiver"). Receiver rows that are not the current output carry `is-quiet` so their compact slider's fill
     is the grey `--line-strong` of the mockup (1.6); the output's row keeps the accent fill. Group rows have no slider.
   - Empty state (no receivers, `State.Loaded`): `.empty` receivers.empty + receivers.emptyHint.
-  Phone: the compact slider is hidden (`display: none` ≤ 699px, the Receivers page has the full one); the row keeps
-  radio, name, meta and pill (5.3).
+  Phone: the compact slider is hidden (`display: none` ≤ 699px, the Receivers page has the full one) and the group's
+  Edit link too (`.only-wide`); the row keeps radio, name, meta and pill, plus the player.pair button of a PIN receiver
+  (the only one-tap way to pair from the Player) (5.3).
 
 **Status card** (`section.card`, `Components/StatusCard.razor`):
 
 - Head: `<h2>` player.status; right: link `/settings/diagnostics` player.diagnostics.
-- Grid of three (≥ 1024px) / two (700–1023) / one column facts, each `.label` + value (600 weight):
+- Grid of facts, each `.label` + value (600 weight): two columns (2 × 2) at ≥ 1024px, where the card is half the
+  page wide (three columns would leave the fourth fact alone on a row); `repeat(auto-fit, minmax(10rem, 1fr))` at
+  700–1023px, which fits all four in one row of the full-width card; one column at ≤ 699px.
   player.spotify → player.connectedAs "{{user}}" in `--ok-ink` / player.connected / player.notConnected (muted);
-  player.outputFact → player.outputConnected (`--ok-ink`) / player.outputNone (muted); player.receiversFact →
+  player.outputFact → player.outputConnected (`--ok-ink`) when a member of the output is connected or streaming /
+  player.outputNone (muted) when nothing is selected / pills.connecting (`--accent-ink`) or pills.error (`--err-ink`)
+  while the selected output is not (yet) connected, so the fact never says "none" under an active Output row
+  (`PlayerTests.Status_card_output_fact_follows_a_selected_output_that_is_not_connected_yet`); player.receiversFact →
   `Plural("player.receiversOnline", onlineCount)` ("{{count}} of {{total}} online"); player.liveUpdates → the status
   text of 7 in its ink.
 - **Not built from the mockups** (8.1): the "Stream · Realtime · NTP · 1.75 s" fact (stream type, timing and latency
@@ -631,8 +673,9 @@ through the catalog). Then `.cards` grid: `grid-template-columns: repeat(auto-fi
 6. Actions row (`display: flex; flex-wrap: wrap; gap: .5rem`): `.btn.btn--primary` receivers.connect /
    receivers.connecting ("Connecting…", the busy label) or `.btn` receivers.disconnect; `.btn` receivers.pairWithPin
    when `PinRequired`; `.btn.btn--ghost` receivers.forgetPairing when `Paired`. Disabled rules as today (offline,
-   `Disabled` pairing). The Connect button's `title` is receivers.connectTitle when enabled and
-   receivers.offlineTitle when it is disabled because the receiver is offline.
+   `Disabled` pairing). The Connect button's `title` is receivers.connectTitle when enabled,
+   receivers.offlineTitle when it is disabled because the receiver is offline, and pills.title.homekitOnly when it is
+   disabled because the receiver accepts HomeKit members only (`Pairing == Disabled`).
 7. `<details class="details">` with `<summary>` receivers.details: the offset form (label receivers.offset, number
    input `.input` 7.5rem, `.btn.btn--sm` receivers.apply, hint receivers.offsetHint "{{ms}} ms", the two error texts
    receivers.offsetInvalid / receivers.offsetRange "{{max}}"), and a `.facts` list of id, manufacturer, port,
@@ -644,12 +687,12 @@ Empty states: not loaded → `.meta` common.connecting; no receivers → `.empty
 
 `/groups`: `<h1>` groups.title; `.meta` groups.lead (the G / r_i explanation); `.btn.btn--primary` groups.newGroup;
 a `.card` list of `.row`s: name, `.meta` member names, pill, `.btn.btn--sm` groups.edit. Empty → `.empty` groups.empty.
-A back link (`.btn.btn--ghost` with a ← glyph, nav.backToPlayer) at the top.
+A back link (`.btn.btn--ghost.btn--back` with a ← glyph, nav.backToPlayer; 1.5) at the top.
 
 `/groups/new`: `<h1>` groups.create; one `.card` with the name field (groups.name, placeholder groups.namePlaceholder,
 maxlength 64) and `.btn.btn--primary` groups.createAction; on success navigate to `/groups/{id}`.
 
-`/groups/{id}` (group editor), `<h1>` = the group name, back link to `/groups` (nav.backToGroups); page title
+`/groups/{id}` (group editor), `<h1>` = the group name, back link (`.btn--back`) to `/groups` (nav.backToGroups); page title
 nav.groups for all three routes (4.1):
 
 - `.card` **Name**: inline rename (`.input` with `aria-label` = groups.name, the key reused for today's "Group name";
@@ -680,10 +723,15 @@ All group commands and the busy/preview logic of today's `Groups.razor` move ove
    (number input, step 441; hint settings.latencyHint with `{{ms}}`, `{{min}}`, `{{max}}` and settings.latencyHint2),
    settings.stream (`<select>`: settings.streamRealtime / settings.streamBuffered; hint settings.streamHint),
    settings.poll (checkbox row: `.field--check { display: grid; grid-template-columns: auto 1fr }`, hint
-   settings.pollHint). Validation messages from the catalog (`SettingsModel` keeps the attributes; the page maps the
-   attribute's `ErrorMessage` names — set them to the catalog keys `settings.validation.*` and render
-   `I18n[message]`). Actions: `.btn.btn--primary` settings.save / settings.saving, `.btn.btn--ghost` settings.reset.
-   Load failure: `.meta` settings.loadFailed + `.btn` common.retry.
+   settings.pollHint as `.hint.hint--check`). Validation messages from the catalog (`SettingsModel` keeps the
+   attributes; the page maps the attribute's `ErrorMessage` names — set them to the catalog keys
+   `settings.validation.*` and render `I18n[message]`). `InputNumber` checks the parse itself before any attribute
+   runs (an empty latency field, or "1e"): its `ParsingErrorMessage` is the key settings.validation.latencyNumber (no
+   `{0}`, so its default "The {0} field must be a number." with the C# property name never shows), and the page renders
+   the latency field's messages itself as `L[message]` (re-rendering on `EditContext.OnValidationStateChanged`), so the
+   message follows a language switch. Actions: `.btn.btn--primary` settings.save / settings.saving, `.btn.btn--ghost`
+   settings.reset. Load failure (any failure `BridgeCommands.IsFailure` names, a request timeout included):
+   `.meta` settings.loadFailed + `.btn` common.retry.
 2. **Appearance** (`.card`): settings.appearance; a `<fieldset>` with `<legend>` settings.theme (visible, styled like
    `.field > label`) and three `.field--check` rows of native radio inputs (theme.light, theme.dark, theme.system,
    each with `<label for>`, 44px rows) bound to `BrowserBridge`; `.field` settings.language = `<label
@@ -698,7 +746,7 @@ All group commands and the busy/preview logic of today's `Groups.razor` move ove
 
 ### 4.7 Diagnostics (`Pages/Diagnostics.razor`, route `/settings/diagnostics`)
 
-Back link to `/settings` (nav.backToSettings), `<h1>` diagnostics.title, page title nav.diagnostics. Grid
+Back link (`.btn.btn--ghost.btn--back`, 1.5) to `/settings` (nav.backToSettings), `<h1>` diagnostics.title, page title nav.diagnostics. Grid
 `repeat(auto-fill, minmax(320px, 1fr))` of three cards and the full-width log card; every card is a `.facts` list
 (`dt` = label, `dd` = value) and the values are today's values, formatted through the culture:
 
@@ -719,10 +767,12 @@ Back link to `/settings` (nav.backToSettings), `<h1>` diagnostics.title, page ti
    Format.Integer(LateWakeups)))` ("0.4 % · 0 late", the mockups' Status-card fact, here as a line of this card),
    or `–` (U+2013) while `PacketsSent == 0`; diagnostics.localAddresses → the list in `--font-mono`, the first five
    and `Plural("diagnostics.more", rest)` as today, diagnostics.noneReported when empty. The "Updated" line
-   diagnostics.updated "{{time}}" with `Format.Time`; load failure diagnostics.unavailable "{{detail}}" + common.retry.
+   diagnostics.updated "{{time}}" with `Format.Time`; load failure diagnostics.unavailable "{{detail}}" + common.retry
+   (any failure `BridgeCommands.IsFailure` names, a request timeout included; a failed periodic refresh keeps the last
+   values with the error line under them, and the 5 s refresh loop goes on).
 3. **Pending probes** (`<h2>` diagnostics.pendingProbes): the `OpenQuestionsPending` names as `.meta` lines (service
    text, 3.5); empty → `.meta` diagnostics.noneReported (replaces today's "None.").
-4. **Live log** (`<h2>` diagnostics.log): controls `.field` inline (label diagnostics.level, `<select class="input">`
+4. **Live log** (`<h2>` diagnostics.log): controls `.field` inline (label diagnostics.level, `<select class="input input--sm">`
    with diagnostics.levels.*), `.btn.btn--ghost.btn--sm` diagnostics.pause / diagnostics.resume, diagnostics.clear;
    lines in `.log` with the level classes of 1.5; diagnostics.noLines when empty.
 
@@ -769,7 +819,7 @@ no role of its own,
 font `.85rem`, padding `.45rem 1.25rem`, `display: flex; gap: .6rem; align-items: center`, hidden while `Connected`:
 - `Connecting` → background `--info-fill`, border-bottom `color-mix(in srgb, var(--accent) 40%, var(--line))`, text
   banner.connecting.
-- `Disconnected` with `NextAttemptAt` → `--warn-fill`, text banner.paused ("{{error}}" appended as banner.pausedError
+- `Disconnected` with `NextAttemptAt` → `--warn-fill`, text banner.paused ("{{error}}" = `ConnectionError.Text`, 3.5, appended as banner.pausedError
   when there is one) + banner.retrying.
 - `Disconnected` without a retry → `--err-fill`, text banner.offline + `.btn.btn--sm` common.reload (`location.reload`
   through `NavigationManager.NavigateTo(uri, forceLoad: true)`).
@@ -826,17 +876,25 @@ of media queries `app.css` may contain (`DesignTokenTests` greps for it; anythin
 |---|---|
 | `(max-width: 699px)` | the phone shell and every phone override of 5.2/5.3, `.only-wide` |
 | `(min-width: 700px)` | `.only-phone { display: none }` |
-| `(min-width: 1024px)` | absolutely centred tabs, the Player's two columns, the three-column Status facts |
+| `(min-width: 1024px)` | absolutely centred tabs, the Player's two columns, the two-column (2 × 2) Status facts |
 | `(max-width: 359px)` | hides `.brand__name` |
-| `(max-height: 500px)` | landscape phones: hero artwork 96px, hero padding `.8rem` |
+| `(max-height: 500px)` | landscape phones: the compacter first screen listed under the table |
 | `(max-width: 699px), (pointer: coarse)` | the touch block of 5.4 (the width half makes it reproducible in headless Edge, which reports `pointer: coarse` as false, 5.6) |
 | `(hover: hover)` | every `:hover` rule is wrapped in it so touch devices do not get sticky hover states |
 | `(prefers-reduced-motion: reduce)` | 1.3 |
 | `(prefers-color-scheme: dark)` | 1.2 |
 
-700–1023px gets the Status card's two columns through plain `repeat(auto-fit, minmax(10rem, 1fr))`, not a query;
-three receiver cards per row at ≥ 1280px come from the `auto-fill` grid of 4.4 by themselves. Landscape phones
-(844×390) get the phone shell (width rules) with the tab bar.
+700–1023px gets the Status card's facts through plain `repeat(auto-fit, minmax(10rem, 1fr))`, not a query (four in
+one row of the full-width card at 768px); three receiver cards per row at ≥ 1280px come from the `auto-fill` grid of
+4.4 by themselves.
+
+**Landscape phones** (844×390) are wider than 699px, so no width query can give them the phone shell: they get the
+**tablet shell**, with the tabs in the top bar (44px tall on a touch screen, 5.4) and no bottom tab bar. The top bar
+stays sticky there, since its tabs are the only navigation. A phone narrower than 700px in landscape keeps the phone
+shell (5.2). The `(max-height: 500px)` block compacts the first screen so the master volume row fits on it: hero
+artwork 96px, hero padding `.8rem` and gap `.6rem`, `.hero__title` 1.3rem, transport gap `.75rem`, `.play` 48px (still
+≥ 44px), top-bar block padding 5px (plus the top safe-area inset), brand tile 28px with an 18px glyph, tab padding
+`.22rem .7rem`. The audit passes at 844×390 with touch emulated.
 
 ### 5.2 Phone shell (≤ 699px)
 
@@ -879,15 +937,18 @@ The phone keeps every desktop component value of 1.5–1.7 **except** the overri
 | `.label` | `font-size: .66rem` |
 | `.chip` | `font-size: .76rem; padding: .28rem .6rem` |
 | `.brand__name`, `.topbar`, `.brand__tile`, `.theme-btn`, `.status` | as in 5.2 |
-| `.hero` | `align-items: center; text-align: center; gap: .6rem`; artwork `.art` 120px (96px under `(max-height: 500px)`); `.hero__title` 1.2rem, max 2 lines; artist as `.meta`; the chip row centred |
+| `.hero` | `align-items: center; text-align: center; gap: .6rem`; artwork `.art` 120px (96px under `(max-height: 500px)`); `.hero__title` 1.2rem, max 2 lines; artist as `.meta` (`.hero__artist` `.78rem`, `--muted`); the chip row centred |
 | progress row | `.track` 5px, times at both ends (`width: 100%`) |
 | transport | `.step.step--lg` 44px, `.play` 56px |
-| master row | `.step` 40px, hero slider, `.big` 1.3rem; row 3 replaced by `.chip--members` (4.3) |
-| Output card | `padding: .8rem 1rem`; rows: radio, name + `.meta.only-phone`, pill (compact slider hidden); head actions per 4.3 (player.editGroups link, Stop output only while selected) |
+| master row | `.step` 44px (the touch rule of 5.4), hero slider, `.big` 1.3rem; row 3 replaced by `.chip--members` (4.3), centred; `.master__head` centred (the label and player.followsSpotify centred like the rest of the hero) |
+| Output card | `padding: .8rem 1rem`; rows: radio, name + `.meta.only-phone`, pill (compact slider and group Edit link hidden; a PIN receiver keeps its player.pair button); head actions per 4.3 (player.editGroups link, Stop output only while selected, with `padding-inline: .5rem` so the head fits one line in longer languages; where a longer language still does not fit, the actions wrap under the title by design, 1.5) |
 | Status card | one column of facts |
 | `main` | `padding: 1rem .875rem calc(1rem + var(--tabbar-h))` |
 | `.cards` (Receivers), Diagnostics grid | one column (`grid-template-columns: 1fr`) |
 | `.level--compact` in Output rows | `display: none` |
+| `.row .level--compact` elsewhere (group editor members) | `width: 120px`, so a name like "Fake Receiver 1" keeps one line beside the slider and the 44px remove button |
+| `.facts` (Receivers details, Diagnostics) | one column, the label (`dt`, `.78rem`) over its value (`dd`, `margin-bottom: .5rem`), so long values (addresses, dates, "live (1 connection, 63 events)") get the card's full width |
+| `.btn--back` | `margin-inline-start: -.75rem` (1.5) |
 | `.toasts`, `.scrim`/`.dialog`, `.banner` | the phone positions of 4.9, 4.11, 4.10/5.2 |
 
 Order on `/`: hero card, Output card, Status card (single column).
@@ -895,8 +956,15 @@ Order on `/`: hero card, Output card, Status card (single column).
 ### 5.4 Touch targets (`@media (max-width: 699px), (pointer: coarse)`)
 
 - `.btn`, `.step`, `.toast__close`, `.tabbar a`, `.btn--icon`, `.input`, `select.input`, the Appearance radios'
-  `.field--check` rows: `min-height: 44px` (`.btn--sm` keeps its 30px box and grows a centred `::before` hit area of
-  44×44 — it has no `overflow: hidden` — so rows do not get taller). **Not grown**: `.theme-btn` (34px, 2.4) and the
+  `.field--check` rows: `min-height: 44px`. `.btn--sm` keeps its small type and padding, but its **box** grows to
+  `min-height: 44px; min-width: 44px` (a `::before` hit area would not do: the audit of 5.6 measures the element's own
+  `getBoundingClientRect()`, which never counts a pseudo-element); inside rows and the banner it gets
+  `margin-block: -.4rem`, so it overlaps their padding and a row with a button is no taller than one without (this
+  matters for the Groups list rows and the banner; in an Output row, `.row--choice` of 1.5, the label's padding carries
+  the height and the margin is inert, the button is simply centred). Card-head
+  links (`.card__head a:not(.btn)`, `.card__actions a:not(.btn)`), the top-bar tabs (on touch tablets and landscape
+  phones), the brand link (`margin-block: -6px`, so the bar keeps its height) and `summary` (`padding-block: 13px`) are
+  44px tall too. **Not grown**: `.theme-btn` (34px, 2.4) and the
   top-bar `.lang-select` (hidden on phones anyway, 5.2; 32px on tablets with a coarse pointer, allow-listed in 5.6
   like the reference apps).
 - Range inputs: `height: 44px` (the track stays 6/10px); the thumb is **24px on every variant** (the hero's 24px
@@ -948,7 +1016,9 @@ a larger `--virtual-time-budget`, 2 s steps up to 30 s) until the `<pre>` is non
 The script dumps the DOM with headless Edge (`--dump-dom`) and fails when `overflow > 0`, `unnamed` is non-empty or
 `small` has entries outside the allow-list. Touch behaviour itself (the first-tap-opens picker, the 44px slider
 band) cannot be seen here; it is covered by bUnit with `hoverCapable` mocked to `false` and by review-2's emulated
-run. Development data comes from the fake receivers.
+run. The not-found content (4.1) is outside the audit's reach (`Audit.razor` resolves the page from the route table, and
+an unknown address has none); `ShellTests.Unknown_address_shows_the_not_found_text_in_the_shell` asserts its link is a
+`.btn` (44px on phones). Development data comes from the fake receivers.
 
 ---
 
@@ -1037,11 +1107,11 @@ Mapped from `BridgeState.Connection`, `ConnectionError`, `NextAttemptAt`:
 | State | Class | Text (de / en) | Colour | Dot |
 |---|---|---|---|---|
 | `Connecting` | `status status--connecting` | status.connecting "verbinde…" / "connecting…" | `--accent-ink`, border `color-mix(in srgb, var(--accent) 45%, var(--line-strong))` | static |
-| `Connected` | `status status--live` | status.live "live" / "live" | `--ok-ink`, border mix with `--ok` | pulsing: `.status--live::before { animation: pulse 1.8s ease-out infinite }`, `@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 70%, transparent) } 70% { box-shadow: 0 0 0 6px transparent } 100% { box-shadow: 0 0 0 0 transparent } }`; while it runs the animated `box-shadow` replaces the base rule's static halo for this state only, the other three states keep the static halo |
+| `Connected` | `status status--live` | status.live "live" / "live" | `--ok-ink`, border mix with `--ok` | pulsing: `.status--live::before { animation: pulse 1.8s ease-out infinite }`, `@keyframes pulse` with two layered shadows in every frame: the base rule's static 3px halo (`0 0 0 3px color-mix(in srgb, currentColor 25%, transparent)`) and under it the ring that grows from `0 0 0 0 color-mix(in srgb, currentColor 70%, transparent)` (0%) to `0 0 0 6px transparent` (70%) and back to `0 0 0 0 transparent` (100%), so the halo also shows on the first frame (a static screenshot, a paused tab) and the ring grows out of it; the other three states keep the static halo alone |
 | `Disconnected`, `NextAttemptAt != null` | `status status--paused` | status.paused "pausiert" / "paused" | `--warn-ink`, border mix with `--warn` | static |
 | `Disconnected`, `NextAttemptAt == null` | `status status--error` | status.offline "offline" / "offline" | `--err-ink`, border mix with `--err` | static |
 
-`title` = status.title.* (the longer sentence, with `{{error}}` for paused/offline). `role="status"` so transitions
+`title` = status.title.* (the longer sentence, with `{{error}}` = `ConnectionError.Text` (3.5) for paused/offline; without one the banner's error-free sentences). `role="status"` so transitions
 are announced. Base rule: `.status { display: inline-flex; align-items: center; gap: .4rem; font-size: .78rem;
 font-weight: 600; padding: .3rem .7rem; border-radius: var(--radius-pill); border: 1px solid var(--line-strong);
 background: var(--surface); color: var(--muted) } .status::before { content: ""; width: 8px; height: 8px;
@@ -1116,10 +1186,11 @@ src/Bridge.Web/
   Layout/MainLayout.razor
   Components/BridgeComponentBase.cs, ThemePicker.razor, LanguageSelect.razor, StatusPill.razor, TabLink.razor,
              TabBar.razor, ConnectionBanner.razor, NoticeArea.razor, PairingDialog.razor, LevelSlider.razor,
-             StatePill.razor, NowPlayingHero.razor, MasterVolume.razor, OutputList.razor, StatusCard.razor
+             StatePill.razor, NowPlayingHero.razor, MasterVolume.razor, OutputList.razor, StatusCard.razor,
+             ConnectionError.cs (the connection error text of 3.5)
              (deleted: StateBadge.razor, LiveIndicator.razor)
   Pages/Player.razor, Receivers.razor, Groups.razor, GroupEditor.razor, Settings.razor, Diagnostics.razor,
-        Styleguide.razor, Audit.razor            (deleted: NowPlaying.razor)
+        Styleguide.razor, Audit.razor, NotFound.razor (no route; App.razor's NotFound, 4.1)   (deleted: NowPlaying.razor)
   wwwroot/index.html, wwwroot/css/app.css, wwwroot/js/app.js, wwwroot/favicon.svg
 tests/Bridge.Tests/Web/
   BridgeStateTests.cs, WebApiClientTests.cs, WebLogicTests.cs, WebTestSupport.cs   (existing)
@@ -1153,7 +1224,8 @@ receivers.connectTitle / receivers.offlineTitle → the Connect button's `title`
 Activate button's `title` when enabled (4.5); settings.spotifyConnectedNoUser → the Spotify card (4.6);
 diagnostics.spotify … diagnostics.version → the Diagnostics Status card (4.7); styleguide.title / audit.title → the
 `<h1>` and page title of the two developer pages; player.bridgeFallback → the device-name fallback (4.3);
-player.noOutput → the Output card's no-output line (4.3). Removed from the first draft because nothing consumed
+player.noOutput → the Output card's no-output line (4.3); banner.closedByBridge → the connection error text of 3.5;
+settings.validation.latencyNumber → the latency field's parse message (4.6). Removed from the first draft because nothing consumed
 them: app.loading, app.error (index.html is static English, 8.1), common.close, common.save, common.working,
 common.yes, common.no, units.*, player.title, player.levelText and groups.masterText (both → common.levelText),
 actions.playback (→ the four actions.playback* keys).
@@ -1206,6 +1278,7 @@ actions.playback (→ the four actions.playback* keys).
 | banner.paused | Live-Updates pausiert. | Live updates paused. |
 | banner.pausedError | Live-Updates pausiert: {{error}} | Live updates paused: {{error}} |
 | banner.retrying | Es wird gleich erneut versucht. | Retrying shortly. |
+| banner.closedByBridge | Die Bridge hat die Verbindung geschlossen. | The bridge closed the connection. |
 | banner.offline | Keine Verbindung zur Bridge. Die Seiten zeigen den letzten bekannten Stand. | No connection to the bridge. The pages show the last known state. |
 
 ### pills (4.8)
@@ -1409,6 +1482,7 @@ actions.playback (→ the four actions.playback* keys).
 | settings.validation.nameEmpty | Der Gerätename ist leer. | The device name is empty. |
 | settings.validation.nameTooLong | Der Gerätename ist länger als 64 Zeichen. | The device name is longer than 64 characters. |
 | settings.validation.latencyRange | Die Latenz muss zwischen 22050 und 176400 Frames liegen. | The latency must be between 22050 and 176400 frames. |
+| settings.validation.latencyNumber | Gib die Latenz als ganze Zahl an Frames ein. | Enter the latency as a whole number of frames. |
 | settings.validation.stream | Der Stream-Typ ist Realtime oder Buffered. | The stream type is Realtime or Buffered. |
 | settings.appearance | Darstellung | Appearance |
 | settings.theme | Design | Theme |

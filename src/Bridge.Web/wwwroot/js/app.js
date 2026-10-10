@@ -117,6 +117,18 @@ export function preventKeys(element, keys) {
     };
 }
 
+/**
+ * Moves the focus out of element: blurs document.activeElement when it is element or inside it (the theme picker
+ * after a pointer selection or Escape, so :focus-within no longer keeps the pill unfolded). Does nothing otherwise.
+ * Chromium keeps the sequential focus starting point, so the next Tab still continues after the blurred control.
+ */
+export function blur(element) {
+    const active = document.activeElement;
+    if (element && active && active !== document.body && element.contains(active) && typeof active.blur === "function") {
+        active.blur();
+    }
+}
+
 const measured = new Map();
 
 /**

@@ -53,6 +53,7 @@
     "paused": "Atualizações ao vivo pausadas.",
     "pausedError": "Atualizações ao vivo pausadas: {{error}}",
     "retrying": "Nova tentativa em instantes.",
+    "closedByBridge": "O Bridge fechou a conexão.",
     "offline": "Sem conexão com o Bridge. As páginas mostram o último estado conhecido."
   },
   "pills": {
@@ -245,6 +246,7 @@
       "nameEmpty": "O nome do dispositivo está vazio.",
       "nameTooLong": "O nome do dispositivo tem mais de 64 caracteres.",
       "latencyRange": "A latência deve estar entre 22050 e 176400 quadros.",
+      "latencyNumber": "Digite a latência como um número inteiro de quadros.",
       "stream": "O tipo de stream é Realtime ou Buffered."
     },
     "appearance": "Aparência",

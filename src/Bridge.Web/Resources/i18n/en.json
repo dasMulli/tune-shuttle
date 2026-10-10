@@ -53,6 +53,7 @@
     "paused": "Live updates paused.",
     "pausedError": "Live updates paused: {{error}}",
     "retrying": "Retrying shortly.",
+    "closedByBridge": "The bridge closed the connection.",
     "offline": "No connection to the bridge. The pages show the last known state."
   },
   "pills": {
@@ -245,6 +246,7 @@
       "nameEmpty": "The device name is empty.",
       "nameTooLong": "The device name is longer than 64 characters.",
       "latencyRange": "The latency must be between 22050 and 176400 frames.",
+      "latencyNumber": "Enter the latency as a whole number of frames.",
       "stream": "The stream type is Realtime or Buffered."
     },
     "appearance": "Appearance",

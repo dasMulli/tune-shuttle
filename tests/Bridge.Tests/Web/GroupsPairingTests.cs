@@ -292,6 +292,7 @@ public sealed class GroupsPairingTests : ComponentTestBase
         var back = cut.Find("a.btn.btn--ghost");
         Assert.Equal("./", back.GetAttribute("href"));
         Assert.Contains("Back to the player", back.TextContent, StringComparison.Ordinal);
+        Assert.Contains("btn--back", back.ClassList);
     }
 
     [Fact]
@@ -625,6 +626,7 @@ public sealed class GroupsPairingTests : ComponentTestBase
         Assert.Equal("Not found", cut.Find("h1").TextContent);
         Assert.Equal("groups", cut.Find("a.btn.btn--ghost").GetAttribute("href"));
         Assert.Contains("Back to the groups", cut.Find("a.btn.btn--ghost").TextContent, StringComparison.Ordinal);
+        Assert.Contains("btn--back", cut.Find("a[href='groups']").ClassList);
     }
 
     [Fact]

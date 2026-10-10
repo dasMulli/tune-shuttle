@@ -177,7 +177,8 @@ public sealed partial class CatalogUsageTests
     /// </summary>
     private static string Strip(string text) => LineComment().Replace(BlockComment().Replace(text, string.Empty), string.Empty);
 
-    private static string WebRoot()
+    /// <summary>The <c>src/Bridge.Web</c> directory of the repository (also used by the other source checks).</summary>
+    internal static string WebRoot()
     {
         // The build output first (the usual layout), then this source file (an --artifacts-path build outside the tree).
         foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory(), Path.GetDirectoryName(ThisFile())! })

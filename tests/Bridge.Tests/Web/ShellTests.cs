@@ -171,11 +171,71 @@ public sealed class ShellTests : ComponentTestBase
             cut.WaitForAssertion(() => Assert.Single(module.Invocations["onOutsideClick"]));
             cut.Find(".theme-btn.is-active").Click(Pointer);
             Assert.Contains("theme-picker--open", cut.Find(".theme-picker").ClassList);
+            // The opening tap selects nothing and leaves the focus where it is (the pill is meant to stay open).
+            Assert.Empty(module.Invocations["blur"]);
 
             cut.Find(".theme-btn.is-active").KeyDown(Key.Escape);
             Assert.DoesNotContain("theme-picker--open", cut.Find(".theme-picker").ClassList);
             Assert.Equal("system", ThemeOf(cut));
             Assert.Empty(module.Invocations["setTheme"]);
+            // The focus leaves the group too, so :focus-within no longer unfolds the pill (REVIEW-1 finding 3).
+            Assert.Single(module.Invocations["blur"]);
+        }
+    }
+
+    [Fact]
+    public async Task Theme_picker_escape_with_the_mouse_layout_also_moves_the_focus_out()
+    {
+        var (ctx, _, _, _, module) = UiTest.Create("en", hoverCapable: true);
+        await using (ctx)
+        {
+            var cut = ctx.Render<ThemePicker>();
+            cut.WaitForAssertion(() => Assert.Single(module.Invocations["hoverCapable"]));
+
+            // A keyboard user tabbed in (focus-within unfolds the pill) and presses Escape: only a blur collapses it.
+            cut.Find(".theme-btn.is-active").KeyDown(Key.Escape);
+            Assert.Single(module.Invocations["blur"]);
+            Assert.Empty(module.Invocations["setTheme"]);
+        }
+    }
+
+    [Fact]
+    public async Task Theme_picker_moves_the_focus_out_after_a_pointer_selection_but_not_after_a_keyboard_one()
+    {
+        var (ctx, _, _, _, module) = UiTest.Create("en", hoverCapable: false);
+        await using (ctx)
+        {
+            var cut = ctx.Render<ThemePicker>();
+            cut.WaitForAssertion(() => Assert.Single(module.Invocations["onOutsideClick"]));
+
+            // Keyboard activation (detail 0) and arrow keys select and keep the focus on the radio.
+            cut.FindAll("button.theme-btn")[0].Click(KeyboardActivation);
+            cut.Find(".theme-btn.is-active").KeyDown(Key.Right);
+            Assert.Equal("dark", ThemeOf(cut));
+            Assert.Empty(module.Invocations["blur"]);
+
+            // Touch: open, then select with a tap; Chromium focused the tapped button, so the picker blurs it.
+            cut.Find(".theme-btn.is-active").Click(Pointer);
+            Assert.Empty(module.Invocations["blur"]);
+            cut.FindAll("button.theme-btn")[2].Click(Pointer);
+            Assert.Equal("system", ThemeOf(cut));
+            Assert.DoesNotContain("theme-picker--open", cut.Find(".theme-picker").ClassList);
+            Assert.Single(module.Invocations["blur"]);
+        }
+    }
+
+    [Fact]
+    public async Task Theme_picker_with_a_mouse_moves_the_focus_out_after_a_click()
+    {
+        var (ctx, _, _, _, module) = UiTest.Create("en", hoverCapable: true);
+        await using (ctx)
+        {
+            var cut = ctx.Render<ThemePicker>();
+            cut.WaitForAssertion(() => Assert.Single(module.Invocations["hoverCapable"]));
+
+            cut.FindAll("button.theme-btn")[1].Click(Pointer);
+            Assert.Equal("dark", ThemeOf(cut));
+            Assert.Single(module.Invocations["blur"]);
         }
     }
 
@@ -350,8 +410,10 @@ public sealed class ShellTests : ComponentTestBase
     [InlineData("en", EventConnectionState.Disconnected, "Stopped.", false, "status status--error", "offline", "No connection to the bridge: Stopped.")]
     [InlineData("de", EventConnectionState.Connecting, null, false, "status status--connecting", "verbinde…", "Verbinde mit der Bridge für Live-Updates")]
     [InlineData("de", EventConnectionState.Connected, null, false, "status status--live", "live", "Live-Updates sind aktiv")]
-    [InlineData("de", EventConnectionState.Disconnected, "The socket closed.", true, "status status--paused", "pausiert", "Live-Updates pausiert: The socket closed. Es wird gleich erneut versucht.")]
-    [InlineData("de", EventConnectionState.Disconnected, "Stopped.", false, "status status--error", "offline", "Keine Verbindung zur Bridge: Stopped.")]
+    [InlineData("de", EventConnectionState.Disconnected, "The socket closed.", true, "status status--paused", "pausiert", "Live-Updates pausiert. Es wird gleich erneut versucht.")]
+    [InlineData("de", EventConnectionState.Disconnected, "Stopped.", false, "status status--error", "offline", "Keine Verbindung zur Bridge. Die Seiten zeigen den letzten bekannten Stand.")]
+    [InlineData("de", EventConnectionState.Disconnected, "The bridge closed the connection.", true, "status status--paused", "pausiert", "Live-Updates pausiert: Die Bridge hat die Verbindung geschlossen. Es wird gleich erneut versucht.")]
+    [InlineData("en", EventConnectionState.Disconnected, "The bridge closed the connection.", true, "status status--paused", "paused", "Live updates paused: The bridge closed the connection. Retrying shortly.")]
     public async Task Status_pill_maps_the_connection_to_class_text_and_title(string lang, EventConnectionState connection, string? error, bool retry, string css, string text, string title)
     {
         var (ctx, state, _, _, _) = UiTest.Create(lang);
@@ -446,6 +508,32 @@ public sealed class ShellTests : ComponentTestBase
             Assert.Equal("Keine Verbindung zur Bridge. Die Seiten zeigen den letzten bekannten Stand.", cut.Find(".banner__text").TextContent);
             Assert.Equal("Neu laden", cut.Find("button").TextContent);
         }
+    }
+
+    [Fact]
+    public async Task Connection_banner_never_shows_the_clients_english_in_another_language()
+    {
+        var (ctx, state, _, _, _) = UiTest.Create("de");
+        await using (ctx)
+        {
+            // The event client's own sentence comes from the catalog (UI-SPEC 3.5: only service text stays English).
+            state.SetConnection(EventConnectionState.Disconnected, ConnectionError.ClosedByBridge, DateTimeOffset.UnixEpoch);
+            var cut = ctx.Render<ConnectionBanner>();
+            Assert.Equal("Live-Updates pausiert: Die Bridge hat die Verbindung geschlossen. Es wird gleich erneut versucht.", cut.Find(".banner__text").TextContent);
+
+            // A runtime exception message is English that no catalog holds: left out, the error-free sentence stays.
+            state.SetConnection(EventConnectionState.Disconnected, "Unable to connect to the remote server.", DateTimeOffset.UnixEpoch);
+            cut.WaitForAssertion(() => Assert.Equal("Live-Updates pausiert. Es wird gleich erneut versucht.", cut.Find(".banner__text").TextContent));
+            Assert.DoesNotContain("Unable", cut.Markup, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Closed_by_bridge_sentence_is_the_one_the_event_client_writes()
+    {
+        // BridgeEventClient stays unchanged (UI-SPEC 8), so ConnectionError matches its literal: keep the two in step.
+        var source = File.ReadAllText(Path.Combine(CatalogUsageTests.WebRoot(), "BridgeEventClient.cs"));
+        Assert.Contains("error = \"" + ConnectionError.ClosedByBridge + "\";", source, StringComparison.Ordinal);
     }
 
     // ---- toasts -----------------------------------------------------------------------------------------------------
@@ -645,7 +733,11 @@ public sealed class ShellTests : ComponentTestBase
             cut.WaitForAssertion(() => Assert.Equal("Nicht gefunden", cut.Find("main.main h1").TextContent));
             Assert.Equal("Unter dieser Adresse gibt es nichts.", cut.Find("main.main h1 + p").TextContent);
             var back = cut.Find("main.main a[href='./']");
-            Assert.Equal("Player", back.TextContent);
+            // Rendered like every other back link (1.5 .btn--back): a hidden ← glyph, then nav.backToPlayer.
+            Assert.Equal("← Zurück zum Player", back.TextContent);
+            Assert.Equal("true", back.QuerySelector("span")!.GetAttribute("aria-hidden"));
+            // The page's only action is a 44px button-styled link on phones (5.4); the audit cannot reach this page (5.6).
+            Assert.Equal(["btn", "btn--ghost", "btn--back"], back.ClassList);
             Assert.NotNull(cut.Find("header.topbar"));
             // No tab is active on an unknown address.
             Assert.Empty(cut.FindAll("nav.tabs a[aria-current]"));

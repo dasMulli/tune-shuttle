@@ -236,41 +236,51 @@
                     <p class="meta output__none" role="status">Nothing selected: audio is discarded. Choose a receiver or a group.</p>
                     <fieldset class="output__list">
                         <legend class="visually-hidden">Choose the output</legend>
-                        <label class="row is-active">
-                            <input type="radio" name="sg-output" class="visually-hidden" checked />
-                            <span class="radio is-on" aria-hidden="true"></span>
-                            <span class="row__main"><strong>Downstairs</strong><span class="meta only-wide">Group · Test Speaker ABCD, Office</span><span class="meta only-phone">Test Speaker ABCD, Office</span></span>
-                            <span class="pill pill--ok">playing</span>
-                            <a class="btn btn--sm" href="_styleguide" aria-label="Edit group Downstairs">Edit</a>
-                        </label>
-                        <label class="row">
-                            <input type="radio" name="sg-output" class="visually-hidden" />
-                            <span class="radio" aria-hidden="true"></span>
-                            <span class="row__main"><strong>Upstairs</strong><span class="meta only-wide">Group · Living room TV</span><span class="meta only-phone">Living room TV</span></span>
-                            <span class="pill pill--warn">PIN needed</span>
-                            <a class="btn btn--sm" href="_styleguide" aria-label="Edit group Upstairs">Edit</a>
-                        </label>
-                        <label class="row is-quiet">
-                            <input type="radio" name="sg-output" class="visually-hidden" />
-                            <span class="radio" aria-hidden="true"></span>
-                            <span class="row__main"><strong>Test Speaker ABCD</strong><span class="meta only-wide">Speaker · 192.0.2.26</span><span class="meta only-phone">Speaker</span></span>
-                            <span class="pill pill--ok">online</span>
+                        <div class="row row--choice is-active">
+                            <label class="row__label">
+                                <input type="radio" name="sg-output" class="visually-hidden" checked />
+                                <span class="radio is-on" aria-hidden="true"></span>
+                                <span class="row__main"><strong>Downstairs</strong><span class="meta only-wide">Group · Test Speaker ABCD, Office</span><span class="meta only-phone">Test Speaker ABCD, Office</span></span>
+                                <span class="pill pill--ok">playing</span>
+                            </label>
+                            <a class="btn btn--sm only-wide" href="_styleguide" aria-label="Edit group Downstairs">Edit</a>
+                        </div>
+                        <div class="row row--choice">
+                            <label class="row__label">
+                                <input type="radio" name="sg-output" class="visually-hidden" />
+                                <span class="radio" aria-hidden="true"></span>
+                                <span class="row__main"><strong>Upstairs</strong><span class="meta only-wide">Group · Living room TV</span><span class="meta only-phone">Living room TV</span></span>
+                                <span class="pill pill--warn">PIN needed</span>
+                            </label>
+                            <a class="btn btn--sm only-wide" href="_styleguide" aria-label="Edit group Upstairs">Edit</a>
+                        </div>
+                        <div class="row row--choice is-quiet">
+                            <label class="row__label">
+                                <input type="radio" name="sg-output" class="visually-hidden" />
+                                <span class="radio" aria-hidden="true"></span>
+                                <span class="row__main"><strong>Test Speaker ABCD</strong><span class="meta only-wide">Speaker · 192.0.2.26</span><span class="meta only-phone">Speaker</span></span>
+                                <span class="pill pill--ok">online</span>
+                            </label>
                             <LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Volume of Test Speaker ABCD" HideLabel="true" Value="40" Send="SendAsync" />
-                        </label>
-                        <label class="row is-quiet">
-                            <input type="radio" name="sg-output" class="visually-hidden" disabled />
-                            <span class="radio" aria-hidden="true"></span>
-                            <span class="row__main"><strong>Kitchen (offline)</strong><span class="meta only-wide">Apple receiver · 192.0.2.98</span><span class="meta only-phone">Apple receiver</span></span>
-                            <span class="pill">offline</span>
+                        </div>
+                        <div class="row row--choice is-quiet">
+                            <label class="row__label">
+                                <input type="radio" name="sg-output" class="visually-hidden" disabled />
+                                <span class="radio" aria-hidden="true"></span>
+                                <span class="row__main"><strong>Kitchen (offline)</strong><span class="meta only-wide">Apple receiver · 192.0.2.98</span><span class="meta only-phone">Apple receiver</span></span>
+                                <span class="pill">offline</span>
+                            </label>
                             <LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Volume of Kitchen" HideLabel="true" Value="24" Disabled="true" Send="SendAsync" />
-                        </label>
-                        <label class="row">
-                            <input type="radio" name="sg-output" class="visually-hidden" disabled />
-                            <span class="radio" aria-hidden="true"></span>
-                            <span class="row__main"><strong>Living room TV</strong><span class="meta only-wide">LG TVMODEL0000 · 198.51.100.200</span><span class="meta only-phone">LG TVMODEL0000</span></span>
-                            <span class="pill pill--warn">PIN needed</span>
+                        </div>
+                        <div class="row row--choice">
+                            <label class="row__label">
+                                <input type="radio" name="sg-output" class="visually-hidden" disabled />
+                                <span class="radio" aria-hidden="true"></span>
+                                <span class="row__main"><strong>Living room TV</strong><span class="meta only-wide">LG TVMODEL0000 · 198.51.100.200</span><span class="meta only-phone">LG TVMODEL0000</span></span>
+                                <span class="pill pill--warn">PIN needed</span>
+                            </label>
                             <button type="button" class="btn btn--ghost btn--sm">Pair</button>
-                        </label>
+                        </div>
                     </fieldset>
                 </section>
 

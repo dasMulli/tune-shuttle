@@ -41,9 +41,9 @@
         _ => L["status.offline"],
     };
 
-    // The titles of paused/offline embed the error; without one (rare: the state before the first attempt) the
+    // The titles of paused/offline embed the error (ConnectionError: catalogued or English-only); without one the
     // banner's error-less sentences say the same thing without a dangling colon.
-    private string Title => (Current, State.ConnectionError) switch
+    private string Title => (Current, ConnectionError.Text(State.ConnectionError, L)) switch
     {
         (Kind.Live, _) => L["status.title.live"],
         (Kind.Connecting, _) => L["status.title.connecting"],

@@ -147,7 +147,7 @@ internal static class UiTest
     /// <summary>
     /// Mocks the <c>./js/app.js</c> module of <see cref="BrowserBridge"/>: <c>getTheme</c> answers "system",
     /// <c>hoverCapable</c> <paramref name="hoverCapable"/>, <c>getLang</c> <paramref name="lang"/>, <c>audit</c> "{}";
-    /// <c>setTheme</c>, <c>setLang</c>, <c>setDocumentLang</c>, <c>measure</c> complete at once and are recorded; <c>onOutsideClick</c> and
+    /// <c>setTheme</c>, <c>setLang</c>, <c>setDocumentLang</c>, <c>measure</c>, <c>blur</c> complete at once and are recorded; <c>onOutsideClick</c> and
     /// <c>rememberActive</c> answer nested module mocks with <c>dispose</c> / <c>restore</c>. Also serves
     /// <c>ElementReference.FocusAsync</c> (<c>Blazor._internal.domWrapper.focus</c>). Every call is recorded in the
     /// returned module's <c>Invocations</c> (nested handles record in their own).
@@ -163,6 +163,7 @@ internal static class UiTest
         module.SetupVoid("setLang", _ => true).SetVoidResult();
         module.SetupVoid("setDocumentLang", _ => true).SetVoidResult();
         module.SetupVoid("measure", _ => true).SetVoidResult();
+        module.SetupVoid("blur", _ => true).SetVoidResult();
         module.SetupModule(invocation => invocation.Identifier == "onOutsideClick").SetupVoid("dispose").SetVoidResult();
         module.SetupModule(invocation => invocation.Identifier == "rememberActive").SetupVoid("restore").SetVoidResult();
         module.Setup<string>("audit").SetResult("{}");

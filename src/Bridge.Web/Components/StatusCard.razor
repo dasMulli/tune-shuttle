@@ -24,11 +24,11 @@
         { SpotifyConnected: true } => ("fact__value text-ok", L["player.connected"]),
         _ => ("fact__value text-muted", L["player.notConnected"]),
     };
-    var (liveClass, liveText) = State.Connection switch
+    var (liveClass, liveText) = StatusPill.KindOf(State) switch
     {
-        EventConnectionState.Connected => ("fact__value text-ok", L["status.live"]),
-        EventConnectionState.Connecting => ("fact__value text-accent", L["status.connecting"]),
-        _ when State.NextAttemptAt is not null => ("fact__value text-warn", L["status.paused"]),
+        StatusPill.Kind.Live => ("fact__value text-ok", L["status.live"]),
+        StatusPill.Kind.Connecting => ("fact__value text-accent", L["status.connecting"]),
+        StatusPill.Kind.Paused => ("fact__value text-warn", L["status.paused"]),
         _ => ("fact__value text-err", L["status.offline"]),
     };
 }

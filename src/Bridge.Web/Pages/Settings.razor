@@ -49,9 +49,17 @@
 
             <div class="field">
                 <label for="latency">@L["settings.latency"]</label>
+                @* InputNumber checks the parse itself, before any attribute runs: an empty field or "1e" stores
+                   ParsingErrorMessage. That message is the catalog key (no {0}, so string.Format keeps it as is) and is
+                   rendered through L[…] here, so it never shows the C# property name and follows a language switch. The
+                   attribute messages are already text (SettingsModel.CatalogMessage) and pass L[…] unchanged. *@
                 <InputNumber id="latency" class="input" @bind-Value="_model.LatencyFrames" inputmode="numeric"
+                             ParsingErrorMessage="settings.validation.latencyNumber"
                              min="@SettingsModel.MinLatencyFrames" max="@SettingsModel.MaxLatencyFrames" step="441" aria-describedby="latency-hint" />
-                <ValidationMessage For="() => _model.LatencyFrames" role="alert" />
+                @foreach (var message in _editContext.GetValidationMessages(() => _model.LatencyFrames))
+                {
+                    <div class="validation-message" role="alert">@L[message]</div>
+                }
                 <p class="hint" id="latency-hint">
                     @L.Format("settings.latencyHint",
                         ("ms", Format.Milliseconds(_model.LatencyFrames)),
@@ -78,7 +86,7 @@
                     <InputCheckbox id="poll" @bind-Value="_model.PollReceiverVolume" aria-describedby="poll-hint" />
                     <span>@L["settings.poll"]</span>
                 </label>
-                <p class="hint" id="poll-hint" style="padding-inline-start: calc(18px + .6rem)">@L["settings.pollHint"]</p>
+                <p class="hint hint--check" id="poll-hint">@L["settings.pollHint"]</p>
             </div>
 
             <div class="actions">
@@ -177,6 +185,10 @@
     {
         _disposed = true;
         Browser.ThemeChanged -= OnThemeChanged;
+        if (_editContext is not null)
+        {
+            _editContext.OnValidationStateChanged -= OnValidationStateChanged;
+        }
     }
 
     private void OnThemeChanged(string theme)
@@ -253,9 +265,18 @@
         try
         {
             _model = SettingsModel.From(await Commands.Api.GetSettingsAsync(Lifetime));
+            if (_editContext is not null)
+            {
+                // Retry and Reset replace the context: keep exactly one handler attached, like Browser.ThemeChanged.
+                _editContext.OnValidationStateChanged -= OnValidationStateChanged;
+            }
+
             _editContext = new EditContext(_model);
+            // The latency messages are rendered by this page (see the field), and a failed parse changes only the
+            // validation state, not the model: re-render on every validation change.
+            _editContext.OnValidationStateChanged += OnValidationStateChanged;
         }
-        catch (Exception ex) when (ex is BridgeApiException or HttpRequestException or System.Text.Json.JsonException)
+        catch (Exception ex) when (BridgeCommands.IsFailure(ex, Lifetime))
         {
             _loadError = BridgeCommands.Describe(ex, L);
         }
@@ -265,6 +286,13 @@
         }
     }
 
+    private void OnValidationStateChanged(object? sender, ValidationStateChangedEventArgs e)
+    {
+        if (!_disposed)
+        {
+            StateHasChanged();
+        }
+    }
 
     private async Task SaveAsync()
     {

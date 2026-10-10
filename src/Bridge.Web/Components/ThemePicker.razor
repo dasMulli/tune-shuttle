@@ -3,7 +3,9 @@
    unfolds it (CSS). Keyboard: one Tab stop (roving tabindex on the checked button), arrows/Home/End move focus and
    selection, Escape collapses. Touch (no hover): the first pointer tap opens the pill (theme-picker--open) instead of
    selecting, the next tap selects; a document click outside (BrowserBridge.OnOutsideClickAsync, a bubbling click
-   listener) or Escape collapses it. Selecting stores and applies the choice through BrowserBridge.SetThemeAsync; a choice
+   listener) or Escape collapses it. A pointer selection and Escape also move the focus out of the pill
+   (BrowserBridge.BlurAsync), since Chromium focuses a tapped button and focus-within would keep it unfolded.
+   Selecting stores and applies the choice through BrowserBridge.SetThemeAsync; a choice
    made elsewhere (the Settings Appearance card) arrives through BrowserBridge.ThemeChanged. The navigation keys are
    kept from scrolling the page (BrowserBridge.PreventKeysAsync). *@
 @inherits BridgeComponentBase
@@ -198,13 +200,21 @@
         }
 
         await SelectAsync(theme);
+        if (e.Detail != 0)
+        {
+            // Chromium focuses a clicked button, and :focus-within would keep the pill unfolded until the next tap
+            // elsewhere: a pointer selection moves the focus out. A keyboard selection keeps it on the radio.
+            await LeaveAsync();
+        }
     }
 
     private async Task OnKeyDownAsync(KeyboardEventArgs e)
     {
         if (e.Key == "Escape")
         {
+            // Collapse: the open class goes, and so does the focus that would keep the pill unfolded (:focus-within).
             _open = false;
+            await LeaveAsync();
             return;
         }
 
@@ -246,6 +256,23 @@
         catch (JSException)
         {
             // Applying failed (no module); the picker shows the choice, the page keeps its scheme.
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+    }
+
+    /// <summary>Moves the focus out of the picker (BrowserBridge.BlurAsync), so the CSS collapses it.</summary>
+    private async Task LeaveAsync()
+    {
+        try
+        {
+            await Browser.BlurAsync(_picker);
+        }
+        catch (JSException)
+        {
+            // A module without the export (a cached older app.js): the pill collapses on the next tap elsewhere.
         }
         catch (JSDisconnectedException)
         {

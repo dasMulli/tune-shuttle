@@ -2,12 +2,16 @@
    aria-current="page" while the current address belongs to its section. A section is its own path plus everything
    under it ("settings" covers /settings/diagnostics) and the extra prefixes of Also (the Player tab also owns
    /groups*). The empty Href is the Player at the app's root. *@
+@using Microsoft.Extensions.Logging
 @implements IDisposable
 @inject NavigationManager Navigation
+@inject ILogger<TabLink> Logger
 
 <a href="@(Href.Length == 0 ? "./" : Href)" class="@(IsActive ? "active" : null)" aria-current="@(IsActive ? "page" : null)">@ChildContent</a>
 
 @code {
+    private bool _disposed;
+
     /// <summary>The section's base-relative path without slashes: <c>""</c> (the Player), <c>"receivers"</c>, <c>"settings"</c>.</summary>
     [Parameter, EditorRequired]
     public string Href { get; set; } = "";
@@ -24,7 +28,11 @@
     public bool IsActive => IsInSection(CurrentPath(), Href, Also);
 
     /// <inheritdoc />
-    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+    public void Dispose()
+    {
+        _disposed = true;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
 
     /// <inheritdoc />
     protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
@@ -50,5 +58,32 @@
         return (end >= 0 ? path[..end] : path).Trim('/');
     }
 
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => _ = InvokeAsync(StateHasChanged);
+    // Guarded and observed like LanguageSelect.OnLanguageChanged: a navigation that races the layout's teardown (the
+    // Router swaps it at every found/not-found switch) is not an error, anything else is logged instead of being dropped.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var refresh = InvokeAsync(StateHasChanged);
+        if (refresh.IsCompletedSuccessfully)
+        {
+            return;
+        }
+
+        _ = refresh.ContinueWith(
+            static (t, state) =>
+            {
+                if (t.Exception?.GetBaseException() is { } ex and not (OperationCanceledException or ObjectDisposedException))
+                {
+                    ((ILogger)state!).LogError(ex, "Re-rendering a tab link after a navigation failed");
+                }
+            },
+            Logger,
+            CancellationToken.None,
+            TaskContinuationOptions.NotOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
 }

@@ -1,7 +1,7 @@
 # Review 1: web app redesign (variant C), waves 0–3
 
-Package `review-1` (wave 4, WORK-PLAN 4). Report only: no code was changed. The `fix-1` package works through the
-findings below and marks each one **fixed** or **deferred (reason)** in place.
+Package `review-1` (wave 4, WORK-PLAN 4). Report only: no code was changed. The `fix-1` package worked through the
+findings below and marked each one **fixed** or **deferred (reason)** in place (the "Status (fix-1)" lines).
 
 ## What was run
 
@@ -26,6 +26,8 @@ There are no blockers.
 
 ### 1. Clearing the latency field shows an English message with a C# property name (major)
 
+- **Status (fix-1):** **fixed.** New key settings.validation.latencyNumber in all seven catalogs ("Enter the latency as a whole number of frames."); `InputNumber` gets it as `ParsingErrorMessage` (no `{0}`), and `Settings.razor` renders the latency messages itself as `L[message]` (re-rendering on `OnValidationStateChanged`), so the text follows a language switch. Test `SettingsDiagnosticsTests.Clearing_the_latency_shows_the_catalog_text_not_the_property_name` (de, "" and "1e", submit blocked, switch to en, a number clears it). UI-SPEC 4.6 and 10 updated.
+
 - **Where:** `src/Bridge.Web/Pages/Settings.razor:52` (`<InputNumber id="latency" …>`)
 - **Spec:** WORK-PLAN 1 ("every string a user sees comes from the catalog"), UI-SPEC 4.6 (validation messages come from the catalog), 3.5.
 - **What is wrong:** `InputNumber<int>` has a parsing check of its own. When the field is empty or holds text that is not
@@ -41,6 +43,8 @@ There are no blockers.
 
 ### 2. Phone Output rows show the group's Edit button, which UI-SPEC 5.3 and the phone mockup leave out (minor, mobile UX)
 
+- **Status (fix-1):** **fixed.** The group Edit link carries `only-wide`; the PIN receiver's player.pair button stays on phones. `PlayerTests.Group_rows_show_members_and_an_edit_link_…` asserts the class; UI-SPEC 4.3 and 5.3 list the phone row.
+
 - **Where:** `src/Bridge.Web/Components/OutputList.razor:89` (group row `a.btn.btn--sm` player.edit). Screenshots
   `player-390x844-*-*.png`, `extra/hero/hero-390x844-light-en.png`.
 - **Spec:** 5.3, Output card row: "rows: radio, name + `.meta.only-phone`, pill (compact slider hidden); head
@@ -53,6 +57,8 @@ There are no blockers.
   the Player. Add it to the 5.3 row list in the spec. Update `PlayerTests` if a test counts Edit links.
 
 ### 3. The theme picker stays unfolded after a pointer selection, and Escape has no visible effect while focus is inside (minor, mobile UX)
+
+- **Status (fix-1):** **fixed (required part); optional refinement deferred.** New `app.js` export `blur(element)` and `BrowserBridge.BlurAsync`; the picker blurs after a pointer selection (`e.Detail != 0`, any device) and after Escape, never after a keyboard selection or the opening tap. Tests: the Escape test now asserts the `blur` call, plus `Theme_picker_escape_with_the_mouse_layout_also_moves_the_focus_out`, `Theme_picker_moves_the_focus_out_after_a_pointer_selection_but_not_after_a_keyboard_one`, `Theme_picker_with_a_mouse_moves_the_focus_out_after_a_click`. Deferred: `:has(:focus-visible)` in the collapse rule, because an engine without `:has()` would drop the whole rule and never collapse the pill, and the blur already covers both cases (UI-SPEC 2.4 says so). review-2's emulated-touch pass should confirm the collapse.
 
 - **Where:** `src/Bridge.Web/wwwroot/css/app.css:260-265` (`.theme-picker:not(:hover):not(:focus-within):not(.theme-picker--open) …`),
   `src/Bridge.Web/Components/ThemePicker.razor:203-209` (Escape only clears `_open`).
@@ -79,6 +85,8 @@ There are no blockers.
 
 ### 4. Output rows put a button, a range input and an `<output>` inside a `<label>` (minor, a11y and HTML validity)
 
+- **Status (fix-1):** **fixed.** Each Output row is a `div.row.row--choice` with a `label.row__label` (radio, glyph, name, meta, pill) that fills the row's height; the Edit link, the compact slider and the Pair button are siblings of the label. The `display: contents` span and its `@onclick:preventDefault` are gone. `PlayerTests.Output_rows_keep_their_other_controls_outside_the_label` replaces the old click-workaround test; `/_styleguide` uses the same markup. UI-SPEC 1.5 and 4.3 updated.
+
 - **Where:** `src/Bridge.Web/Components/OutputList.razor:102-139` (receiver row `label.row` containing `.row__level` with
   `LevelSlider` or the Pair `<button>`); group rows (`:68-90`) contain only an `<a>`, which is allowed.
 - **Spec:** 4.3 (rows are labels wrapping the radio), 6.1 (real semantic controls).
@@ -91,6 +99,8 @@ There are no blockers.
   `.row.is-active` and `.is-quiet` stay on the `div`. If fix-1 defers this, write the exception into UI-SPEC 4.3.
 
 ### 5. Client-side English error text appears in the banner and the status title (minor, i18n)
+
+- **Status (fix-1):** **fixed (options a + b).** `Components/ConnectionError.cs`: the client's known sentence maps to the new key banner.closedByBridge; any other client/runtime text is shown only in English and left out in every other language (the error-free sentences are used). Used by `ConnectionBanner` and `StatusPill`; `BridgeEventClient` is unchanged. Tests: `ShellTests.Connection_banner_never_shows_the_clients_english_in_another_language`, `Closed_by_bridge_sentence_is_the_one_the_event_client_writes` (source check of the literal), new/changed `Status_pill_maps_…` rows. Rule written into UI-SPEC 3.5 (and 4.10, 7).
 
 - **Where:** `src/Bridge.Web/BridgeEventClient.cs:194` (`error = "The bridge closed the connection."`) and `:202/:208`
   (`ex.Message` of `WebSocketException`). The text reaches `ConnectionBanner` as banner.pausedError and
@@ -106,6 +116,8 @@ There are no blockers.
 
 ### 6. The phone members chip stretches across the whole card (nit, mockup fidelity)
 
+- **Status (fix-1):** **fixed.** `.chip--members { align-self: center }` (UI-SPEC 1.5).
+
 - **Where:** `src/Bridge.Web/wwwroot/css/app.css:408-415` (`.chip--members`), rendered at `MasterVolume.razor:51`.
   Screenshots `player-390x844-*`, `extra/hero/hero-390x844-light-en.png` against `mockups/variant-c-phone-light-en.png`.
 - **Spec:** 4.3 / 1.5 (`.chip--members`), phone mockup (the chip is a centred pill as wide as its text).
@@ -113,6 +125,8 @@ There are no blockers.
 - **Expected fix:** add `align-self: center` to `.chip--members`. It keeps `max-width: 100%`, so long names still wrap.
 
 ### 7. With no output, the master number shows "–" in large accent ink, and it looks like a third stepper (nit)
+
+- **Status (fix-1):** **fixed.** `.level.is-disabled output.big { color: var(--muted) }` (UI-SPEC 1.5, 4.3).
 
 - **Where:** `src/Bridge.Web/Components/MasterVolume.razor:26,56` and `app.css:681`. Screenshot
   `nooutput/player-390x844-light-en.png`, right of the "+" button.
@@ -124,6 +138,8 @@ There are no blockers.
 
 ### 8. Back links (`.btn.btn--ghost` with ←) are indented against the `<h1>` (nit)
 
+- **Status (fix-1):** **fixed.** `.btn--back` (`margin-inline-start: -.9rem`, `-.75rem` on phones so the box stays inside the viewport; `margin-block: -.4rem` on touch) on Groups, GroupEditor and Diagnostics (UI-SPEC 1.5, 4.5, 4.7, 5.3).
+
 - **Where:** `Pages/Groups.razor:12`, `Pages/GroupEditor.razor:17`, `Pages/Diagnostics.razor:12`. Screenshots
   `groups-390x844-*`, `settings-diagnostics-*`.
 - **Spec:** 4.5 / 4.7 (a back link at the top). The mockups do not draw it.
@@ -133,6 +149,8 @@ There are no blockers.
   link does not add height above the heading), used by the three pages.
 
 ### 9. Spec fix: landscape phones get the tablet shell, not the phone shell (minor, spec)
+
+- **Status (fix-1):** **fixed (spec).** UI-SPEC 5.1 now describes the tablet shell for landscape phones and lists every `(max-height: 500px)` rule (`.play` 48px ≥ 44px).
 
 - **Where:** `UI-SPEC.md` 5.1 (the last paragraph: "Landscape phones (844×390) get the phone shell (width rules) with the tab
   bar") against `app.css:990-1006` and `extra/player-844x390-light-en.png`.
@@ -145,6 +163,8 @@ There are no blockers.
 
 ### 10. Spec fix: `.btn--sm` gets a 44px box on touch instead of the `::before` hit area (nit, spec)
 
+- **Status (fix-1):** **fixed (spec).** UI-SPEC 1.5 and 5.4 describe the 44 × 44 box and the negative block margin, and why a `::before` area would fail the audit.
+
 - **Where:** `app.css:1017-1021` against UI-SPEC 5.4 ("`.btn--sm` keeps its 30px box and grows a centred `::before` hit area").
 - **What is wrong:** The spec contradicts itself. 5.6's audit measures `getBoundingClientRect()` of the element, which never
   counts a pseudo-element, so the `::before` approach would fail the audit. The implementation grows the box to
@@ -153,11 +173,15 @@ There are no blockers.
 
 ### 11. Spec fix: the master `.step` is 40px in 5.3 but 44px in 5.4 (nit, spec)
 
+- **Status (fix-1):** **fixed (spec).** UI-SPEC 5.3 master row: `.step` 44px.
+
 - **Where:** UI-SPEC 5.3 table ("master row `.step` 40px") against 5.4 (`.step` min 44px) and `app.css:1012-1014`.
 - **What is wrong:** The 44px rule wins, which is correct for touch. Only the 5.3 table is wrong.
 - **Expected fix:** change the 5.3 table to 44px.
 
 ### 12. Spec fix: Status card columns between 700 and 1023px (nit, spec)
+
+- **Status (fix-1):** **fixed (code + spec).** ≥ 1024px is now `repeat(2, minmax(0, 1fr))` (2 × 2, no fact alone in the half-width column); 700–1023 stays auto-fit (four in one row). UI-SPEC 4.3, 5.1 (table and text) updated.
 
 - **Where:** UI-SPEC 4.3 ("three (≥ 1024px) / two (700–1023) / one column") and 5.1 ("700–1023px gets … two columns
   through plain `repeat(auto-fit, minmax(10rem, 1fr))`"), against `app.css:742` and `player-768x1024-*.png`.
@@ -169,6 +193,8 @@ There are no blockers.
 
 ### 13. Phone overrides that are not in the "complete list" of UI-SPEC 5.3 (nit, spec)
 
+- **Status (fix-1):** **fixed (spec).** UI-SPEC 5.3 lists `.hero__artist`, the centred `.master__head`, `.row .level--compact` 120px and the stacked `.facts` (plus `.btn--back`).
+
 - **Where:** `app.css:917` (`.hero__artist` muted .78rem), `:920` (`.master__head` centred), `:932` (`.row .level--compact`
   120px for the group editor members), `:937-940` (`.facts` stacked label-over-value on phones).
 - **Spec:** 5.3 calls its table "the complete list".
@@ -178,6 +204,8 @@ There are no blockers.
 
 ### 14. The live pulse keeps the static halo under the animated ring (nit, spec)
 
+- **Status (fix-1):** **fixed (spec).** UI-SPEC 7 describes the layered keyframes.
+
 - **Where:** `app.css:301-305` against UI-SPEC 7 ("while it runs the animated `box-shadow` replaces the base rule's static
   halo").
 - **What is wrong:** The keyframes layer the 3px static halo under the growing ring, so the first frame of a screenshot
@@ -185,6 +213,8 @@ There are no blockers.
 - **Expected fix:** change the spec text in 7 to describe the layered keyframes.
 
 ### 15. The Status card's Output fact can also say "connecting…" or "error" (nit, spec)
+
+- **Status (fix-1):** **fixed (spec).** UI-SPEC 4.3 lists the connecting… / error states of the Output fact and names the test.
 
 - **Where:** `Components/StatusCard.razor:14-20` against UI-SPEC 4.3 (player.outputConnected / player.outputNone only).
 - **What is wrong:** When an output is selected but not connected, the fact shows pills.connecting (accent) or
@@ -194,11 +224,15 @@ There are no blockers.
 
 ### 16. The Connect button's title for a HomeKit-only receiver uses pills.title.homekitOnly (nit, spec)
 
+- **Status (fix-1):** **fixed (spec).** UI-SPEC 4.4 lists pills.title.homekitOnly as the third title.
+
 - **Where:** `Pages/Receivers.razor:213-221` against UI-SPEC 4.4 (only receivers.connectTitle / receivers.offlineTitle).
 - **What is wrong:** A sensible addition that the spec does not list.
 - **Expected fix:** add it to 4.4.
 
 ### 17. `Pages/NotFound.razor` is missing from the file map (nit, spec)
+
+- **Status (fix-1):** **fixed (spec).** UI-SPEC 4.1 describes `Pages/NotFound.razor`; section 9 lists it (and `Components/ConnectionError.cs`).
 
 - **Where:** UI-SPEC 4.1 ("`App.razor` NotFound: `<h1>` … inside MainLayout") and 9.
 - **What is wrong:** The not-found content lives in its own route-less component. It focuses its own `<h1>`, writes its own title
@@ -207,6 +241,8 @@ There are no blockers.
 
 ### 18. The log level select on Diagnostics is larger than the buttons beside it (nit)
 
+- **Status (fix-1):** **fixed.** `.input--sm` (`.85rem`, 32px, `padding-block: .3rem`) on the log level select; the touch block keeps 44px and 16px (UI-SPEC 1.5, 4.7).
+
 - **Where:** `Pages/Diagnostics.razor:119-131`. Screenshot `settings-diagnostics-1280x900-*`.
 - **What is wrong:** The `select.input` (16px text, 40px tall, 44px on touch) sits next to two `.btn--sm` ghost buttons
   (.78rem). The head row looks uneven on desktop.
@@ -214,6 +250,8 @@ There are no blockers.
   44px and 16px.
 
 ### 19. Spec fix: a busy Output row keeps its radio enabled (minor, spec)
+
+- **Status (fix-1):** **fixed (spec only, code unchanged as asked).** UI-SPEC 4.3 now says: the row carries `aria-busy`, the pill shows pills.connecting, a repeated check is ignored, the radio stays enabled so keyboard focus is kept.
 
 - **Where:** `src/Bridge.Web/Components/OutputList.razor:69` (the group row radio has no busy condition in `disabled`;
   the row carries `aria-busy` and `ActivateAsync` ignores a repeat), the receiver rows likewise, against UI-SPEC 4.3
@@ -227,6 +265,8 @@ There are no blockers.
   focus is kept."
 
 ### 20. A request timeout on Settings and Diagnostics shows the unhandled-error strip instead of the retry state (minor)
+
+- **Status (fix-1):** **fixed.** `BridgeCommands.IsFailure` is `internal static` and is the catch filter of `Settings.LoadAsync` and `Diagnostics.RefreshAsync`; the error state shows `Describe`'s notices.timeout. Tests: `Settings_timeout_shows_the_retry_state_and_retry_loads`, `Diagnostics_timeout_shows_the_catalog_text_and_retries`, `Diagnostics_timeout_in_a_later_refresh_keeps_the_refresh_loop_running` (OK → timeout → OK through the real 5 s loop). UI-SPEC 4.6/4.7 updated.
 
 - **Where:** `src/Bridge.Web/Pages/Settings.razor:255` (`LoadAsync`) and `src/Bridge.Web/Pages/Diagnostics.razor:342`
   (`RefreshAsync`).
@@ -248,6 +288,8 @@ There are no blockers.
 
 ### 21. The not-found page's only action is a 20px inline link (minor, mobile UX)
 
+- **Status (fix-1):** **fixed.** The not-found link is `a.btn.btn--ghost.btn--back`; `ShellTests.Unknown_address_shows_the_not_found_text_in_the_shell` asserts the classes; UI-SPEC 4.1 and 5.6 (outside the audit's reach, covered by that test) updated.
+
 - **Where:** `src/Bridge.Web/Pages/NotFound.razor:11` (`<p><a href="./">nav.player</a></p>`). Screenshot
   `nooutput/no-such-page-390x844-light-en.png`.
 - **Spec:** 5.4 / 5.6 (interactive elements, `a[href]` included, are ≥ 44 × 44 on phones).
@@ -262,6 +304,8 @@ There are no blockers.
 
 ### 22. Inline style attributes instead of app.css classes (minor, CSS contract)
 
+- **Status (fix-1):** **fixed.** Both `style` attributes are gone: the `.row__level` span disappeared with finding 4, the poll hint uses the new `.hint--check` class (UI-SPEC 1.5, 4.6).
+
 - **Where:** `src/Bridge.Web/Components/OutputList.razor:125` (`<span class="row__level" style="display: contents" …>`)
   and `src/Bridge.Web/Pages/Settings.razor:81` (`<p class="hint" id="poll-hint" style="padding-inline-start: calc(18px + .6rem)">`).
 - **Spec:** 1.5 ("class names are the contract between CSS and components"); the only sanctioned inline style is
@@ -274,6 +318,8 @@ There are no blockers.
   `.row__level` span may disappear altogether.
 
 ### 23. Spec fix: `SetLanguage` sets only the default-thread cultures (minor, spec)
+
+- **Status (fix-1):** **fixed (spec).** UI-SPEC 3.1 paragraph and the `SetLanguage` signature comment now say default-thread cultures only, with the reason; 3.4 still reads correctly.
 
 - **Where:** UI-SPEC 3.1 (the paragraph before the signature block: "`SetLanguage` sets
   `CultureInfo.CurrentCulture`/`CurrentUICulture` and the `DefaultThreadCurrent*`", and the signature comment of
@@ -291,6 +337,8 @@ There are no blockers.
 
 ### 24. The section-7 connection mapping is written out three times (minor, maintainability)
 
+- **Status (fix-1):** **fixed.** `StatusCard` and `Diagnostics.ConnectionWord` switch on `StatusPill.KindOf(State)`; no behaviour change (existing tests green).
+
 - **Where:** `StatusPill.KindOf` (`Components/StatusPill.razor:18`, which `ConnectionBanner` already reuses),
   `Components/StatusCard.razor:27-33` (`liveClass`/`liveText`) and `Pages/Diagnostics.razor:265-271` (`ConnectionWord`).
 - **Spec:** 7 (Connected → live, Connecting → connecting, Disconnected with `NextAttemptAt` → paused, else offline).
@@ -301,6 +349,8 @@ There are no blockers.
   `Live_updates_word_comes_from_the_status_keys` keep covering it.
 
 ### 25. In German the phone Output card head wraps into two rows (nit, mobile UX)
+
+- **Status (fix-1):** **fixed.** `.output .card__actions .btn--sm { padding-inline: .5rem }` on phones; the de head now fits one line at 390px (`artifacts/screenshots/fix-1/player-390x844-*-de.png`). UI-SPEC 5.3 notes that a longer language may still wrap by design; review-2 checks fr/ru/uk.
 
 - **Where:** `src/Bridge.Web/Components/OutputList.razor:21` (`.card__head` with `.card__actions`). Screenshots
   `player-390x844-light-de.png`, `player-390x844-dark-de.png`.
@@ -314,6 +364,8 @@ There are no blockers.
   it against the ru/uk screenshots either way.
 
 ### 26. `TabLink` discards the re-render task on navigation (nit, Blazor)
+
+- **Status (fix-1):** **fixed.** `TabLink` has a `_disposed` flag (set in `Dispose`, checked first) and logs a faulted re-render except `OperationCanceledException`/`ObjectDisposedException`, like `LanguageSelect`.
 
 - **Where:** `src/Bridge.Web/Components/TabLink.razor:53` (`OnLocationChanged … => _ = InvokeAsync(StateHasChanged)`).
 - **What is wrong:** Every other component routes background work through `Observe` or a logged continuation. Here a
@@ -385,3 +437,30 @@ Mobile
   to whoever owns `tests/Airplay2.Sender.Tests` (it is timing-sensitive under the parallel run).
 - `?theme=dark` shows the page dark while the picker and the Appearance radios show "System". This is by design: the query is a
   one-shot override that is never stored (2.2), and `getTheme` reports the stored choice.
+
+## fix-1 verification
+
+| Check | Result |
+|---|---|
+| `dotnet build AirplayBridge.sln -warnaserror` | green: 0 warnings, 0 errors |
+| `dotnet test tests/Bridge.Tests --filter FullyQualifiedName~Bridge.Tests.Web` | 423/423 passed (9 new tests, 1 replaced) |
+| `dotnet test AirplayBridge.sln --filter "Category!=SpeakerALive&Category!=ShairportLive"` | `Bridge.Tests` 509/509. `Airplay2.Sender.Tests` 565/566: this time `ReceiverBrowserLoopbackTests.Browser_finds_merges_and_loses_a_responder_advertised_receiver` failed once under the parallel run and passed on its own (with the `Dropped_packets_…` test of review-1: 6/6). A timing flake in the sender tests again, outside the web packages. Report it to the owner of `tests/Airplay2.Sender.Tests`. |
+| `tools/web-screenshots.ps1 -Package fix-1` | 96 PNGs in `artifacts/screenshots/fix-1/`: the 8 routes × 390×844, 768×1024, 1280×900 × light, dark × en, de, with the `mobile-polish` setup. `extra/`: the Player with no output and the not-found page at 390×844 and 844×390, en and de. |
+| `tools/web-audit.ps1` | **84/84 passed** (7 routes × 390×844, 768×1024, 844×390 touch × light, dark × en, de). Overflow 0 and `unnamed` empty in every run. `small` lists only the allow-listed `.theme-btn.is-active` and `select#lang-select`. Log: `artifacts/screenshots/fix-1/audit.log`. |
+
+New catalog keys (all seven catalogs, UI-SPEC 10): banner.closedByBridge, settings.validation.latencyNumber.
+
+## fix-1 follow-up (review of fix-1)
+
+- **NotFound back link:** now `<span aria-hidden="true">←</span> nav.backToPlayer`, like every other `.btn--back`;
+  `ShellTests.Unknown_address_shows_the_not_found_text_in_the_shell` asserts the text and the hidden glyph; UI-SPEC 4.1
+  updated. Screenshots `artifacts/screenshots/fix-1/extra/no-such-page-*.png` retaken.
+- **Settings EditContext handler:** `LoadAsync` detaches `OnValidationStateChanged` from the old context before creating
+  a new one (Retry, Reset), and `Dispose(bool)` detaches it, symmetric with `Browser.ThemeChanged`.
+- **Class contract assertions:** `input--sm` (#log-level) and `btn--back` (Diagnostics) in
+  `Diagnostics_page_shows_statistics_and_the_live_log`, `hint--check` (#poll-hint) in
+  `Poll_row_is_a_wrapping_label_like_the_theme_radios`, `btn--back` in the Groups empty-list and GroupEditor
+  not-found tests.
+- **UI-SPEC 5.4 / 1.5 `.row--choice`:** the touch `.btn--sm` negative block margin is inert in an Output row (the
+  label's padding carries the 44px height); it matters for the Groups list rows and the banner.
+- Build `-warnaserror` green; web tests 423/423.

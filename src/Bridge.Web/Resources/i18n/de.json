@@ -53,6 +53,7 @@
     "paused": "Live-Updates pausiert.",
     "pausedError": "Live-Updates pausiert: {{error}}",
     "retrying": "Es wird gleich erneut versucht.",
+    "closedByBridge": "Die Bridge hat die Verbindung geschlossen.",
     "offline": "Keine Verbindung zur Bridge. Die Seiten zeigen den letzten bekannten Stand."
   },
   "pills": {
@@ -245,6 +246,7 @@
       "nameEmpty": "Der Gerätename ist leer.",
       "nameTooLong": "Der Gerätename ist länger als 64 Zeichen.",
       "latencyRange": "Die Latenz muss zwischen 22050 und 176400 Frames liegen.",
+      "latencyNumber": "Gib die Latenz als ganze Zahl an Frames ein.",
       "stream": "Der Stream-Typ ist Realtime oder Buffered."
     },
     "appearance": "Darstellung",

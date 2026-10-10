@@ -85,6 +85,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         Assert.Equal("field", label.ParentElement!.ClassName);
         Assert.Equal("poll-hint", cut.Find("#poll").GetAttribute("aria-describedby"));
         Assert.Single(cut.FindAll("div.field > label[for=poll] + p.hint#poll-hint"));
+        Assert.Contains("hint--check", cut.Find("#poll-hint").ClassList); // indents the hint under the checkbox text (1.5)
 
         // The same structure as the Appearance rows (.field > label.field--check > input + span), so one rule styles both.
         var radioLabel = cut.Find("label[for=settings-theme-light]");
@@ -209,6 +210,59 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         await cut.InvokeAsync(() => l.SetLanguage("de"));
         cut.WaitForAssertion(() => Assert.Equal("Die Latenz muss zwischen 22050 und 176400 Frames liegen.", cut.Find(".validation-message").TextContent));
         Assert.Equal("Einstellungen", cut.Find("h1").TextContent);
+    }
+
+    [Fact]
+    public async Task Clearing_the_latency_shows_the_catalog_text_not_the_property_name()
+    {
+        using var scope = new CultureScope("de");
+        var (ctx, _, api, l, _) = UiTest.Create("de", respond: (request, _) => Task.FromResult(
+            request.Method == HttpMethod.Get
+                ? StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime"))
+                : new HttpResponseMessage(HttpStatusCode.NotFound)));
+        await using var context = ctx;
+        var cut = ctx.Render<Settings>();
+        cut.WaitForAssertion(() => Assert.Equal("77175", cut.Find("#latency").GetAttribute("value")));
+
+        // InputNumber's own parse check runs before any attribute: an empty field (or "1e") must not show its built-in
+        // "The LatencyFrames field must be a number." (REVIEW-1 finding 1).
+        cut.Find("#latency").Change("");
+        cut.WaitForAssertion(() => Assert.Equal("Gib die Latenz als ganze Zahl an Frames ein.", cut.Find(".validation-message").TextContent));
+        Assert.Equal("alert", cut.Find(".validation-message").GetAttribute("role"));
+        Assert.Equal("true", cut.Find("#latency").GetAttribute("aria-invalid"));
+        Assert.DoesNotContain("LatencyFrames", cut.Find(".validation-message").TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("must be a number", cut.Find("form").TextContent, StringComparison.Ordinal);
+
+        cut.Find("form").Submit();
+        Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Put);
+        Assert.Single(cut.FindAll(".validation-message"));
+
+        // The message follows a language switch, and a number clears it.
+        await cut.InvokeAsync(() => l.SetLanguage("en"));
+        cut.WaitForAssertion(() => Assert.Equal("Enter the latency as a whole number of frames.", cut.Find(".validation-message").TextContent));
+        cut.Find("#latency").Change("1e");
+        cut.WaitForAssertion(() => Assert.Equal("Enter the latency as a whole number of frames.", cut.Find(".validation-message").TextContent));
+        cut.Find("#latency").Change("88200");
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".validation-message")));
+    }
+
+    [Fact]
+    public void Settings_timeout_shows_the_retry_state_and_retry_loads()
+    {
+        using var scope = new CultureScope("en");
+        var calls = 0;
+        UseApi((_, _) => ++calls == 1
+            ? throw new TaskCanceledException(null, new TimeoutException())
+            : StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+        var cut = _ctx.Render<Settings>();
+
+        // A request timeout is a failure like any other (not Blazor's unhandled-error strip): the catalog text and Retry.
+        cut.WaitForAssertion(() => Assert.Equal("The settings could not be loaded. The bridge did not answer in time.", cut.Find("[role=alert]").TextContent));
+        Assert.Empty(cut.FindAll("form"));
+
+        cut.Find(".card .btn").Click();
+        cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        Assert.Empty(cut.FindAll("[role=alert]"));
     }
 
     [Fact]
@@ -420,6 +474,8 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         Assert.Equal("Diagnostics", cut.Find("h1").TextContent);
         Assert.Equal("settings", cut.Find("a.btn--ghost").GetAttribute("href"));
         Assert.Contains("Back to settings", cut.Find("a.btn--ghost").TextContent, StringComparison.Ordinal);
+        Assert.Contains("btn--back", cut.Find("a[href='settings']").ClassList);
+        Assert.Contains("input--sm", cut.Find("#log-level").ClassList);
 
         _state.Apply(new BridgeEvent.LogLine(DateTimeOffset.UnixEpoch, "info", "Bridge", "hello"));
         _state.Apply(new BridgeEvent.LogLine(DateTimeOffset.UnixEpoch.AddSeconds(1), "warn", "Bridge", "careful"));
@@ -607,6 +663,47 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         cut.WaitForAssertion(() => Assert.StartsWith("Diagnostics unavailable. Boom", cut.Find("[role=alert]").TextContent, StringComparison.Ordinal));
         cut.Find("#diagnostics-network").ParentElement!.ParentElement!.QuerySelector(".btn")!.Click();
         cut.WaitForAssertion(() => Assert.Equal("1,234", Fact(cut, "Packets sent")));
+        Assert.Empty(cut.FindAll("[role=alert]"));
+    }
+
+    [Fact]
+    public void Diagnostics_timeout_shows_the_catalog_text_and_retries()
+    {
+        using var scope = new CultureScope("en");
+        var calls = 0;
+        UseApi((request, _) => PathOf(request) != "/api/diagnostics"
+            ? new HttpResponseMessage(HttpStatusCode.NotFound)
+            : ++calls == 1 ? throw new TaskCanceledException(null, new TimeoutException()) : StubHandler.Json(Stats));
+        var cut = _ctx.Render<Diagnostics>();
+
+        cut.WaitForAssertion(() => Assert.Equal("Diagnostics unavailable. The bridge did not answer in time.", cut.Find("[role=alert]").TextContent));
+        cut.Find("#diagnostics-network").ParentElement!.ParentElement!.QuerySelector(".btn")!.Click();
+        cut.WaitForAssertion(() => Assert.Equal("1,234", Fact(cut, "Packets sent")));
+        Assert.Empty(cut.FindAll("[role=alert]"));
+    }
+
+    [Fact]
+    public void Diagnostics_timeout_in_a_later_refresh_keeps_the_refresh_loop_running()
+    {
+        using var scope = new CultureScope("en");
+        var calls = 0;
+        UseApi((request, _) => PathOf(request) != "/api/diagnostics"
+            ? new HttpResponseMessage(HttpStatusCode.NotFound)
+            : Interlocked.Increment(ref calls) switch
+            {
+                1 => StubHandler.Json(Stats),
+                2 => throw new TaskCanceledException(null, new TimeoutException()),
+                _ => StubHandler.Json(Stats with { PacketsSent = 5678 }),
+            });
+        var cut = _ctx.Render<Diagnostics>();
+        cut.WaitForAssertion(() => Assert.Equal("1,234", Fact(cut, "Packets sent")));
+
+        // The second refresh (5 s) times out: the last values stay with the catalog text under them ...
+        cut.WaitForAssertion(() => Assert.Equal("Diagnostics unavailable. The bridge did not answer in time.", cut.Find("[role=alert]").TextContent), Diagnostics.RefreshInterval * 3);
+        Assert.Equal("1,234", Fact(cut, "Packets sent"));
+
+        // ... and the loop goes on: the third refresh brings new values and clears the error.
+        cut.WaitForAssertion(() => Assert.Equal("5,678", Fact(cut, "Packets sent")), Diagnostics.RefreshInterval * 3);
         Assert.Empty(cut.FindAll("[role=alert]"));
     }
 

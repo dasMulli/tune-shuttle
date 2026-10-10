@@ -29,7 +29,7 @@
 </div>
 
 @code {
-    private string PausedText => State.ConnectionError is { Length: > 0 } error
+    private string PausedText => ConnectionError.Text(State.ConnectionError, L) is { } error
         ? L.Format("banner.pausedError", ("error", error))
         : L["banner.paused"];
 

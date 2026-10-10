@@ -261,7 +261,14 @@ public sealed class BridgeCommands
         }
     }
 
-    private static bool IsFailure(Exception ex, CancellationToken ct) =>
+    /// <summary>
+    /// True for the exceptions a request can fail with that the app turns into catalog text (<see cref="Describe"/>):
+    /// the service's problem details, an unreachable bridge, a body that does not parse, and a timeout, which
+    /// <see cref="HttpClient"/> reports as a <see cref="TaskCanceledException"/> with a <see cref="TimeoutException"/>
+    /// inside while <paramref name="ct"/> (the caller's own token) is still live. A cancellation of <paramref name="ct"/>
+    /// is not a failure: the caller went away. Pages use it as their catch filter (Settings, Diagnostics).
+    /// </summary>
+    internal static bool IsFailure(Exception ex, CancellationToken ct) =>
         ex is BridgeApiException or HttpRequestException or TimeoutException or System.Text.Json.JsonException
         || (ex is TaskCanceledException && !ct.IsCancellationRequested && ex.InnerException is TimeoutException);
 }

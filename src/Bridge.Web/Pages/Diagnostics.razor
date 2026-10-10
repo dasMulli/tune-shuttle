@@ -9,7 +9,7 @@
 
 <div class="stack">
     <div>
-        <a class="btn btn--ghost" href="settings"><span aria-hidden="true">←</span> @L["nav.backToSettings"]</a>
+        <a class="btn btn--ghost btn--back" href="settings"><span aria-hidden="true">←</span> @L["nav.backToSettings"]</a>
     </div>
     <h1>@L["diagnostics.title"]</h1>
 
@@ -118,7 +118,7 @@
                 <div class="card__actions">
                     <div class="field field--inline">
                         <label for="log-level">@L["diagnostics.level"]</label>
-                        <select id="log-level" class="input" @bind="_minimumLevel">
+                        <select id="log-level" class="input input--sm" @bind="_minimumLevel">
                             <option value="0">@L["diagnostics.levels.all"]</option>
                             <option value="2">@L["diagnostics.levels.info"]</option>
                             <option value="3">@L["diagnostics.levels.warning"]</option>
@@ -261,12 +261,12 @@
         return output.ReceiverId is { } receiverId ? State.NameOf(receiverId) : L["common.none"];
     }
 
-    /// <summary>The word of the live pill (UI-SPEC 7) for the event connection.</summary>
-    private string ConnectionWord() => State.Connection switch
+    /// <summary>The word of the live pill (UI-SPEC 7) for the event connection, by the pill's own mapping.</summary>
+    private string ConnectionWord() => StatusPill.KindOf(State) switch
     {
-        EventConnectionState.Connected => L["status.live"],
-        EventConnectionState.Connecting => L["status.connecting"],
-        _ when State.NextAttemptAt is not null => L["status.paused"],
+        StatusPill.Kind.Live => L["status.live"],
+        StatusPill.Kind.Connecting => L["status.connecting"],
+        StatusPill.Kind.Paused => L["status.paused"],
         _ => L["status.offline"],
     };
 
@@ -343,8 +343,9 @@
             _updated = DateTimeOffset.Now;
             _error = null;
         }
-        catch (Exception ex) when (ex is BridgeApiException or HttpRequestException or System.Text.Json.JsonException)
+        catch (Exception ex) when (BridgeCommands.IsFailure(ex, ct))
         {
+            // A timeout included: the page shows the catalog text, and a failed tick does not end the refresh loop.
             _error = BridgeCommands.Describe(ex, L);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

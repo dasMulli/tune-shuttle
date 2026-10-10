@@ -5,9 +5,8 @@
    only repeat the last value as a second request. StepAsync is the same path for the −/+ steppers of MasterVolume.
 
    Markup, in this order: the visible <label for> (Default look; with HideLabel there is no <label> and the name is
-   aria-label on the input, so a slider inside a wrapping label.row of the Output list nests no label), Before, the
-   native range input, After, the value <output> (unless ShowValue is false). The CSS (.level, flex) lays out whichever
-   of them are present.
+   aria-label on the input), Before, the native range input, After, the value <output> (unless ShowValue is false). The
+   CSS (.level, flex) lays out whichever of them are present.
    ValueText feeds aria-valuetext ("73 of 100"); the visible <output> shows OutputText, by default the number alone. *@
 @using System.Globalization
 @implements IDisposable

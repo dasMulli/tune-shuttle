@@ -53,6 +53,7 @@
     "paused": "Actualizaciones en directo en pausa.",
     "pausedError": "Actualizaciones en directo en pausa: {{error}}",
     "retrying": "Se reintentará en breve.",
+    "closedByBridge": "El Bridge cerró la conexión.",
     "offline": "Sin conexión con el Bridge. Las páginas muestran el último estado conocido."
   },
   "pills": {
@@ -245,6 +246,7 @@
       "nameEmpty": "El nombre del dispositivo está vacío.",
       "nameTooLong": "El nombre del dispositivo tiene más de 64 caracteres.",
       "latencyRange": "La latencia debe estar entre 22050 y 176400 tramas.",
+      "latencyNumber": "Introduce la latencia como un número entero de tramas.",
       "stream": "El tipo de flujo es Realtime o Buffered."
     },
     "appearance": "Apariencia",

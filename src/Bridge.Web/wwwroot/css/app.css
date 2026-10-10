@@ -406,6 +406,7 @@ legend { padding: 0; }
 .chip--accent { background: var(--accent-soft); border-color: transparent; color: var(--accent-ink); }
 .chip--warn { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
 .chip--members {
+    align-self: center; /* a centred pill as wide as its text, not a bar across the card (the phone mockup) */
     max-width: 100%;
     white-space: normal;
     overflow-wrap: anywhere;
@@ -437,6 +438,8 @@ legend { padding: 0; }
 .btn--danger { background: var(--danger-bg); border-color: var(--danger-bg); color: var(--danger-fg); }
 .btn--sm { padding: .25rem .6rem; font-size: .78rem; min-height: 30px; }
 .btn--icon { width: 2.2rem; height: 2.2rem; padding: 0; border-radius: 50%; display: grid; place-items: center; flex: none; }
+/* A back link (ghost button with ←) whose glyph lines up with the page heading below it (the button padding hangs out). */
+.btn--back { margin-inline-start: -.9rem; }
 
 .step {
     width: 2.2rem;
@@ -487,14 +490,27 @@ legend { padding: 0; }
     padding-right: .7rem;
 }
 .row.is-active + .row { border-top-color: transparent; }
-label.row { cursor: pointer; }
 a.row { color: var(--text); }
 .row__chevron { color: var(--muted); font-size: 1.2rem; line-height: 1; flex: none; }
 .row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
 .row__main > strong { overflow-wrap: anywhere; }
 .row input:focus-visible + .radio { outline: 2px solid var(--accent); outline-offset: 2px; }
 .row input:disabled + .radio { opacity: .45; background: var(--surface-2); }
-label.row:has(input:disabled) { cursor: default; }
+/* An Output row (4.3): the label fills the row, so the whole row height checks the radio; the row's own padding moves
+   into the label, and the controls beside it (Edit, the compact slider, Pair) are centred in the same height. */
+.row.row--choice { padding-top: 0; padding-bottom: 0; }
+.row__label {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: inherit;
+    padding-block: .7rem;
+    cursor: pointer;
+}
+.row__label:has(input:disabled) { cursor: default; }
 
 .radio {
     width: 20px;
@@ -557,6 +573,9 @@ fieldset.field > legend { margin-bottom: .3rem; }
 }
 .input.invalid, .input[aria-invalid="true"] { border-color: var(--err); }
 .input--narrow { width: 7.5rem; }
+/* A select beside .btn--sm buttons (the Diagnostics log level): the same small type and height on desktop; the touch
+   block of 5.4 sets 44px and 16px again. */
+.input--sm { font-size: .85rem; min-height: 32px; padding-block: .3rem; }
 select.input {
     -webkit-appearance: none;
     appearance: none;
@@ -567,6 +586,8 @@ select.input {
 }
 .input::placeholder { color: var(--muted); opacity: 1; }
 .hint { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; margin: 0; }
+/* The hint under a check row (Settings poll): starts under the text column, past the 18px box and the .6rem gap. */
+.hint--check { padding-inline-start: calc(18px + .6rem); }
 .validation-message { color: var(--err-ink); font-size: .85rem; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 
@@ -679,6 +700,8 @@ select.input {
 .level output.draft { color: var(--accent-ink); font-weight: 600; }
 .level--compact output.draft { color: var(--accent-ink); }
 .level output.big { font-size: 1.7rem; font-weight: 700; color: var(--accent-ink); min-width: 2.6rem; }
+/* Nothing to control (no output, an offline receiver): the number (or the "–" glyph) is muted, not a third control. */
+.level.is-disabled output.big { color: var(--muted); }
 
 /* Read-only bars: member levels and the progress bar (no knob, no seeking: UI-SPEC 8.1). */
 .track {
@@ -857,7 +880,7 @@ select.input {
 @media (min-width: 1024px) {
     .topbar .tabs { position: absolute; left: 50%; transform: translateX(-50%); }
     .player { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .fact-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } /* 2 x 2 in the half-width column: no fact alone */
 }
 
 /* Phone shell (5.2) and the phone overrides (5.3). */
@@ -882,6 +905,7 @@ select.input {
     .brand__tile svg { width: 20px; height: 20px; }
     .brand__name { font-size: 1rem; }
     .tools { gap: .4rem; }
+    .btn--back { margin-inline-start: -.75rem; } /* main has .875rem side padding: the box stays inside the viewport */
 
     .theme-btn { width: 34px; height: 34px; }
     .theme-btn .ico { width: 18px; height: 18px; }
@@ -905,6 +929,7 @@ select.input {
 
     .card { padding: 1rem; gap: .8rem; }
     .row { gap: .6rem; padding: .6rem .2rem; }
+    .row__label { padding-block: .6rem; }
     .meta { font-size: .78rem; }
     .label { font-size: .66rem; }
     .chip { font-size: .76rem; padding: .28rem .6rem; }
@@ -927,6 +952,8 @@ select.input {
 
     .output { padding: .8rem 1rem; }
     .output .level--compact { display: none; }
+    /* Stop output keeps its 44px box but less side padding, so the head fits one line in longer languages (de). */
+    .output .card__actions .btn--sm { padding-inline: .5rem; }
     /* Compact sliders that do show on phones (group editor members): narrower, so a name like "Fake Receiver 1"
        keeps one line beside the slider and the 44px remove button. */
     .row .level--compact { width: 120px; }
@@ -1019,6 +1046,7 @@ select.input {
        padding, so a row with a button is no taller than one without. */
     .btn--sm { min-height: 44px; min-width: 44px; }
     .row .btn--sm, .banner .btn--sm { margin-block: -.4rem; }
+    .btn--back { margin-block: -.4rem; } /* the 44px back link adds no height above the heading */
     /* The brand link: a 44px target in a bar that keeps its height (the box overlaps the bar's padding). */
     .brand { min-height: 44px; margin-block: -6px; }
     /* The top-bar tabs on touch tablets and landscape phones (where they are the navigation): 44px tall links, so the
