@@ -2,19 +2,111 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: fixed elements pad with env(safe-area-inset-*); interactive-widget=resizes-content: Chrome on
+         Android shrinks the layout viewport when the on-screen keyboard opens, so fixed elements stay above it
+         (UI-SPEC 5.2). Browsers that do not know a token ignore it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>AirPlay Bridge</title>
     <base href="/" />
+    <!-- theme-color is the page ground (--bg) per scheme. An explicit light/dark choice inserts a media-less
+         #theme-color-override meta in front of these two (the browser takes the first matching one); "system"
+         removes it again (UI-SPEC 2.1). -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1117" />
+    <script>
+        // Theme bootstrap (UI-SPEC 2.2): runs before the stylesheet so the first paint already has the right scheme.
+        // localStorage["airplay-bridge-theme"] is "light" or "dark"; absent = follow the OS (no data-theme attribute).
+        // ?theme=light|dark|system is a one-shot override for screenshots and shared links; it is never stored.
+        (function () {
+            var KEY = "airplay-bridge-theme";
+            function applyThemeColor(theme) {
+                var override = document.getElementById("theme-color-override");
+                if (theme !== "light" && theme !== "dark") { if (override) override.remove(); return; }
+                if (!override) {
+                    override = document.createElement("meta");
+                    override.id = "theme-color-override";
+                    override.name = "theme-color";
+                    document.head.insertBefore(override, document.head.firstChild);
+                }
+                override.content = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: ' + theme + ')"]').content;
+            }
+            function apply(theme, persist) {
+                if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
+                else document.documentElement.removeAttribute("data-theme");
+                applyThemeColor(theme);
+                if (persist) {
+                    try {
+                        if (theme === "light" || theme === "dark") localStorage.setItem(KEY, theme);
+                        else localStorage.removeItem(KEY);
+                    } catch (e) { }
+                }
+            }
+            function read() {
+                try { var t = localStorage.getItem(KEY); return t === "light" || t === "dark" ? t : "system"; }
+                catch (e) { return "system"; }
+            }
+            var q = new URLSearchParams(location.search).get("theme");
+            apply(q === "light" || q === "dark" || q === "system" ? q : read(), false);
+            window.bridgeTheme = { apply: function (t) { apply(t, true); }, read: read };
+        })();
+
+        // Language bootstrap (UI-SPEC 3.2): Program.Main asks bridgeLang.get() before the first render, sets the
+        // culture and then calls bridgeLang.setDocument(code) so <html lang> matches. Same logic as getLang() in
+        // js/app.js: ?lang= (one-shot, never stored) -> localStorage["airplay-bridge-lang"] -> navigator.languages ->
+        // "" (the caller falls back to "en").
+        (function () {
+            var KEY = "airplay-bridge-lang";
+            var SUPPORTED = ["de", "en", "fr", "es", "ru", "uk", "pt"];
+            function supported(code) {
+                if (typeof code !== "string" || code.length < 2) return "";
+                var two = code.slice(0, 2).toLowerCase();
+                return SUPPORTED.indexOf(two) >= 0 && (code.length === 2 || code.charAt(2) === "-" || code.charAt(2) === "_") ? two : "";
+            }
+            function get() {
+                var q = supported(new URLSearchParams(location.search).get("lang"));
+                if (q) return q;
+                try { var s = supported(localStorage.getItem(KEY)); if (s) return s; } catch (e) { }
+                var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+                for (var i = 0; i < langs.length; i++) { var n = supported(langs[i]); if (n) return n; }
+                return "";
+            }
+            window.bridgeLang = {
+                get: get,
+                setDocument: function (code) { document.documentElement.lang = code; }
+            };
+        })();
+    </script>
+    <!-- Splash and error strip render before the runtime and the catalog exist: static English (UI-SPEC 8.1), coloured
+         with the tokens of css/app.css so they follow the theme. Declared before the stylesheet so app.css may refine them.
+         blazor.webassembly.js shows the strip with style.display = "block", so it is styled for block flow: the .reload
+         link carries its own spacing (no flex gap). -->
+    <style>
+        .splash { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 1.25rem;
+                  background: var(--bg); color: var(--muted); font-family: var(--font, system-ui, sans-serif); }
+        .splash p { margin: 0; font-size: .95rem; }
+        #blazor-error-ui { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000;
+                           padding: .6rem 3.5rem calc(.6rem + env(safe-area-inset-bottom)) 1.25rem;
+                           background: var(--err-fill); color: var(--text); border-top: 1px solid var(--err);
+                           box-shadow: var(--shadow-lift); font-family: var(--font, system-ui, sans-serif); font-size: .9rem; }
+        #blazor-error-ui .reload { display: inline-flex; align-items: center; min-height: 44px; margin-left: .75rem; padding: 0 .5rem;
+                                   font-weight: 600; color: var(--accent-ink); }
+        #blazor-error-ui .dismiss { position: absolute; top: 50%; right: .5rem; transform: translateY(-50%);
+                                    width: 44px; height: 44px; display: grid; place-items: center; padding: 0;
+                                    border: 0; border-radius: 50%; background: transparent; color: var(--text);
+                                    font: inherit; font-size: 1.2rem; cursor: pointer; }
+        #blazor-error-ui .dismiss:focus-visible, #blazor-error-ui .reload:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    </style>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link href="css/app.css" rel="stylesheet" />
 </head>
 <body>
     <div id="app">
-        <p style="padding: 1rem; font-family: sans-serif;">Loading the AirPlay Bridge app...</p>
+        <div class="splash" role="status"><p>Loading the AirPlay Bridge app…</p></div>
     </div>
-    <div id="blazor-error-ui" style="display: none;">
-        An unhandled error has occurred.
+    <div id="blazor-error-ui" role="alert">
+        <span>An unhandled error has occurred.</span>
         <a href="." class="reload">Reload</a>
-        <span class="dismiss">x</span>
+        <button type="button" class="dismiss" aria-label="Dismiss">×</button>
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
 </body>
