@@ -51,6 +51,13 @@ public sealed class BridgeApiClient
     /// <summary><c>DELETE /api/receivers/{id}/pairing</c>: forgets the stored keys.</summary>
     public Task ForgetPairingAsync(string id, CancellationToken ct) => SendAsync(HttpMethod.Delete, Route(ApiRoutes.ReceiverUnpair, id), null, ct);
 
+    /// <summary><c>DELETE /receivers/{id}</c>: forgets an offline receiver (409 while it is online).</summary>
+    public Task ForgetReceiverAsync(string id, CancellationToken ct) => SendAsync(HttpMethod.Delete, Route(ApiRoutes.Receiver, id), null, ct);
+
+    /// <summary><c>DELETE /receivers?offline=true</c>: forgets every offline receiver; returns the ids removed.</summary>
+    public Task<ForgottenReceiversDto> ForgetOfflineReceiversAsync(CancellationToken ct) =>
+        SendAsync<ForgottenReceiversDto>(HttpMethod.Delete, ApiRoutes.Receivers + "?offline=true", null, ct);
+
     /// <summary><c>POST /api/receivers/{id}/connect</c>: plays to this receiver alone (a PIN receiver answers with a <c>pairingRequired</c> event).</summary>
     public Task<ReceiverDto> ConnectAsync(string id, CancellationToken ct) => SendAsync<ReceiverDto>(HttpMethod.Post, Route(ApiRoutes.ReceiverConnect, id), null, ct);
 

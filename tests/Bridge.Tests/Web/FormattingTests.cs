@@ -204,6 +204,56 @@ public sealed class FormattingTests
         Assert.Equal("1,234", afterSwitch);
     }
 
+    [Theory]
+    [InlineData("de", -60, "Zuletzt gesehen vor weniger als einer Minute")] // a clock ahead of ours
+    [InlineData("de", 30, "Zuletzt gesehen vor weniger als einer Minute")]
+    [InlineData("de", 60, "Zuletzt gesehen vor 1 Minute")]
+    [InlineData("de", 59 * 60, "Zuletzt gesehen vor 59 Minuten")]
+    [InlineData("de", 3600, "Zuletzt gesehen vor 1 Stunde")]
+    [InlineData("de", 5 * 3600 + 1800, "Zuletzt gesehen vor 5 Stunden")]
+    [InlineData("de", 86400, "Zuletzt gesehen vor 1 Tag")]
+    [InlineData("de", 3 * 86400 + 7200, "Zuletzt gesehen vor 3 Tagen")]
+    [InlineData("de", 30 * 86400, "Zuletzt gesehen vor 30 Tagen")]
+    [InlineData("en", 30, "Last seen less than a minute ago")]
+    [InlineData("en", 60, "Last seen 1 minute ago")]
+    [InlineData("en", 2 * 60, "Last seen 2 minutes ago")]
+    [InlineData("en", 3600, "Last seen 1 hour ago")]
+    [InlineData("en", 23 * 3600, "Last seen 23 hours ago")]
+    [InlineData("en", 86400, "Last seen 1 day ago")]
+    [InlineData("en", 3 * 86400, "Last seen 3 days ago")]
+    [InlineData("ru", 30, "Был в сети меньше минуты назад")]
+    [InlineData("ru", 60, "Был в сети 1 минуту назад")]
+    [InlineData("ru", 3 * 60, "Был в сети 3 минуты назад")]
+    [InlineData("ru", 11 * 60, "Был в сети 11 минут назад")]
+    [InlineData("ru", 21 * 60, "Был в сети 21 минуту назад")]
+    [InlineData("ru", 3600, "Был в сети 1 час назад")]
+    [InlineData("ru", 2 * 3600, "Был в сети 2 часа назад")]
+    [InlineData("ru", 5 * 3600, "Был в сети 5 часов назад")]
+    [InlineData("ru", 86400, "Был в сети 1 день назад")]
+    [InlineData("ru", 3 * 86400, "Был в сети 3 дня назад")]
+    [InlineData("ru", 12 * 86400, "Был в сети 12 дней назад")]
+    [InlineData("ru", 21 * 86400, "Был в сети 21 день назад")]
+    [InlineData("ru", 22 * 86400, "Был в сети 22 дня назад")]
+    public void Last_seen_is_relative_with_the_languages_plural_forms(string lang, int secondsAgo, string expected)
+    {
+        var now = new DateTimeOffset(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        Assert.Equal(expected, Format.LastSeen(new I18n(lang), now - TimeSpan.FromSeconds(secondsAgo), now));
+    }
+
+    [Theory]
+    [InlineData("de", "Zuletzt gesehen am 26.08.2026")]
+    [InlineData("en", "Last seen on 8/26/2026")]
+    [InlineData("ru", "Был в сети 26.08.2026")]
+    public void Last_seen_older_than_a_month_is_the_date(string lang, string expected)
+    {
+        // Noon local time, so the local date is the 26th on any machine.
+        var lastSeen = AtLocal(new DateTime(2026, 8, 26, 12, 0, 0, DateTimeKind.Unspecified));
+        var l = new I18n(lang);
+        Assert.Equal(expected, Format.LastSeen(l, lastSeen, lastSeen + TimeSpan.FromDays(45)));
+        Assert.Equal(expected, Format.LastSeen(l, lastSeen, lastSeen + Format.LastSeenRelativeLimit));
+        Assert.StartsWith(lang switch { "de" => "Zuletzt gesehen vor 30 Tagen", "en" => "Last seen 30 days ago", _ => "Был в сети 30 дней назад" }, Format.LastSeen(l, lastSeen, lastSeen + Format.LastSeenRelativeLimit - TimeSpan.FromHours(12)), StringComparison.Ordinal);
+    }
+
     private static DateTimeOffset AtLocal(DateTime wallClock) => new(wallClock, TimeZoneInfo.Local.GetUtcOffset(wallClock));
 
     // ICU versions differ in the space before AM/PM and before % (U+202F, U+00A0 or a plain space); the spec writes a space.

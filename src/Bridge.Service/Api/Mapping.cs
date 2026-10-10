@@ -117,8 +117,8 @@ public static class Mapping
     }
 
     /// <summary>
-    /// The API view of a receiver. Address, port and capabilities come from <paramref name="discovered"/> when the receiver
-    /// is currently on the network (it is then <c>Online</c>), otherwise from the stored row.
+    /// The API view of a receiver. Address, port, capabilities and last-seen come from <paramref name="discovered"/> when
+    /// the receiver is currently on the network (it is then <c>Online</c>), otherwise from the stored row.
     /// </summary>
     public static ReceiverDto ToDto(this ReceiverRow row, DiscoveredReceiver? discovered, ReceiverConnectionState state, string? groupId = null, string? error = null)
     {
@@ -153,7 +153,8 @@ public static class Mapping
             OffsetFrames: row.OffsetFrames,
             GroupId: groupId,
             Error: error,
-            Capabilities: capabilities);
+            Capabilities: capabilities,
+            LastSeen: discovered is not null ? discovered.LastSeen : ParseTimestamp(row.LastSeen));
     }
 
     /// <summary>
@@ -231,6 +232,10 @@ public static class Mapping
     /// <summary>Formats a timestamp like the schema's <c>strftime('%Y-%m-%dT%H:%M:%fZ')</c> default (UTC, milliseconds).</summary>
     public static string FormatTimestamp(DateTimeOffset value) =>
         value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+
+    /// <summary>Parses a stored timestamp (<see cref="FormatTimestamp"/>, or any ISO-8601 form, UTC when unmarked); null when absent or unreadable.</summary>
+    public static DateTimeOffset? ParseTimestamp(string? value) =>
+        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed) ? parsed : null;
 
     /// <summary>The address the bridge shows and stores for a receiver: its IPv4 address if it has one, else the first.</summary>
     private static IPAddress? PreferredAddress(DiscoveredReceiver discovered) =>

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Threading.Channels;
+using Librespot.Discovery.Mdns;
 
 namespace Airplay2.Sender.Discovery;
 
@@ -62,6 +63,13 @@ public sealed record ReceiverBrowserOptions
     /// 10 s; the browser keeps them for at least two <see cref="QueryInterval"/>s.
     /// </summary>
     public bool UseLegacyUnicastQueries { get; init; } = true;
+
+    /// <summary>
+    /// The multicast groups, port and hop limit to browse on: <see cref="MdnsEndpoint.Default"/> (224.0.0.251 /
+    /// ff02::fb, port 5353) for every real use. Tests pass a private group and port so the same socket code runs without
+    /// anything else on the network listening or reflecting.
+    /// </summary>
+    public MdnsEndpoint Endpoint { get; init; } = MdnsEndpoint.Default;
 }
 
 /// <summary>

@@ -107,12 +107,28 @@ public abstract class BridgeComponentBase : ComponentBase, IDisposable
             TaskScheduler.Default);
     }
 
-    /// <summary>Runs <paramref name="tick"/> every <paramref name="period"/> until the component goes away (observed).</summary>
+    /// <summary>
+    /// Runs <paramref name="tick"/> every <paramref name="period"/> of the state's clock (<see cref="BridgeState.Now"/>)
+    /// until the component goes away (observed).
+    /// </summary>
     protected void Every(TimeSpan period, Func<CancellationToken, Task> tick)
     {
         ArgumentNullException.ThrowIfNull(tick);
-        Observe(LoopAsync(period, tick, Lifetime));
+        Observe(LoopAsync(period, State.Time, tick, Lifetime));
     }
+
+    /// <summary>
+    /// Redraws every <see cref="Format.LastSeenRefresh"/> while an offline receiver carries a last-seen time: the
+    /// relative phrase ("last seen 5 minutes ago", <see cref="Format.LastSeen"/>) ages with the clock, not with events.
+    /// </summary>
+    protected void RedrawLastSeenPhrases() =>
+        Every(Format.LastSeenRefresh, async _ =>
+        {
+            if (State.Receivers.Any(r => !r.Online && r.LastSeen is not null))
+            {
+                await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+            }
+        });
 
     private void OnStateChanged()
     {
@@ -138,9 +154,9 @@ public abstract class BridgeComponentBase : ComponentBase, IDisposable
         }
     }
 
-    private static async Task LoopAsync(TimeSpan period, Func<CancellationToken, Task> tick, CancellationToken cancellationToken)
+    private static async Task LoopAsync(TimeSpan period, TimeProvider time, Func<CancellationToken, Task> tick, CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(period);
+        using var timer = new PeriodicTimer(period, time);
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))

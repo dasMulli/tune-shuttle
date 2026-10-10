@@ -14,7 +14,9 @@ public static class Endpoints
         var api = app.MapGroup(ApiRoutes.Base);
 
         api.MapGet("/receivers", (BridgeController c, CancellationToken ct) => c.GetReceiversAsync(ct));
+        api.MapDelete("/receivers", (bool? offline, BridgeController c, CancellationToken ct) => c.ForgetReceiversAsync(offline, ct));
         api.MapGet("/receivers/{id}", (string id, BridgeController c, CancellationToken ct) => c.GetReceiverAsync(id, ct));
+        api.MapDelete("/receivers/{id}", (string id, BridgeController c, CancellationToken ct) => c.ForgetReceiverAsync(id, ct));
         api.MapPost("/receivers/{id}/pair", (string id, BridgeController c, CancellationToken ct) => c.StartPairingAsync(id, ct));
         api.MapPost("/receivers/{id}/pair/pin", (string id, PairingPinRequest body, BridgeController c, CancellationToken ct) => c.FinishPairingAsync(id, body, ct));
         api.MapDelete("/receivers/{id}/pairing", (string id, BridgeController c, CancellationToken ct) => c.DeletePairingAsync(id, ct));
@@ -42,6 +44,14 @@ public static class Endpoints
         api.MapGet("/status", (BridgeController c, CancellationToken ct) => c.GetStatusAsync(ct));
         api.MapGet("/diagnostics", (BridgeController c, CancellationToken ct) => c.GetDiagnosticsAsync(ct));
         api.MapDelete("/spotify", (BridgeController c, CancellationToken ct) => c.ForgetSpotifyAsync(ct));
+
+#if BRIDGE_FAKE_RECEIVERS
+        // Development only (Debug builds with Bridge:FakeReceivers): screenshot setups take a fake receiver offline.
+        api.MapPost("/dev/fake-receivers/{id}/offline", (string id, double? daysAgo, IServiceProvider services) =>
+            services.GetService<Output.DevFakeReceivers>() is { } fakes && fakes.TakeOffline(id, TimeSpan.FromDays(Math.Max(0, daysAgo ?? 0)))
+                ? Results.NoContent()
+                : Results.NotFound());
+#endif
 
         app.Map(ApiRoutes.Events, async (HttpContext http, EventHub hub, BridgeController c, CancellationToken ct) =>
         {

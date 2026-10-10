@@ -50,6 +50,12 @@ selected, live tests return early unless `AIRPLAY_LIVE=1` is set, so a plain `do
 The 30-second pacer accuracy test is tagged `Category=Timing`; add `&Category!=Timing` on a loaded machine. A live
 test that returns early is reported as passed (xunit 2.9 has no dynamic skip); its output says why.
 
+The mDNS loopback tests (`ReceiverBrowserLoopbackTests`) run the real browser and librespot's responder against each
+other with real sockets, but on a private multicast endpoint (239.255.0.251 / ff05::1:fb, ports 53530-53533, hop
+limit 1) instead of 224.0.0.251:5353. Nothing else on the network joins those groups, so the made-up "ap2 browser
+loopback" receivers never reach an mDNS reflector, another VLAN or a running bridge. Production code always uses the
+standard endpoint (`MdnsEndpoint.Default`).
+
 The CI script does the whole sequence:
 
 ```powershell
@@ -118,7 +124,11 @@ Open `http://<host>:8080`. Then:
    Bridge"; you can rename it under Settings). The Zeroconf handoff logs the bridge in. The credentials are cached in
    SQLite, so after a restart the device comes back without a new handoff.
 2. **Receivers** lists everything mDNS finds. *Connect* makes a receiver the output. A receiver that needs a PIN shows
-   one on its screen, and the web app opens a PIN dialog for it.
+   one on its screen, and the web app opens a PIN dialog for it. An offline receiver says when it was last seen;
+   *Forget* removes it with its pairing, group memberships and settings (after a confirmation), and *Forget all offline
+   receivers* does that for every offline one. Online receivers cannot be forgotten: mDNS would bring them back within
+   seconds. Offline receivers that carry nothing of yours (no pairing, no group, not the output, default volume and
+   offset) are forgotten automatically after `Bridge:ForgetOfflineAfter` (3 days; Settings changes it, 0 = never).
 3. **Player** shows the track, the transport and the master volume, and its **Output** card picks the output: a
    receiver or a group. *Edit groups* (phone) / *New group* opens **Groups**: create a group, add members, then
    *Activate* it. The master slider scales every member's level and keeps the differences between them, as Apple
@@ -187,7 +197,9 @@ pwsh tools/web-audit.ps1 -Langs en,de,ru -Setup tools/screenshot-setups/mobile-p
 ```
 
 `tools/screenshot-setups/<package>.ps1` put the fake receivers into a state through the REST API before the pictures
-are taken (`-Setup`); `mobile-polish.ps1 -BaseUrl <url> -HeroShots <dir>` also captures the Player with a demo track
+are taken (`-Setup`); `forget-receivers.ps1` takes fake receiver 2 offline ("last seen 3 days ago") through the
+development-only route `POST /api/dev/fake-receivers/{id}/offline?daysAgo=N`, which exists only in Debug builds running
+`--Bridge:FakeReceivers`; `mobile-polish.ps1 -BaseUrl <url> -HeroShots <dir>` also captures the Player with a demo track
 (injected in the browser only, since Spotify is off). Both scripts drive Edge over the DevTools protocol at exact CSS
 viewport sizes: headless Edge lays out no narrower than 504px when only `--window-size` is given. After a rebuild of
 `src/Bridge.Web`, restart a bridge that `-NoStart` uses; it serves the files it found when it started.
@@ -211,7 +223,23 @@ overrides these defaults.
 | `Bridge:LocalAddress` | all interfaces | Address the sender's UDP sockets bind to |
 | `Bridge:ConnectTimeout` | `00:01:00` | Upper bound for connecting one receiver |
 | `Bridge:FileLogging`, `Bridge:LogRetentionDays` | `true`, `7` | Daily log files under `<DataDirectory>/logs` (Windows) |
+| `Bridge:ForgetOfflineAfter` | `3.00:00:00` | Offline receivers without user state (no pairing, no group, not the selected output, default level and offset) are forgotten once not seen for this long; checked a minute after start-up, then hourly; `00:00:00` never forgets. The Settings page overrides it (in days) |
 | `Logging:LogLevel:Airplay2` | `Information` | `Debug` logs the decrypted RTSP exchange |
+
+### API
+
+The web app uses a REST API under `/api` and a WebSocket at `/ws/events` (docs/airplay2/WORK-PLAN.md section 7; in
+Development the OpenAPI document is at `/openapi/v1.json`). Errors are RFC 9457 problem details. Forgetting receivers:
+
+| Request | Answer |
+|---|---|
+| `DELETE /api/receivers/{id}` | `204`; the receiver, its pairing, its group memberships and its output selection are deleted. `404` for an unknown id, `409` while it is online, connecting, connected or streaming |
+| `DELETE /api/receivers?offline=true` | `200` `{"removed": ["<id>", …]}`: every offline receiver forgotten. Without `offline=true`: `422` |
+
+Both publish `receiverRemoved`, `groupChanged` for every group that lost a member (an emptied group is kept) and
+`outputChanged` when the output changed. `GET /api/receivers` and the `receiverChanged` events carry `lastSeen`
+(ISO 8601, null when unknown); `GET`/`PUT /api/settings` carry `forgetOfflineAfterDays` (0 = never; a `PUT` without it
+keeps the current value).
 
 ### As a Windows Service
 

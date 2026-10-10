@@ -214,6 +214,14 @@ public sealed class ReceiverInventory(
                 break;
             case ReceiverEvent.Lost:
                 logger.LogInformation("Receiver gone from mDNS: {Receiver}", receiver.Name);
+                // The row's last_seen is written on Found/Updated only, and the cache raises no Updated for a LastSeen-only
+                // change (a re-announcement with the same records). Store the arrival time of the receiver's last record:
+                // the last time it was actually heard, not the time of this Lost event (up to TTL plus grace later).
+                if (receiver.LastSeen != DateTimeOffset.MinValue)
+                {
+                    await store.TouchReceiverAsync(receiver.Id, receiver.LastSeen, cancellationToken).ConfigureAwait(false);
+                }
+
                 break;
         }
 

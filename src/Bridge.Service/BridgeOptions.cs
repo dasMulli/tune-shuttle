@@ -63,6 +63,13 @@ public sealed class BridgeOptions
     /// <summary>How long a connect waits for an offline receiver to appear in mDNS before it falls back to its last address.</summary>
     public TimeSpan ResolveTimeout { get; set; } = TimeSpan.FromSeconds(3);
 
+    /// <summary>
+    /// Offline receivers that carry no user state (no stored pairing, no group, not the selected output, default level and
+    /// offset) are forgotten once they have not been seen for this long (<see cref="Output.ReceiverPruner"/>, hourly);
+    /// <see cref="TimeSpan.Zero"/> never forgets. The web app's Settings page overrides it (<see cref="ReceiverRetention"/>).
+    /// </summary>
+    public TimeSpan ForgetOfflineAfter { get; set; } = TimeSpan.FromDays(3);
+
     /// <summary>The parsed <see cref="LocalAddress"/>, or null.</summary>
     public IPAddress? LocalIPAddress => string.IsNullOrWhiteSpace(LocalAddress) ? null : IPAddress.Parse(LocalAddress);
 }
@@ -88,6 +95,50 @@ public static class BridgeSettingKeys
     /// this level, so raising G again restores the relative levels (PLAN.md volume model).
     /// </summary>
     public const string GroupReferenceLevelPrefix = "group_reference_level:";
+
+    /// <summary>How long an offline receiver without user state is kept (<see cref="ReceiverRetention"/>), as a <c>c</c>-format TimeSpan.</summary>
+    public const string ForgetOfflineAfter = "forget_offline_after";
+}
+
+/// <summary>
+/// The "forget offline receivers after" setting (<see cref="BridgeOptions.ForgetOfflineAfter"/>, overridden in the
+/// <c>settings</c> table by the Settings page). Kept apart from <see cref="BridgeSettings"/>: changing it rebuilds nothing.
+/// </summary>
+public static class ReceiverRetention
+{
+    /// <summary>Longest accepted value in days (ten years).</summary>
+    public const double MaxDays = 3650;
+
+    /// <summary>The effective value: the stored one, else the configuration. Never negative.</summary>
+    public static async Task<TimeSpan> LoadAsync(IBridgeStore store, BridgeOptions defaults, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(defaults);
+        var stored = await store.GetSettingAsync(BridgeSettingKeys.ForgetOfflineAfter, cancellationToken).ConfigureAwait(false);
+        var value = TimeSpan.TryParse(stored, CultureInfo.InvariantCulture, out var parsed) ? parsed : defaults.ForgetOfflineAfter;
+        return value < TimeSpan.Zero ? TimeSpan.Zero : value;
+    }
+
+    /// <summary>
+    /// Stores a value given in days (the API's unit), rounded like <see cref="ToDays"/> so the stored value is the one the
+    /// API reports (0.0004 days is stored as 0, never, not as 35 seconds that GET /settings would show as 0). Throws
+    /// <see cref="ArgumentException"/> outside 0..<see cref="MaxDays"/>.
+    /// </summary>
+    public static Task SaveDaysAsync(IBridgeStore store, double days, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (double.IsNaN(days) || days is < 0 or > MaxDays)
+        {
+            throw new ArgumentException($"Forgetting offline receivers takes 0 (never) to {MaxDays.ToString(CultureInfo.InvariantCulture)} days.", nameof(days));
+        }
+
+        return store.SetSettingAsync(BridgeSettingKeys.ForgetOfflineAfter, TimeSpan.FromDays(RoundDays(days)).ToString("c", CultureInfo.InvariantCulture), cancellationToken);
+    }
+
+    /// <summary>A value in days for the API, rounded to a thousandth (a minute and a half) so the JSON stays readable.</summary>
+    public static double ToDays(TimeSpan value) => RoundDays(value.TotalDays);
+
+    private static double RoundDays(double days) => Math.Round(days, 3);
 }
 
 /// <summary>The user-changeable settings, resolved from the store with the configuration as default.</summary>

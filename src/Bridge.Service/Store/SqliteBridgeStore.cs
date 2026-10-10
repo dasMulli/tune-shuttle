@@ -416,6 +416,17 @@ public sealed class SqliteBridgeStore : IBridgeStore
     }
 
     /// <inheritdoc />
+    public async Task<bool> TouchReceiverAsync(string id, DateTimeOffset lastSeen, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(id);
+        // The timestamps share one fixed-width UTC format (Mapping.FormatTimestamp), so they compare as text.
+        var value = Api.Mapping.FormatTimestamp(lastSeen);
+        var changed = await WriteAsync((connection, transaction) => connection.ExecuteAsync(Command(
+            "UPDATE receivers SET last_seen = @value WHERE id = @id AND (last_seen IS NULL OR last_seen < @value);", new { id, value }, transaction, cancellationToken)), cancellationToken).ConfigureAwait(false);
+        return changed > 0;
+    }
+
+    /// <inheritdoc />
     public async Task DeleteReceiverAsync(string id, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(id);

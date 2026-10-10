@@ -273,6 +273,30 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
     }
 
     /// <summary>
+    /// A receiver is about to be forgotten (<see cref="ReceiverJanitor"/>): as the single output it is deselected; as a
+    /// member of the active group it leaves the player and its reconnect plan; its runtime state is dropped. Returns
+    /// true when the output changed (the caller publishes the output once the row is gone).
+    /// </summary>
+    public async Task<bool> ReceiverForgettingAsync(string receiverId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(receiverId);
+        var changed = false;
+        if (_runtime.Selection.ReceiverId == receiverId)
+        {
+            await ActivateAsync(OutputSelection.None, interactive: false, persist: true, cancellationToken).ConfigureAwait(false);
+            changed = true;
+        }
+        else if (_active is { } active && _plans.TryRemove(receiverId, out _))
+        {
+            await active.Player.RemoveReceiverAsync(receiverId, cancellationToken).ConfigureAwait(false);
+            changed = true;
+        }
+
+        _runtime.Clear(receiverId);
+        return changed;
+    }
+
+    /// <summary>
     /// Applies changed settings: a new device name or stream preference needs a new sender (identity, transport choice), a
     /// new L or poll setting a new player; the active output is rebuilt and its receivers reconnected.
     /// </summary>

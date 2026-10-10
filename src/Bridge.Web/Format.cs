@@ -1,4 +1,5 @@
 using System.Globalization;
+using Bridge.Web.Localization;
 
 namespace Bridge.Web;
 
@@ -37,6 +38,48 @@ public static class Format
 
     /// <summary>A moment as local date and time in the culture's general pattern (<c>G</c>): 10.10.2026 14:05:09 (de).</summary>
     public static string DateTime(DateTimeOffset value) => value.ToLocalTime().ToString("G", CultureInfo.CurrentCulture);
+
+    /// <summary>Up to this age "last seen" is relative ("3 days ago"); older is the date.</summary>
+    public static readonly TimeSpan LastSeenRelativeLimit = TimeSpan.FromDays(31);
+
+    /// <summary>
+    /// How often the pages that show <see cref="LastSeen"/> redraw while an offline receiver has one (the finest unit of
+    /// the phrase is the minute).
+    /// </summary>
+    public static readonly TimeSpan LastSeenRefresh = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// When a receiver was last seen, as a phrase in <paramref name="l"/>'s language: "just now" under a minute (also for
+    /// a time ahead of <paramref name="now"/>, a clock skew), then whole minutes, hours and days with the language's
+    /// plural forms (receivers.lastSeenMinutes / Hours / Days), and from <see cref="LastSeenRelativeLimit"/> on the
+    /// local date in the culture's short pattern (receivers.lastSeenOn).
+    /// </summary>
+    public static string LastSeen(I18n l, DateTimeOffset lastSeen, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(l);
+        var age = now - lastSeen;
+        if (age < TimeSpan.FromMinutes(1))
+        {
+            return l["receivers.lastSeenJustNow"];
+        }
+
+        if (age < TimeSpan.FromHours(1))
+        {
+            return l.Plural("receivers.lastSeenMinutes", (long)age.TotalMinutes);
+        }
+
+        if (age < TimeSpan.FromDays(1))
+        {
+            return l.Plural("receivers.lastSeenHours", (long)age.TotalHours);
+        }
+
+        if (age < LastSeenRelativeLimit)
+        {
+            return l.Plural("receivers.lastSeenDays", (long)age.TotalDays);
+        }
+
+        return l.Format("receivers.lastSeenOn", ("date", lastSeen.ToLocalTime().ToString("d", l.Culture)));
+    }
 
     /// <summary>Frames at 44.1 kHz as whole milliseconds, invariant (offsets, latency).</summary>
     public static string FramesAsMs(int frames) => (frames / 44.1).ToString("0", CultureInfo.InvariantCulture);

@@ -118,6 +118,31 @@ public sealed class BridgeCommands
         _state.ApplyReceiver(await _api.GetReceiverAsync(receiverId, ct).ConfigureAwait(false));
     });
 
+    /// <summary>Forgets an offline receiver (its pairing, group memberships and settings go with it).</summary>
+    public Task<bool> ForgetReceiverAsync(string receiverId, CancellationToken ct) => RunAsync(_l.Format("actions.forgetReceiver", ("name", _state.NameOf(receiverId))), async () =>
+    {
+        await _api.ForgetReceiverAsync(receiverId, ct).ConfigureAwait(false);
+        _state.RemoveReceivers([receiverId]);
+    });
+
+    /// <summary>Forgets every offline receiver; returns how many were forgotten, or null on failure.</summary>
+    public async Task<int?> ForgetOfflineReceiversAsync(CancellationToken ct)
+    {
+        IReadOnlyList<string>? removed = null;
+        var ok = await RunAsync(_l["actions.forgetOfflineReceivers"], async () =>
+        {
+            removed = (await _api.ForgetOfflineReceiversAsync(ct).ConfigureAwait(false)).Removed;
+            _state.RemoveReceivers(removed);
+        }).ConfigureAwait(false);
+        if (!ok || removed is null)
+        {
+            return null;
+        }
+
+        _state.Notify(NoticeKind.Success, _l.Plural("notices.receiversForgotten", removed.Count));
+        return removed.Count;
+    }
+
     // ---- groups --------------------------------------------------------------------------------------------------
 
     /// <summary>Creates a group; returns it, or null on failure.</summary>

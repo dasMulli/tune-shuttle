@@ -24,6 +24,7 @@ public sealed class BridgeController(
     OutputManager output,
     PairingCoordinator pairing,
     ReceiverInventory inventory,
+    ReceiverJanitor janitor,
     SpotifyHost spotify,
     RuntimeState runtime,
     AirplaySenderProvider senders,
@@ -51,6 +52,27 @@ public sealed class BridgeController(
     /// <summary><c>GET /receivers/{id}</c>.</summary>
     public Task<IResult> GetReceiverAsync(string id, CancellationToken ct) => RunAsync(async () =>
         await dtos.ReceiverAsync(id, ct).ConfigureAwait(false) is { } dto ? Results.Ok(dto) : NotFound($"Unknown receiver '{id}'."));
+
+    /// <summary>
+    /// <c>DELETE /receivers/{id}</c>: forgets an offline receiver with its pairing, group memberships and settings (404
+    /// unknown, 409 online: an online receiver is back from mDNS within seconds).
+    /// </summary>
+    public Task<IResult> ForgetReceiverAsync(string id, CancellationToken ct) => RunAsync(async () =>
+    {
+        await janitor.ForgetAsync(id, ct).ConfigureAwait(false);
+        return Results.NoContent();
+    });
+
+    /// <summary><c>DELETE /receivers?offline=true</c>: forgets every offline receiver; answers the ids removed.</summary>
+    public Task<IResult> ForgetReceiversAsync(bool? offline, CancellationToken ct) => RunAsync(async () =>
+    {
+        if (offline != true)
+        {
+            throw new ArgumentException("Only offline receivers can be forgotten in bulk; pass offline=true.", nameof(offline));
+        }
+
+        return Results.Ok(new ForgottenReceiversDto(await janitor.ForgetOfflineAsync(ct).ConfigureAwait(false)));
+    });
 
     /// <summary><c>POST /receivers/{id}/pair</c>: the receiver shows its PIN.</summary>
     public Task<IResult> StartPairingAsync(string id, CancellationToken ct) => RunAsync(async () => Results.Ok(await pairing.StartAsync(id, ct).ConfigureAwait(false)));
@@ -228,10 +250,14 @@ public sealed class BridgeController(
     public Task<IResult> GetSettingsAsync(CancellationToken ct) => RunAsync(async () =>
     {
         var settings = await BridgeSettings.LoadAsync(store, options.Value, ct).ConfigureAwait(false);
-        return Results.Ok(new SettingsDto(settings.DeviceName, settings.LatencyFrames, settings.PollReceiverVolume, settings.PreferredStream));
+        var retention = await ReceiverRetention.LoadAsync(store, options.Value, ct).ConfigureAwait(false);
+        return Results.Ok(new SettingsDto(settings.DeviceName, settings.LatencyFrames, settings.PollReceiverVolume, settings.PreferredStream, ReceiverRetention.ToDays(retention)));
     });
 
-    /// <summary><c>PUT /settings</c>: a new device name relaunches Spotify Connect; L, stream and poll rebuild the output.</summary>
+    /// <summary>
+    /// <c>PUT /settings</c>: a new device name relaunches Spotify Connect; L, stream and poll rebuild the output; the
+    /// forget-offline period applies from the next pruning run (null keeps it).
+    /// </summary>
     public Task<IResult> SetSettingsAsync(SettingsDto body, CancellationToken ct) => RunAsync(async () =>
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -243,10 +269,21 @@ public sealed class BridgeController(
 
         var stream = BridgeSettings.NormalizeStream(body.PreferredStream)
             ?? throw new ArgumentException("The preferred stream is 'Realtime' or 'Buffered'.", nameof(body));
+        if (body.ForgetOfflineAfterDays is { } days && (double.IsNaN(days) || days is < 0 or > ReceiverRetention.MaxDays))
+        {
+            throw new ArgumentException($"Forgetting offline receivers takes 0 (never) to {ReceiverRetention.MaxDays.ToString(CultureInfo.InvariantCulture)} days.", nameof(body));
+        }
+
         var previous = await BridgeSettings.LoadAsync(store, options.Value, ct).ConfigureAwait(false);
         var current = new BridgeSettings(name, body.LatencyFrames, body.PollReceiverVolume, stream);
         await current.SaveAsync(store, ct).ConfigureAwait(false);
-        logger.LogInformation("Settings: {Settings}", current);
+        if (body.ForgetOfflineAfterDays is { } forgetDays)
+        {
+            await ReceiverRetention.SaveDaysAsync(store, forgetDays, ct).ConfigureAwait(false);
+        }
+
+        var retention = await ReceiverRetention.LoadAsync(store, options.Value, ct).ConfigureAwait(false);
+        logger.LogInformation("Settings: {Settings}, forget offline receivers after {Retention}", current, retention > TimeSpan.Zero ? retention.ToString() : "never");
         if (previous.DeviceName != current.DeviceName)
         {
             runtime.Spotify = runtime.Spotify with { DeviceName = current.DeviceName };
@@ -255,7 +292,7 @@ public sealed class BridgeController(
 
         await output.ApplySettingsAsync(previous, current, ct).ConfigureAwait(false);
         hub.Publish(new BridgeEvent.StatusChanged(await dtos.StatusAsync(ct).ConfigureAwait(false)));
-        return Results.Ok(new SettingsDto(current.DeviceName, current.LatencyFrames, current.PollReceiverVolume, current.PreferredStream));
+        return Results.Ok(new SettingsDto(current.DeviceName, current.LatencyFrames, current.PollReceiverVolume, current.PreferredStream, ReceiverRetention.ToDays(retention)));
     });
 
     /// <summary><c>GET /status</c>.</summary>

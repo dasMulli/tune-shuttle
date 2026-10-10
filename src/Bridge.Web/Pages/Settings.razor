@@ -90,6 +90,20 @@
                 <p class="hint hint--check" id="poll-hint">@L["settings.pollHint"]</p>
             </div>
 
+            @* Whole days in the spinner; the service also takes fractions (Bridge:ForgetOfflineAfter may be "12:00:00"), so
+               the field is an InputNumber<double> and shows such a value as it is. Messages as for the latency field. *@
+            <div class="field">
+                <label for="forget-offline">@L["settings.forgetOfflineAfter"]</label>
+                <InputNumber id="forget-offline" class="input input--narrow" @bind-Value="_model.ForgetOfflineAfterDays" inputmode="decimal"
+                             ParsingErrorMessage="settings.validation.forgetDaysNumber"
+                             min="0" max="@SettingsModel.MaxForgetOfflineAfterDays" step="1" aria-describedby="forget-offline-hint" />
+                @foreach (var message in _editContext.GetValidationMessages(() => _model.ForgetOfflineAfterDays))
+                {
+                    <div class="validation-message" role="alert">@L[message]</div>
+                }
+                <p class="hint" id="forget-offline-hint">@L["settings.forgetOfflineAfterHint"]</p>
+            </div>
+
             <div class="actions">
                 @* aria-disabled while saving, not disabled: Chromium blurs a focused button that becomes disabled, so the
                    keyboard focus would fall to <body>; the handlers ignore a press meanwhile. *@
@@ -401,6 +415,7 @@
                 _model.LatencyFrames = saved.LatencyFrames;
                 _model.PollReceiverVolume = saved.PollReceiverVolume;
                 _model.PreferredStream = saved.PreferredStream;
+                _model.ForgetOfflineAfterDays = saved.ForgetOfflineAfterDays ?? _model.ForgetOfflineAfterDays;
                 _editContext.MarkAsUnmodified();
                 _editContext.NotifyValidationStateChanged();
             }

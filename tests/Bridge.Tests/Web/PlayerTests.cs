@@ -847,6 +847,27 @@ public sealed class PlayerTests : ComponentTestBase
         }
     }
 
+    [Fact]
+    public void Offline_output_rows_say_when_the_receiver_was_last_seen()
+    {
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "A", lastSeen: DateTimeOffset.UtcNow)));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o", "O", online: false, state: ReceiverConnectionState.Offline, lastSeen: DateTimeOffset.UtcNow - TimeSpan.FromHours(2) - TimeSpan.FromMinutes(5))));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("n", "N", online: false, state: ReceiverConnectionState.Offline)));
+        _state.Apply(new BridgeEvent.OutputChanged(Dto.NoOutput));
+        var cut = _ctx.Render<Player>();
+
+        // Online: model and address; offline: model and when it was last seen (the phone line only the latter).
+        Assert.Equal("Model · 192.0.2.1", cut.Find("[data-receiver-id='a'] .row__main .meta.only-wide").TextContent);
+        Assert.Equal("Model", cut.Find("[data-receiver-id='a'] .row__main .meta.only-phone").TextContent);
+        Assert.Equal("Model · Last seen 2 hours ago", cut.Find("[data-receiver-id='o'] .row__main .meta.only-wide").TextContent);
+        Assert.Equal("Last seen 2 hours ago", cut.Find("[data-receiver-id='o'] .row__main .meta.only-phone").TextContent);
+        Assert.Equal("true", cut.Find("[data-receiver-id='o'] .row__main .meta.only-wide").GetAttribute("data-last-seen"));
+
+        // Unknown last-seen: the online layout.
+        Assert.Equal("Model · 192.0.2.1", cut.Find("[data-receiver-id='n'] .row__main .meta.only-wide").TextContent);
+    }
+
     // ---- status card ---------------------------------------------------------------------------------------------
 
     [Fact]

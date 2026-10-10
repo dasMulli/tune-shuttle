@@ -42,6 +42,26 @@ public sealed class DevFakeReceivers(StaticReceiverBrowser browser, IOptions<Bri
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
+    /// <summary>
+    /// Development (screenshot setups, <c>POST /api/dev/fake-receivers/{id}/offline?daysAgo=N</c>): the fake leaves the
+    /// static browser as if it had gone from the network <paramref name="ago"/> before now; it keeps running, so it can be
+    /// forgotten or stays listed as offline. False for an id that is not a listed fake.
+    /// </summary>
+    public bool TakeOffline(string receiverId, TimeSpan ago)
+    {
+        var receiver = browser.Snapshot().FirstOrDefault(r => r.Id == receiverId);
+        if (receiver is null || !_fakes.Any(f => f.DeviceId == receiverId))
+        {
+            return false;
+        }
+
+        // Updated first (the inventory stores the earlier last-seen), then Lost.
+        browser.Add(receiver with { LastSeen = DateTimeOffset.UtcNow - ago });
+        browser.Remove(receiverId);
+        _logger.LogWarning("Development: fake receiver {Name} ({Id}) taken offline, last seen {Ago} ago", receiver.Name, receiverId, ago);
+        return true;
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {

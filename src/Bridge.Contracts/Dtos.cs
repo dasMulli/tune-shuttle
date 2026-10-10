@@ -7,6 +7,7 @@ public static class ApiRoutes
 {
     public const string Base = "/api";
     public const string Receivers = Base + "/receivers";
+    public const string Receiver = Base + "/receivers/{id}";
     public const string ReceiverPair = Base + "/receivers/{id}/pair";
     public const string ReceiverPairPin = Base + "/receivers/{id}/pair/pin";
     public const string ReceiverUnpair = Base + "/receivers/{id}/pairing";
@@ -59,6 +60,10 @@ public enum ReceiverConnectionState
 }
 
 /// <summary>A receiver: discovery data merged with the store.</summary>
+/// <remarks>
+/// <c>LastSeen</c> (added after the first release, hence optional): when discovery last saw the receiver; for an online
+/// receiver its latest mDNS record, for an offline one the stored time it was last seen. Null when unknown.
+/// </remarks>
 public sealed record ReceiverDto(
     string Id,
     string Name,
@@ -73,7 +78,8 @@ public sealed record ReceiverDto(
     int OffsetFrames,
     string? GroupId,
     string? Error,
-    ReceiverCapabilitiesDto Capabilities);
+    ReceiverCapabilitiesDto Capabilities,
+    DateTimeOffset? LastSeen = null);
 
 /// <summary>Capabilities decoded from the TXT records.</summary>
 public sealed record ReceiverCapabilitiesDto(bool AirPlay2, bool Transient, bool Pin, bool Buffered, bool Ptp, bool Alac, bool Text, bool Artwork, bool Progress, string Features, string Flags);
@@ -115,7 +121,18 @@ public sealed record PlaybackDto(bool Playing, string? TrackId, string? Title, s
 public sealed record PlaybackCommandRequest(string Command);
 
 /// <summary>Settings.</summary>
-public sealed record SettingsDto(string DeviceName, int LatencyFrames, bool PollReceiverVolume, string PreferredStream);
+/// <param name="DeviceName">The Spotify Connect device name.</param>
+/// <param name="LatencyFrames">L in frames.</param>
+/// <param name="PollReceiverVolume">Poll the receivers' volume while playing.</param>
+/// <param name="PreferredStream">"Realtime" or "Buffered".</param>
+/// <param name="ForgetOfflineAfterDays">
+/// Offline receivers without user state are forgotten after this many days (0 = never). Always set in answers; null in a
+/// <c>PUT</c> keeps the current value (clients that predate the field).
+/// </param>
+public sealed record SettingsDto(string DeviceName, int LatencyFrames, bool PollReceiverVolume, string PreferredStream, double? ForgetOfflineAfterDays = null);
+
+/// <summary>Answer of <c>DELETE /receivers?offline=true</c>: the ids of the receivers that were forgotten.</summary>
+public sealed record ForgottenReceiversDto(IReadOnlyList<string> Removed);
 
 /// <summary>Service status.</summary>
 public sealed record StatusDto(string Version, bool SpotifyConnected, string? SpotifyUser, string DeviceName, bool OutputConnected, int Receivers, DateTimeOffset StartedAt);

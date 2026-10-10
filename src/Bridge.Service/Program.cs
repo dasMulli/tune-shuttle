@@ -93,6 +93,7 @@ public static class Program
         services.AddSingleton<ReceiverInventory>();
         services.AddSingleton<PairingCoordinator>();
         services.AddSingleton<OutputManager>();
+        services.AddSingleton<ReceiverJanitor>();
         services.AddSingleton<IPlaybackOutput>(sp => sp.GetRequiredService<OutputManager>());
         services.AddSingleton<IArtworkLoader, HttpArtworkLoader>();
         services.AddSingleton<SpotifyHost>();
@@ -105,6 +106,7 @@ public static class Program
         services.AddHostedService(sp => sp.GetRequiredService<ReceiverInventory>());
         services.AddHostedService(sp => sp.GetRequiredService<OutputManager>());
         services.AddHostedService(sp => sp.GetRequiredService<SpotifyHost>());
+        services.AddHostedService<ReceiverPruner>();
     }
 
     private static void AddFakeReceivers(IServiceCollection services, IConfiguration configuration)

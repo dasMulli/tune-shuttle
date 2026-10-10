@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
+using System.Threading.Channels;
 using Bridge.Contracts;
 using Bridge.Tests.Service;
 using Bridge.Web;
@@ -22,8 +23,8 @@ internal static class Dto
 {
     public static readonly ReceiverCapabilitiesDto Caps = new(true, true, false, false, false, true, true, true, true, "0x1C340405D4A00", "0x4");
 
-    public static ReceiverDto Receiver(string id, string name, int level = 50, ReceiverConnectionState state = ReceiverConnectionState.Available, PairingState pairing = PairingState.Transient, string? groupId = null, bool online = true, int offset = 0, string? error = null) =>
-        new(id, name, "Model", "Maker", "192.0.2.1", 7000, online, pairing, state, level, offset, groupId, error, Caps);
+    public static ReceiverDto Receiver(string id, string name, int level = 50, ReceiverConnectionState state = ReceiverConnectionState.Available, PairingState pairing = PairingState.Transient, string? groupId = null, bool online = true, int offset = 0, string? error = null, DateTimeOffset? lastSeen = null) =>
+        new(id, name, "Model", "Maker", "192.0.2.1", 7000, online, pairing, state, level, offset, groupId, error, Caps, lastSeen);
 
     public static GroupDto Group(string id, string name, int master, bool active, params (string Id, string Name, int Level)[] members) =>
         new(id, name, master, active, [.. members.Select(m => new GroupMemberDto(m.Id, m.Name, m.Level, ReceiverConnectionState.Available))]);
@@ -43,6 +44,115 @@ internal sealed class ManualTime(DateTimeOffset start) : TimeProvider
     public DateTimeOffset Now { get; set; } = start;
 
     public override DateTimeOffset GetUtcNow() => Now;
+}
+
+/// <summary>
+/// A clock whose time and timers move only on <see cref="Advance"/>: <c>Task.Delay</c> and <c>PeriodicTimer</c> on it
+/// wait for the test. <see cref="TimerCreated"/> reports each new timer's due time, so a test can wait until the code
+/// under test waits.
+/// </summary>
+internal sealed class SteppedTime(DateTimeOffset start) : TimeProvider
+{
+    private readonly Lock _gate = new();
+    private readonly List<Timer> _timers = [];
+    private DateTimeOffset _now = start;
+
+    /// <summary>The due time of every timer created, in order.</summary>
+    public Channel<TimeSpan> TimerCreated { get; } = Channel.CreateUnbounded<TimeSpan>();
+
+    public override DateTimeOffset GetUtcNow()
+    {
+        lock (_gate)
+        {
+            return _now;
+        }
+    }
+
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        var timer = new Timer(this, callback, state);
+        timer.Change(dueTime, period);
+        TimerCreated.Writer.TryWrite(dueTime);
+        return timer;
+    }
+
+    /// <summary>Waits (real time, bounded) for the next timer the code under test creates and returns its due time.</summary>
+    public async Task<TimeSpan> NextTimerAsync()
+    {
+        using var timeout = new CancellationTokenSource(RecordedFake.Patience);
+        return await TimerCreated.Reader.ReadAsync(timeout.Token);
+    }
+
+    /// <summary>Moves the clock forward and fires every timer that came due (a periodic one once).</summary>
+    public void Advance(TimeSpan by)
+    {
+        List<Timer> due;
+        lock (_gate)
+        {
+            _now += by;
+            due = [.. _timers.Where(t => t.Due <= _now)];
+            foreach (var timer in due)
+            {
+                if (timer.Period > TimeSpan.Zero && timer.Period != Timeout.InfiniteTimeSpan)
+                {
+                    while (timer.Due <= _now)
+                    {
+                        timer.Due += timer.Period;
+                    }
+                }
+                else
+                {
+                    _timers.Remove(timer);
+                }
+            }
+        }
+
+        foreach (var timer in due)
+        {
+            timer.Fire();
+        }
+    }
+
+    private sealed class Timer(SteppedTime owner, TimerCallback callback, object? state) : ITimer
+    {
+        public DateTimeOffset Due { get; set; }
+
+        public TimeSpan Period { get; private set; }
+
+        public bool Change(TimeSpan dueTime, TimeSpan period)
+        {
+            lock (owner._gate)
+            {
+                owner._timers.Remove(this);
+                if (dueTime == Timeout.InfiniteTimeSpan)
+                {
+                    return true;
+                }
+
+                Due = owner._now + dueTime;
+                Period = period;
+                owner._timers.Add(this);
+            }
+
+            return true;
+        }
+
+        public void Fire() => callback(state);
+
+        public void Dispose()
+        {
+            lock (owner._gate)
+            {
+                owner._timers.Remove(this);
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 }
 
 /// <summary>An HTTP handler that answers from a function and records every request (method, path, body).</summary>

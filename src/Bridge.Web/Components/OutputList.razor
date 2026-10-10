@@ -99,6 +99,8 @@
                     var key = ReceiverKey(receiver.Id);
                     var busy = InFlight(key);
                     var model = receiver.Model is { Length: > 0 } m ? m : L["player.unknownModel"];
+                    // An offline row says when the receiver was last seen instead of its (stale) address.
+                    var lastSeen = !receiver.Online && receiver.LastSeen is { } seen ? Format.LastSeen(L, seen, State.Now) : null;
                     var nameId = "output-receiver-" + receiver.Id;
                     var metaId = nameId + "-meta";
                     var pillId = nameId + "-pill";
@@ -111,8 +113,8 @@
                             <span class="@(active ? "radio is-on" : "radio")" aria-hidden="true"></span>
                             <span class="row__main">
                                 <strong id="@nameId">@receiver.Name</strong>
-                                <span id="@metaId" class="meta only-wide">@(receiver.Address is { Length: > 0 } address ? L.Format("player.receiverMeta", ("model", model), ("address", address)) : model)</span>
-                                <span class="meta only-phone">@model</span>
+                                <span id="@metaId" class="meta only-wide" data-last-seen="@(lastSeen is null ? null : "true")">@(lastSeen is not null ? L.Format("player.receiverMetaOffline", ("model", model), ("lastSeen", lastSeen)) : receiver.Address is { Length: > 0 } address ? L.Format("player.receiverMeta", ("model", model), ("address", address)) : model)</span>
+                                <span class="meta only-phone">@(lastSeen ?? model)</span>
                             </span>
                             <span id="@pillId">
                                 @if (busy)
@@ -295,6 +297,13 @@
 
     /// <summary>The radio of a receiver's row (tests: the focus target after a pairing from the row).</summary>
     internal ElementReference RadioOf(string receiverId) => _receiverRadios[receiverId];
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        RedrawLastSeenPhrases(); // "last seen 5 minutes ago" ages without an event
+    }
 
     /// <inheritdoc />
     protected override void OnBridgeStateChanged()

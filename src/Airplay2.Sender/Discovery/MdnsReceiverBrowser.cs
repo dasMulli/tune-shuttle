@@ -14,6 +14,8 @@ namespace Airplay2.Sender.Discovery;
 /// <remarks>
 /// <para>Sockets, per address family: one listener bound to port 5353 with <c>ReuseAddress</c> that joins
 /// 224.0.0.251 / ff02::fb on every selected interface and sends the multicast queries (answers come back by multicast);
+/// group, port and hop limit come from <see cref="ReceiverBrowserOptions.Endpoint"/> (the standard mDNS endpoint unless a
+/// test passes a private one);
 /// and, when <see cref="ReceiverBrowserOptions.UseLegacyUnicastQueries"/> is set, one ephemeral-port socket per local
 /// address (IPv4) or interface (IPv6) that sends the same queries as legacy unicast queries, as pyatv does with one
 /// socket per local address plus one on 5353 [pyatv:pyatv/core/mdns.py:506-531]. The second path is the fallback for
@@ -27,14 +29,14 @@ namespace Airplay2.Sender.Discovery;
 /// </remarks>
 public sealed class MdnsReceiverBrowser : IReceiverBrowser
 {
-    /// <summary>The mDNS port.</summary>
+    /// <summary>The mDNS port (of <see cref="MdnsEndpoint.Default"/>).</summary>
     public const int MdnsPort = 5353;
 
-    /// <summary>The IPv4 mDNS group.</summary>
-    public static readonly IPAddress GroupV4 = IPAddress.Parse("224.0.0.251");
+    /// <summary>The IPv4 mDNS group (of <see cref="MdnsEndpoint.Default"/>).</summary>
+    public static readonly IPAddress GroupV4 = MdnsEndpoint.Default.GroupV4;
 
-    /// <summary>The IPv6 mDNS group.</summary>
-    public static readonly IPAddress GroupV6 = IPAddress.Parse("ff02::fb");
+    /// <summary>The IPv6 mDNS group (of <see cref="MdnsEndpoint.Default"/>).</summary>
+    public static readonly IPAddress GroupV6 = MdnsEndpoint.Default.GroupV6;
 
     // Windows: SIO_UDP_CONNRESET, so an ICMP port-unreachable does not fail the next receive (same as librespot's responder).
     private const int SioUdpConnReset = -1744830452;
@@ -76,6 +78,7 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
     internal MdnsReceiverBrowser(ReceiverBrowserOptions options, ILogger<MdnsReceiverBrowser> logger, TimeProvider time)
     {
         Options = options ?? throw new ArgumentNullException(nameof(options));
+        ArgumentNullException.ThrowIfNull(options.Endpoint, nameof(options));
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         if (options.QueryInterval <= TimeSpan.Zero)
@@ -119,7 +122,7 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
 
             if (bound.Length == 0)
             {
-                throw new InvalidOperationException("mDNS browser: no socket could be bound (no usable interface, or port 5353 and every ephemeral bind failed); see the log for details.");
+                throw new InvalidOperationException($"mDNS browser: no socket could be bound (no usable interface, or port {Options.Endpoint.Port} and every ephemeral bind failed); see the log for details.");
             }
 
             NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
@@ -595,12 +598,12 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
                 continue;
             }
 
-            TryAdd(() => MdnsSocket.BindListener(family, ofFamily, Logger), $"{family} listener on port {MdnsPort}");
+            TryAdd(() => MdnsSocket.BindListener(family, ofFamily, Options.Endpoint, Logger), $"{family} listener on port {Options.Endpoint.Port}");
             if (Options.UseLegacyUnicastQueries)
             {
                 foreach (var iface in Queriers(ofFamily))
                 {
-                    TryAdd(() => MdnsSocket.BindQuerier(iface), $"querier on {iface.Address}");
+                    TryAdd(() => MdnsSocket.BindQuerier(iface, Options.Endpoint), $"querier on {iface.Address}");
                 }
             }
         }
@@ -649,7 +652,7 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
 
         foreach (var w in missingQueriers)
         {
-            TryAdd(() => MdnsSocket.BindQuerier(w), $"querier on {w.Address}");
+            TryAdd(() => MdnsSocket.BindQuerier(w, Options.Endpoint), $"querier on {w.Address}");
         }
 
         foreach (var family in missingListeners)
@@ -657,7 +660,7 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
             var ofFamily = interfaces.Where(i => i.Address.AddressFamily == family).ToList();
             if (ofFamily.Count > 0)
             {
-                TryAdd(() => MdnsSocket.BindListener(family, ofFamily, Logger), $"{family} listener on port {MdnsPort}");
+                TryAdd(() => MdnsSocket.BindListener(family, ofFamily, Options.Endpoint, Logger), $"{family} listener on port {Options.Endpoint.Port}");
             }
         }
     }
@@ -809,18 +812,22 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
         // The querier's description; a listener's is computed from the joined interfaces.
         private readonly string _description;
 
-        private MdnsSocket(Socket socket, bool isListener, int interfaceIndex, IPAddress? localAddress, string description)
+        // The group and port the queries go to (the listener also joins the group and is bound to the port).
+        private readonly MdnsEndpoint _endpoint;
+
+        private MdnsSocket(Socket socket, bool isListener, int interfaceIndex, IPAddress? localAddress, string description, MdnsEndpoint endpoint)
         {
             Socket = socket;
             IsListener = isListener;
             InterfaceIndex = interfaceIndex;
             LocalAddress = localAddress;
             _description = description;
+            _endpoint = endpoint;
         }
 
         public Socket Socket { get; }
 
-        /// <summary>True for the port-5353 multicast socket; false for an ephemeral legacy-unicast querier.</summary>
+        /// <summary>True for the multicast socket on the mDNS port (5353); false for an ephemeral legacy-unicast querier.</summary>
         public bool IsListener { get; }
 
         /// <summary>The interface of a querier (0 for a listener, whose packets carry their own interface).</summary>
@@ -850,10 +857,10 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
 
         public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
-        private IPAddress Group => Socket.AddressFamily == AddressFamily.InterNetwork ? GroupV4 : GroupV6;
+        private IPAddress Group => _endpoint.GroupOf(Socket.AddressFamily);
 
         /// <summary>Port 5353, <c>ReuseAddress</c>, group joined per interface (librespot's responder binds the same way).</summary>
-        public static MdnsSocket BindListener(AddressFamily family, IEnumerable<LocalInterface> interfaces, ILogger logger)
+        public static MdnsSocket BindListener(AddressFamily family, IEnumerable<LocalInterface> interfaces, MdnsEndpoint endpoint, ILogger logger)
         {
             var socket = new Socket(family, SocketType.Dgram, ProtocolType.Udp);
             try
@@ -866,13 +873,13 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
                 }
 
                 socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                socket.Bind(new IPEndPoint(v6 ? IPAddress.IPv6Any : IPAddress.Any, MdnsPort));
+                socket.Bind(new IPEndPoint(v6 ? IPAddress.IPv6Any : IPAddress.Any, endpoint.Port));
                 var level = v6 ? SocketOptionLevel.IPv6 : SocketOptionLevel.IP;
                 socket.SetSocketOption(level, SocketOptionName.PacketInformation, true);
-                socket.SetSocketOption(level, SocketOptionName.MulticastTimeToLive, 255);
+                socket.SetSocketOption(level, SocketOptionName.MulticastTimeToLive, endpoint.HopLimit);
                 socket.SetSocketOption(level, SocketOptionName.MulticastLoopback, true);
 
-                var result = new MdnsSocket(socket, isListener: true, 0, null, $"{(v6 ? "IPv6" : "IPv4")} :{MdnsPort}");
+                var result = new MdnsSocket(socket, isListener: true, 0, null, $"{(v6 ? "IPv6" : "IPv4")} :{endpoint.Port}", endpoint);
                 result.JoinMissing(interfaces, logger);
                 if (result._joined.Count == 0)
                 {
@@ -889,7 +896,7 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
         }
 
         /// <summary>An ephemeral-port socket on one local address whose queries are legacy unicast queries (RFC 6762 6.7).</summary>
-        public static MdnsSocket BindQuerier(LocalInterface iface)
+        public static MdnsSocket BindQuerier(LocalInterface iface, MdnsEndpoint endpoint)
         {
             var family = iface.Address.AddressFamily;
             var socket = new Socket(family, SocketType.Dgram, ProtocolType.Udp);
@@ -900,7 +907,7 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
                 {
                     socket.Bind(new IPEndPoint(iface.Address, 0));
                     socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, iface.Address.GetAddressBytes());
-                    socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
+                    socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, endpoint.HopLimit);
                     socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastLoopback, true);
                 }
                 else
@@ -908,11 +915,11 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
                     socket.DualMode = false;
                     socket.Bind(new IPEndPoint(IPAddress.IPv6Any, 0));
                     socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.MulticastInterface, iface.Index);
-                    socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.MulticastTimeToLive, 255);
+                    socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.MulticastTimeToLive, endpoint.HopLimit);
                     socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.MulticastLoopback, true);
                 }
 
-                return new MdnsSocket(socket, isListener: false, iface.Index, iface.Address, $"{iface.Address}:{((IPEndPoint)socket.LocalEndPoint!).Port} ({iface.Name})");
+                return new MdnsSocket(socket, isListener: false, iface.Index, iface.Address, $"{iface.Address}:{((IPEndPoint)socket.LocalEndPoint!).Port} ({iface.Name})", endpoint);
             }
             catch
             {
@@ -940,11 +947,11 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
                     if (Socket.AddressFamily == AddressFamily.InterNetwork)
                     {
                         v4 = iface.Address;
-                        Socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(GroupV4, v4));
+                        Socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(Group, v4));
                     }
                     else
                     {
-                        Socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, new IPv6MulticastOption(GroupV6, iface.Index));
+                        Socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, new IPv6MulticastOption(Group, iface.Index));
                     }
 
                     lock (_joined)
@@ -978,7 +985,7 @@ public sealed class MdnsReceiverBrowser : IReceiverBrowser
 
             try
             {
-                var to = new IPEndPoint(Group, MdnsPort);
+                var to = _endpoint.GroupEndPoint(Socket.AddressFamily);
                 if (!IsListener)
                 {
                     await Socket.SendToAsync(packet, SocketFlags.None, to, cancellationToken).ConfigureAwait(false);

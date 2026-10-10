@@ -1,6 +1,7 @@
 using System.Net;
 using Airplay2.FakeReceiver;
 using Bridge.Contracts;
+using Bridge.Service;
 using Bridge.Service.Output;
 using Bridge.Service.Store;
 using Xunit;
@@ -28,7 +29,7 @@ public sealed class BridgeApiTests
         Assert.False(status.OutputConnected);
 
         var settings = await client.GetJsonAsync<SettingsDto>(ApiRoutes.Settings);
-        Assert.Equal(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime"), settings);
+        Assert.Equal(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime", 3), settings);
 
         using (var invalid = await client.SendJsonAsync(HttpMethod.Put, ApiRoutes.Settings, settings with { LatencyFrames = 10 }))
         {
@@ -41,9 +42,26 @@ public sealed class BridgeApiTests
             Assert.Equal(HttpStatusCode.UnprocessableEntity, invalid.StatusCode);
         }
 
+        using (var invalid = await client.SendJsonAsync(HttpMethod.Put, ApiRoutes.Settings, settings with { ForgetOfflineAfterDays = -1 }))
+        {
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, invalid.StatusCode);
+        }
+
+        using (var invalid = await client.SendJsonAsync(HttpMethod.Put, ApiRoutes.Settings, settings with { ForgetOfflineAfterDays = 3651 }))
+        {
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, invalid.StatusCode);
+        }
+
+        // A client that predates ForgetOfflineAfterDays (null) keeps the value; a new one sets it (0 = never).
         var updated = await client.SendJsonAsync<SettingsDto>(HttpMethod.Put, ApiRoutes.Settings, new SettingsDto("Wohnzimmer", 88200, true, "buffered"));
-        Assert.Equal(new SettingsDto("Wohnzimmer", 88200, true, "Buffered"), updated);
+        Assert.Equal(new SettingsDto("Wohnzimmer", 88200, true, "Buffered", 3), updated);
         Assert.Equal(updated, await client.GetJsonAsync<SettingsDto>(ApiRoutes.Settings));
+        updated = await client.SendJsonAsync<SettingsDto>(HttpMethod.Put, ApiRoutes.Settings, updated with { ForgetOfflineAfterDays = 0 });
+        Assert.Equal(0, updated.ForgetOfflineAfterDays);
+        updated = await client.SendJsonAsync<SettingsDto>(HttpMethod.Put, ApiRoutes.Settings, updated with { ForgetOfflineAfterDays = 7.5 });
+        Assert.Equal(new SettingsDto("Wohnzimmer", 88200, true, "Buffered", 7.5), updated);
+        Assert.Equal(updated, await client.GetJsonAsync<SettingsDto>(ApiRoutes.Settings));
+        Assert.Equal(TimeSpan.FromDays(7.5), await ReceiverRetention.LoadAsync(factory.Get<IBridgeStore>(), new BridgeOptions(), CancellationToken.None));
         Assert.Equal("Wohnzimmer", (await client.GetJsonAsync<StatusDto>(ApiRoutes.Status)).DeviceName);
         Assert.Equal("Wohnzimmer", await factory.Get<IBridgeStore>().GetSettingAsync(SettingKeys.DeviceName, CancellationToken.None));
 

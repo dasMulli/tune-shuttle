@@ -677,7 +677,9 @@ left, Output and Status stacked right. One column below.
     (`Commands.StartPairingAsync`). Radio disabled when offline or `Pairing == Disabled`. Meta is two spans:
     `.meta.only-wide` player.receiverMeta "{{model}} · {{address}}" (player.unknownModel when no model; address
     without port) and `.meta.only-phone` with the model alone (player.unknownModel when none; the phone mockup's
-    "Apple receiver"). Receiver rows that are not the current output carry `is-quiet` so their compact slider's fill
+    "Apple receiver"). An offline receiver with a known `LastSeen` shows when it was last seen instead of its stale
+    address: `.meta.only-wide[data-last-seen]` player.receiverMetaOffline "{{model}} · {{lastSeen}}" and
+    `.meta.only-phone` the last-seen phrase alone (`Format.LastSeen`, 4.4). Receiver rows that are not the current output carry `is-quiet` so their compact slider's fill
     is grey (`--muted`, 1.6); the output's row keeps the accent fill. Group rows have no slider.
   - Empty state (no receivers, `State.Loaded`): `.empty` receivers.empty + receivers.emptyHint.
   Phone: the compact slider is hidden (`display: none` ≤ 699px, the Receivers page has the full one) and the group's
@@ -704,13 +706,27 @@ left, Output and Status stacked right. One column below.
 
 ### 4.4 Receivers page (`Pages/Receivers.razor`, route `/receivers`)
 
-`<h1>` receivers.title; `.meta` lead line (receivers.lead: device name + Spotify state + output summary, as today but
-through the catalog). Then `.cards` grid: `grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.25rem`
-(one column < 700px). Each receiver is an `article.card.receiver[data-receiver-id]`:
+`<h1 tabindex="-1">` receivers.title (the focus target after a forget removed the pressed button's card); `.meta` lead
+line (receivers.lead: device name + Spotify state + output summary, as today but through the catalog). Then, only while
+N > 0 receivers are forgettable (offline: `!Online` and not connecting, connected or streaming, the service's rule),
+`div[data-bulk=forget-offline]` with a `.btn` receivers.forgetOffline "{{count}}" (N in `Format.Integer`) → inline
+confirm in its place: `<p><strong>` receivers.forgetOfflineConfirm (plural by N), `.btn.btn--danger` receivers.forget
+(`Commands.ForgetOfflineReceiversAsync`, `DELETE /api/receivers?offline=true`, then the success notice
+notices.receiversForgotten, plural by the number the service removed) and `.btn` common.keep. The focus goes to Keep when
+the confirm opens, back to the button on Keep, and to the `<h1>` after the forget. Then `.cards` grid:
+`grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.25rem` (one column < 700px). Each receiver is an
+`article.card.receiver[data-receiver-id]`:
 
 1. `.card__head`: `<h2>` name; pill (4.8).
 2. `.meta`: player.receiverMeta "{{model}} · {{address}}" with `address` = "address:port" (receivers.unknownModel when
-   no model; the model alone while there is no address), the same key as the Player's Output row.
+   no model; the model alone while there is no address), the same key as the Player's Output row. An offline receiver
+   with a known `LastSeen` adds a second line in the same block (`<br>` + `span[data-last-seen]`): `Format.LastSeen`,
+   relative under 31 days — receivers.lastSeenJustNow under a minute (and for a time ahead of the browser's clock),
+   receivers.lastSeenMinutes / receivers.lastSeenHours / receivers.lastSeenDays with whole units and the language's
+   plural forms — and from 31 days on receivers.lastSeenOn "{{date}}" with the local date in the culture's short
+   pattern ("d"). The phrase ages with the clock, not with bridge events, so this page and the Player's Output list
+   redraw once a minute (`Format.LastSeenRefresh`, `BridgeComponentBase.RedrawLastSeenPhrases`, on the state's clock)
+   while an offline receiver carries a last-seen time.
 3. Level block: `.label` receivers.volume, then `LevelSlider Variant="Hero"` (`Label` = receivers.volumeOf "{{name}}"
    hidden, `ValueText` common.levelText) with the `.big` number (same look as the master slider; no −/+ steppers here).
 4. Tags row (`.tags`, chips): chip "AirPlay 2" when `Capabilities.AirPlay2`, "PTP", "Buffered" (receivers.tags.*),
@@ -719,7 +735,12 @@ through the catalog). Then `.cards` grid: `grid-template-columns: repeat(auto-fi
 5. Error line (`.meta` in `--err-ink`, `role="alert"`) when `State == Error` and `Error` is set.
 6. Actions row (`display: flex; flex-wrap: wrap; gap: .5rem`): `.btn.btn--primary` receivers.connect /
    receivers.connecting ("Connecting…", the busy label) or `.btn` receivers.disconnect; `.btn` receivers.pairWithPin
-   when `PinRequired`; `.btn.btn--ghost` receivers.forgetPairing when `Paired`. Disabled rules as today (offline,
+   when `PinRequired`; `.btn.btn--ghost` receivers.forgetPairing when `Paired`; `.btn.btn--ghost[data-action=forget-receiver]`
+   receivers.forget when the receiver is forgettable (offline, see above). Forget opens an inline confirm in place of
+   the row: `<p data-confirm=forget-receiver><strong>` receivers.forgetConfirm "{{name}}", `.btn.btn--danger`
+   receivers.forget (`Commands.ForgetReceiverAsync`, `DELETE /api/receivers/{id}`; aria-busy while it runs; a refusal
+   keeps the confirm open with the notice) and `.btn` common.keep; focus as for the bulk confirm (Keep, back to Forget,
+   the `<h1>` once the card is gone). Disabled rules as today (offline,
    `Disabled` pairing). The Connect button's `title` is receivers.connectTitle when enabled,
    receivers.offlineTitle when it is disabled because the receiver is offline, and pills.title.homekitOnly when it is
    disabled because the receiver accepts HomeKit members only (`Pairing == Disabled`).
@@ -772,7 +793,10 @@ All group commands and the busy/preview logic of today's `Groups.razor` move ove
    its own language never blocks the submit and settings.validation.latencyRange shows instead; hint settings.latencyHint with `{{ms}}`, `{{min}}`, `{{max}}` and settings.latencyHint2),
    settings.stream (`<select>`: settings.streamRealtime / settings.streamBuffered; hint settings.streamHint),
    settings.poll (checkbox row: `.field--check { display: grid; grid-template-columns: auto 1fr }`, hint
-   settings.pollHint as `.hint.hint--check`). Validation messages from the catalog (`SettingsModel` keeps the
+   settings.pollHint as `.hint.hint--check`), settings.forgetOfflineAfter (`InputNumber<double>` `#forget-offline`,
+   `.input.input--narrow`, min 0, max 3650, step 1; hint settings.forgetOfflineAfterHint with "0 = never"; range message
+   settings.validation.forgetDaysRange, parse message settings.validation.forgetDaysNumber, both rendered like the
+   latency field's; a service answer without the field shows the default 3). Validation messages from the catalog (`SettingsModel` keeps the
    attributes; the page maps the attribute's `ErrorMessage` names — set them to the catalog keys
    `settings.validation.*` and render `I18n[message]`). `InputNumber` checks the parse itself before any attribute
    runs (an empty latency field, or "1e"): its `ParsingErrorMessage` is the key settings.validation.latencyNumber (no
@@ -1363,7 +1387,9 @@ Activate button's `title` when enabled (4.5); settings.spotifyConnectedNoUser �
 diagnostics.spotify … diagnostics.version → the Diagnostics Status card (4.7); styleguide.title / audit.title → the
 `<h1>` and page title of the two developer pages; player.bridgeFallback → the device-name fallback (4.3);
 player.noOutput → the Output card's no-output line (4.3); banner.closedByBridge → the connection error text of 3.5;
-settings.validation.latencyNumber → the latency field's parse message (4.6). Removed from the first draft because nothing consumed
+settings.validation.latencyNumber → the latency field's parse message (4.6); settings.validation.forgetDaysNumber → the
+forget-offline field's parse message (4.6); player.receiverMetaOffline → offline Output rows (4.3); receivers.lastSeen* →
+`Format.LastSeen` (4.4, also the Output rows). Removed from the first draft because nothing consumed
 them: app.loading, app.error (index.html carries its own inline texts, 8.1), common.close, common.save, common.working,
 common.yes, common.no, units.*, player.title, player.levelText and groups.masterText (both → common.levelText),
 actions.playback (→ the four actions.playback* keys).
@@ -1486,6 +1512,7 @@ actions.playback (→ the four actions.playback* keys).
 | player.groupEmpty | Gruppe · keine Mitglieder | Group · no members |
 | player.groupEmptyShort | keine Mitglieder | no members |
 | player.receiverMeta | {{model}} · {{address}} | {{model}} · {{address}} |
+| player.receiverMetaOffline | {{model}} · {{lastSeen}} | {{model}} · {{lastSeen}} |
 | player.unknownModel | Unbekanntes Modell | Unknown model |
 | player.noOutput | Nichts ausgewählt: Audio wird verworfen. Wähle einen Empfänger oder eine Gruppe. | Nothing selected: audio is discarded. Choose a receiver or a group. |
 | player.status | Status | Status |
@@ -1524,8 +1551,18 @@ actions.playback (→ the four actions.playback* keys).
 | receivers.disconnect | Trennen | Disconnect |
 | receivers.pairWithPin | Mit PIN koppeln | Pair with PIN |
 | receivers.forgetPairing | Kopplung vergessen | Forget pairing |
+| receivers.forget | Vergessen | Forget |
+| receivers.forgetConfirm | {{name}} vergessen? Kopplung, Gruppenmitgliedschaften und Einstellungen des Empfängers werden gelöscht; taucht er wieder im Netz auf, wird er neu aufgenommen. | Forget {{name}}? Its pairing, group memberships and settings are deleted; if it shows up on the network again, it is added afresh. |
+| receivers.forgetOffline | Alle Offline-Empfänger vergessen ({{count}}) | Forget all offline receivers ({{count}}) |
+| receivers.forgetOfflineConfirm_one | {{count}} Offline-Empfänger vergessen? Seine Kopplung, Gruppenmitgliedschaften und Einstellungen werden gelöscht. | Forget {{count}} offline receiver? Its pairing, group memberships and settings are deleted. |
+| receivers.forgetOfflineConfirm_other | {{count}} Offline-Empfänger vergessen? Ihre Kopplungen, Gruppenmitgliedschaften und Einstellungen werden gelöscht. | Forget {{count}} offline receivers? Their pairings, group memberships and settings are deleted. |
 | receivers.connectTitle | Nur zu diesem Empfänger spielen | Play to this receiver alone |
 | receivers.offlineTitle | Der Empfänger ist offline | The receiver is offline |
+| receivers.lastSeenJustNow | Zuletzt gesehen vor weniger als einer Minute | Last seen less than a minute ago |
+| receivers.lastSeenMinutes_one / _other | Zuletzt gesehen vor {{count}} Minute / Minuten | Last seen {{count}} minute / minutes ago |
+| receivers.lastSeenHours_one / _other | Zuletzt gesehen vor {{count}} Stunde / Stunden | Last seen {{count}} hour / hours ago |
+| receivers.lastSeenDays_one / _other | Zuletzt gesehen vor {{count}} Tag / Tagen | Last seen {{count}} day / days ago |
+| receivers.lastSeenOn | Zuletzt gesehen am {{date}} | Last seen on {{date}} |
 | receivers.details | Details | Details |
 | receivers.offset | Versatz | Offset |
 | receivers.offsetHint | {{frames}} Frames = {{ms}} ms (Latenz-Trimmung, ±2 s) | {{frames}} frames = {{ms}} ms (latency trim, ±2 s) |
@@ -1613,6 +1650,8 @@ actions.playback (→ the four actions.playback* keys).
 | settings.streamHint | Realtime: RTP über UDP mit NTP- oder PTP-Timing, der zuerst gebaute und getestete Weg. Gepuffert: TCP mit PTP-Timing, nur für Empfänger, die es können. | Realtime: RTP over UDP with NTP or PTP timing, what the bridge was built and tested with first. Buffered: TCP with PTP timing, used only for receivers that support it. |
 | settings.poll | Empfänger-Lautstärke abfragen | Poll receiver volume |
 | settings.pollHint | Liest die Lautstärke alle paar Sekunden vom Empfänger zurück, für Geräte, deren Tasten keine Änderungen über den Ereigniskanal melden. | Reads the volume back from receivers every few seconds, for receivers whose own buttons do not report changes over the event channel. |
+| settings.forgetOfflineAfter | Offline-Empfänger vergessen nach (Tagen) | Forget offline receivers after (days) |
+| settings.forgetOfflineAfterHint | Empfänger ohne Kopplung, Gruppe und eigene Einstellungen werden entfernt, wenn sie so lange nicht im Netz waren. 0 = nie. | Receivers without a pairing, a group or settings of their own are removed once they have been off the network this long. 0 = never. |
 | settings.save | Speichern | Save |
 | settings.saving | Speichere… | Saving… |
 | settings.reset | Zurücksetzen | Reset |
@@ -1622,6 +1661,8 @@ actions.playback (→ the four actions.playback* keys).
 | settings.validation.latencyRange | Die Latenz muss zwischen 22.050 und 176.400 Frames liegen. | The latency must be between 22,050 and 176,400 frames. |
 | settings.validation.latencyNumber | Gib die Latenz als ganze Zahl an Frames ein. | Enter the latency as a whole number of frames. |
 | settings.validation.stream | Der Stream-Typ ist Realtime oder Gepuffert. | The stream type is Realtime or Buffered. |
+| settings.validation.forgetDaysRange | Gib 0 bis 3.650 Tage an (0 = nie). | Enter 0 to 3,650 days (0 = never). |
+| settings.validation.forgetDaysNumber | Gib die Anzahl der Tage als Zahl ein. | Enter the number of days as a number. |
 | settings.appearance | Darstellung | Appearance |
 | settings.theme | Design | Theme |
 | settings.language | Sprache | Language |
@@ -1688,6 +1729,7 @@ actions.playback (→ the four actions.playback* keys).
 | notices.settingsSaved | Einstellungen gespeichert. | Settings saved. |
 | notices.paired | Mit {{name}} gekoppelt. | Paired with {{name}}. |
 | notices.spotifyForgotten | Die Spotify-Anmeldung ist vergessen; wähle die Bridge in einer Spotify-App, um dich neu anzumelden. | The Spotify login is forgotten; select the bridge in a Spotify app to log in again. |
+| notices.receiversForgotten_one / _other | {{count}} Empfänger vergessen. | {{count}} receiver / receivers forgotten. |
 | notices.connectFailed | {{name}}: {{error}} | {{name}}: {{error}} |
 | notices.connectFailedDefault | die Verbindung ist fehlgeschlagen. | the connection failed. |
 | notices.unreachable | Die Bridge ist nicht erreichbar. | The bridge is not reachable. |
@@ -1701,6 +1743,8 @@ actions.playback (→ the four actions.playback* keys).
 | actions.setOffset | Setzen des Versatzes von {{name}} | Setting the offset of {{name}} |
 | actions.startPairing | Starten der Kopplung mit {{name}} | Starting the pairing with {{name}} |
 | actions.forgetPairing | Vergessen der Kopplung von {{name}} | Forgetting the pairing of {{name}} |
+| actions.forgetReceiver | Vergessen von {{name}} | Forgetting {{name}} |
+| actions.forgetOfflineReceivers | Vergessen der Offline-Empfänger | Forgetting the offline receivers |
 | actions.createGroup | Anlegen der Gruppe {{name}} | Creating the group {{name}} |
 | actions.renameGroup | Umbenennen der Gruppe | Renaming the group |
 | actions.deleteGroup | Löschen der Gruppe | Deleting the group |

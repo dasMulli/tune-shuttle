@@ -28,9 +28,10 @@ internal sealed class BridgeFactory : WebApplicationFactory<BridgeController>
 {
     private readonly bool _ownsDirectory;
 
-    public BridgeFactory(string? dataDirectory = null, StaticReceiverBrowser? browser = null, bool useMdns = false, ILoggerProvider? extraLogging = null, string environment = "Development")
+    public BridgeFactory(string? dataDirectory = null, StaticReceiverBrowser? browser = null, bool useMdns = false, ILoggerProvider? extraLogging = null, string environment = "Development", TimeProvider? time = null)
     {
         Environment = environment;
+        Time = time;
         UseMdns = useMdns;
         ExtraLogging = extraLogging;
         _ownsDirectory = dataDirectory is null;
@@ -47,6 +48,9 @@ internal sealed class BridgeFactory : WebApplicationFactory<BridgeController>
     public bool UseMdns { get; }
 
     public ILoggerProvider? ExtraLogging { get; }
+
+    /// <summary>A clock for the whole bridge (pruning tests), or null for the system clock.</summary>
+    public TimeProvider? Time { get; }
 
     /// <summary>The host environment (Development by default; Production is what a plain <c>bridge.dll</c> run gets).</summary>
     public string Environment { get; }
@@ -75,6 +79,11 @@ internal sealed class BridgeFactory : WebApplicationFactory<BridgeController>
         if (!UseMdns)
         {
             builder.ConfigureTestServices(services => services.AddSingleton<IReceiverBrowser>(Browser));
+        }
+
+        if (Time is not null)
+        {
+            builder.ConfigureTestServices(services => services.AddSingleton(Time));
         }
     }
 

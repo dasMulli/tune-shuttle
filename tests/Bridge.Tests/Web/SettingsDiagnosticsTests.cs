@@ -70,6 +70,52 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     }
 
     [Fact]
+    public void Forget_offline_after_is_a_days_field_that_validates_and_saves()
+    {
+        using var scope = new CultureScope("en");
+        var api = UseApi((request, body) => (request.Method.Method, PathOf(request)) switch
+        {
+            ("GET", "/api/settings") => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime", 3)),
+            ("PUT", "/api/settings") => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime", 0)),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => Assert.Equal("3", cut.Find("#forget-offline").GetAttribute("value")));
+        Assert.Equal("Forget offline receivers after (days)", cut.Find("label[for=forget-offline]").TextContent);
+        Assert.Contains("0 = never.", cut.Find("#forget-offline-hint").TextContent, StringComparison.Ordinal);
+        Assert.Equal("forget-offline-hint", cut.Find("#forget-offline").GetAttribute("aria-describedby"));
+        Assert.Equal("0", cut.Find("#forget-offline").GetAttribute("min"));
+        Assert.Equal("3650", cut.Find("#forget-offline").GetAttribute("max"));
+
+        cut.Find("#forget-offline").Change("-1");
+        cut.Find("form").Submit();
+        cut.WaitForAssertion(() => Assert.Equal("Enter 0 to 3,650 days (0 = never).", cut.Find(".validation-message").TextContent));
+        cut.Find("#forget-offline").Change("1e");
+        cut.WaitForAssertion(() => Assert.Contains("Enter the number of days as a number.", cut.FindAll(".validation-message").Select(m => m.TextContent)));
+        Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Put);
+
+        cut.Find("#forget-offline").Change("0");
+        cut.Find("form").Submit();
+        cut.WaitForAssertion(() =>
+        {
+            var put = Assert.Single(api.Requests, r => r.Method == HttpMethod.Put);
+            Assert.Contains("\"forgetOfflineAfterDays\":0", put.Body, StringComparison.Ordinal);
+        });
+        cut.WaitForAssertion(() => Assert.Equal("0", cut.Find("#forget-offline").GetAttribute("value")));
+        Assert.Empty(cut.FindAll(".validation-message"));
+    }
+
+    [Fact]
+    public void An_answer_without_the_forget_field_shows_the_default()
+    {
+        using var scope = new CultureScope("en");
+        UseApi((_, _) => StubHandler.Json(new SettingsDto("AirPlay Bridge", 77175, false, "Realtime")));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => Assert.Equal("3", cut.Find("#forget-offline").GetAttribute("value")));
+        Assert.Equal(3, SettingsModel.From(new SettingsDto("x", 77175, false, "Realtime")).ToDto().ForgetOfflineAfterDays);
+    }
+
+    [Fact]
     public void Poll_row_is_a_wrapping_label_like_the_theme_radios()
     {
         using var scope = new CultureScope("en");

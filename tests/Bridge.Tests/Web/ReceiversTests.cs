@@ -275,6 +275,192 @@ public sealed class ReceiversTests : ComponentTestBase
         cut.WaitForAssertion(() => Assert.Equal(cut.Instance.ConnectButtonOf("f").Id, LastFocusedId()));
     }
 
+    [Fact]
+    public void Last_seen_phrases_age_with_the_clock_without_a_bridge_event()
+    {
+        var time = new SteppedTime(new DateTimeOffset(2026, 10, 10, 12, 0, 0, TimeSpan.Zero));
+        var state = new BridgeState(time);
+        _ctx.Services.AddSingleton(state); // the last registration wins over the fixture's state
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o", "O", online: false, state: ReceiverConnectionState.Offline, lastSeen: time.GetUtcNow() - TimeSpan.FromMinutes(5))));
+        state.Apply(new BridgeEvent.OutputChanged(Dto.NoOutput));
+        var receivers = _ctx.Render<Receivers>();
+        var player = _ctx.Render<Player>();
+        Assert.Equal("Last seen 5 minutes ago", receivers.Find("article[data-receiver-id='o'] [data-last-seen]").TextContent);
+        Assert.Equal("Last seen 5 minutes ago", player.Find("[data-receiver-id='o'] .row__main .meta.only-phone").TextContent);
+        var version = state.Version;
+
+        // Ten minutes later, with no event in between: the once-a-minute redraw (Format.LastSeenRefresh) catches up.
+        time.Advance(TimeSpan.FromMinutes(10));
+        receivers.WaitForAssertion(() => Assert.Equal("Last seen 15 minutes ago", receivers.Find("article[data-receiver-id='o'] [data-last-seen]").TextContent));
+        player.WaitForAssertion(() => Assert.Equal("Last seen 15 minutes ago", player.Find("[data-receiver-id='o'] .row__main .meta.only-phone").TextContent));
+        Assert.Equal(version, state.Version);
+    }
+
+    [Fact]
+    public void Offline_cards_show_when_they_were_last_seen_and_forget_asks_first()
+    {
+        var forgetAnswer = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var api = UseApi((request, _) => (request.Method.Method, PathOf(request)) switch
+        {
+            ("DELETE", "/api/receivers/o") => forgetAnswer.Task,
+            _ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)),
+        });
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "A", lastSeen: DateTimeOffset.UtcNow)));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o", "O", online: false, state: ReceiverConnectionState.Offline, lastSeen: DateTimeOffset.UtcNow - TimeSpan.FromDays(3) - TimeSpan.FromHours(1))));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("c", "C", online: false, state: ReceiverConnectionState.Connecting, lastSeen: DateTimeOffset.UtcNow - TimeSpan.FromMinutes(5))));
+        _state.Apply(new BridgeEvent.OutputChanged(Dto.NoOutput));
+        var cut = _ctx.Render<Receivers>();
+
+        // Last seen on offline cards only; Forget only where the service would accept it (offline, no session).
+        Assert.Equal("Last seen 3 days ago", cut.Find("article[data-receiver-id='o'] [data-last-seen]").TextContent);
+        Assert.Equal("Last seen 5 minutes ago", cut.Find("article[data-receiver-id='c'] [data-last-seen]").TextContent);
+        Assert.Empty(cut.FindAll("article[data-receiver-id='a'] [data-last-seen]"));
+        Assert.Empty(cut.FindAll("article[data-receiver-id='a'] [data-action=forget-receiver]"));
+        Assert.Empty(cut.FindAll("article[data-receiver-id='c'] [data-action=forget-receiver]"));
+        var forget = cut.Find("article[data-receiver-id='o'] [data-action=forget-receiver]");
+        Assert.Equal("Forget", forget.TextContent);
+        Assert.Contains("btn--ghost", forget.ClassList);
+
+        // The confirm replaces the actions row; Keep brings the button back with the focus.
+        forget.Click();
+        Assert.Equal("Forget O? Its pairing, group memberships and settings are deleted; if it shows up on the network again, it is added afresh.", cut.Find("article[data-receiver-id='o'] [data-confirm=forget-receiver]").TextContent);
+        Assert.Empty(cut.FindAll("article[data-receiver-id='o'] [data-action=connect]"));
+        Assert.Contains("btn--danger", cut.Find("article[data-receiver-id='o'] [data-action=forget-receiver-yes]").ClassList);
+        cut.WaitForAssertion(() => Assert.Equal(ElementId(cut.Find("article[data-receiver-id='o'] [data-action=keep-receiver]")), LastFocusedId()));
+        cut.Find("article[data-receiver-id='o'] [data-action=keep-receiver]").Click();
+        Assert.Empty(cut.FindAll("[data-confirm=forget-receiver]"));
+        cut.WaitForAssertion(() => Assert.Equal(ElementId(cut.Find("article[data-receiver-id='o'] [data-action=forget-receiver]")), LastFocusedId()));
+        Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Delete);
+
+        // Forget: busy while the request runs, then the card is gone and the heading has the focus.
+        cut.Find("article[data-receiver-id='o'] [data-action=forget-receiver]").Click();
+        cut.Find("article[data-receiver-id='o'] [data-action=forget-receiver-yes]").Click();
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(api.Requests, r => r.Method == HttpMethod.Delete && r.Path == "/api/receivers/o");
+            Assert.Equal("true", cut.Find("article[data-receiver-id='o'] [data-action=forget-receiver-yes]").GetAttribute("aria-busy"));
+        });
+        forgetAnswer.SetResult(new HttpResponseMessage(HttpStatusCode.NoContent));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("article[data-receiver-id='o']")));
+        Assert.Null(_state.Receiver("o"));
+        cut.WaitForAssertion(() => Assert.Equal(cut.Instance.Title.Id, LastFocusedId()));
+        Assert.Equal("-1", cut.Find("h1").GetAttribute("tabindex"));
+    }
+
+    [Fact]
+    public void A_refused_forget_keeps_the_confirm_open_and_says_why()
+    {
+        UseApi((request, _) => (request.Method.Method, PathOf(request)) switch
+        {
+            ("DELETE", "/api/receivers/o") => StubHandler.Problem(HttpStatusCode.Conflict, "Conflict", "O is online"),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o", "O", online: false, state: ReceiverConnectionState.Offline)));
+        var cut = _ctx.Render<Receivers>();
+
+        // Without a last-seen time the card shows none.
+        Assert.Empty(cut.FindAll("[data-last-seen]"));
+        cut.Find("[data-action=forget-receiver]").Click();
+        cut.Find("[data-action=forget-receiver-yes]").Click();
+        cut.WaitForAssertion(() => Assert.Contains(_state.Notices, n => n.Kind == NoticeKind.Error && n.Text.Contains("O is online", StringComparison.Ordinal)));
+        Assert.Single(cut.FindAll("[data-confirm=forget-receiver]"));
+        Assert.NotNull(_state.Receiver("o"));
+    }
+
+    [Fact]
+    public void Forget_all_offline_is_hidden_without_offline_receivers_and_forgets_them_after_a_confirm()
+    {
+        string? query = null;
+        var api = UseApi((request, _) =>
+        {
+            if (request.Method == HttpMethod.Delete && PathOf(request) == "/api/receivers")
+            {
+                query = request.RequestUri!.Query;
+                return StubHandler.Json(new ForgottenReceiversDto(["o1", "o2"]));
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "A")));
+        _state.Apply(new BridgeEvent.OutputChanged(Dto.NoOutput));
+        var cut = _ctx.Render<Receivers>();
+        Assert.Empty(cut.FindAll("[data-bulk]"));
+
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o1", "O1", online: false, state: ReceiverConnectionState.Offline)));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o2", "O2", online: false, state: ReceiverConnectionState.Error, error: "gone")));
+        cut.WaitForAssertion(() => Assert.Equal("Forget all offline receivers (2)", cut.Find("[data-action=forget-offline]").TextContent));
+
+        cut.Find("[data-action=forget-offline]").Click();
+        Assert.Equal("Forget 2 offline receivers? Their pairings, group memberships and settings are deleted.", cut.Find("[data-bulk] p").TextContent);
+        cut.WaitForAssertion(() => Assert.Equal(ElementId(cut.Find("[data-action=keep-offline]")), LastFocusedId()));
+        cut.Find("[data-action=keep-offline]").Click();
+        cut.WaitForAssertion(() => Assert.Equal(ElementId(cut.Find("[data-action=forget-offline]")), LastFocusedId()));
+        Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Delete);
+
+        cut.Find("[data-action=forget-offline]").Click();
+        cut.Find("[data-action=forget-offline-yes]").Click();
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("?offline=true", query);
+            Assert.Equal(["a"], cut.FindAll("article.card.receiver").Select(c => c.GetAttribute("data-receiver-id")));
+            Assert.Empty(cut.FindAll("[data-bulk]"));
+        });
+        Assert.Contains(_state.Notices, n => n.Kind == NoticeKind.Success && n.Text == "2 receivers forgotten.");
+        cut.WaitForAssertion(() => Assert.Equal(cut.Instance.Title.Id, LastFocusedId()));
+    }
+
+    [Fact]
+    public void Forget_texts_render_in_german_and_russian()
+    {
+        using var culture = new CultureScope("ru");
+        _ctx.Services.AddSingleton(new I18n("ru"));
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o", "O", online: false, state: ReceiverConnectionState.Offline, lastSeen: DateTimeOffset.UtcNow - TimeSpan.FromDays(5))));
+        var cut = _ctx.Render<Receivers>();
+
+        Assert.Equal("Был в сети 5 дней назад", cut.Find("[data-last-seen]").TextContent);
+        Assert.Equal("Забыть все приёмники не в сети (1)", cut.Find("[data-action=forget-offline]").TextContent);
+        cut.Find("[data-action=forget-offline]").Click();
+        Assert.Equal("Забыть 1 приёмник не в сети? Его сопряжение, группы и настройки будут удалены.", cut.Find("[data-bulk] p").TextContent);
+
+        var l = new I18n("de");
+        Assert.Equal("Alle Offline-Empfänger vergessen (3)", l.Format("receivers.forgetOffline", ("count", 3)));
+        Assert.Equal("1 Offline-Empfänger vergessen? Seine Kopplung, Gruppenmitgliedschaften und Einstellungen werden gelöscht.", l.Plural("receivers.forgetOfflineConfirm", 1));
+        Assert.Equal("Wohnzimmer vergessen? Kopplung, Gruppenmitgliedschaften und Einstellungen des Empfängers werden gelöscht; taucht er wieder im Netz auf, wird er neu aufgenommen.", l.Format("receivers.forgetConfirm", ("name", "Wohnzimmer")));
+    }
+
+    [Fact]
+    public void A_receiver_that_comes_back_online_closes_its_forget_confirm()
+    {
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o", "O", online: false, state: ReceiverConnectionState.Offline)));
+        var cut = _ctx.Render<Receivers>();
+        cut.Find("[data-action=forget-receiver]").Click();
+        cut.Find("[data-action=forget-offline]").Click();
+        Assert.Single(cut.FindAll("[data-confirm=forget-receiver]"));
+
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o", "O")));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll("[data-confirm=forget-receiver]"));
+            Assert.Empty(cut.FindAll("[data-bulk]"));
+            Assert.Single(cut.FindAll("[data-action=connect]"));
+        });
+
+        // Offline again: the buttons, not the old confirms.
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("o", "O", online: false, state: ReceiverConnectionState.Offline)));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Single(cut.FindAll("[data-action=forget-receiver]"));
+            Assert.Single(cut.FindAll("[data-action=forget-offline]"));
+        });
+        Assert.Empty(cut.FindAll("[data-confirm=forget-receiver]"));
+    }
+
+    /// <summary>The element reference id bUnit renders for an element with <c>@ref</c>.</summary>
+    private static string? ElementId(AngleSharp.Dom.IElement element) => element.GetAttribute("blazor:elementReference");
+
     private const string Focus = "Blazor._internal.domWrapper.focus";
 
     /// <summary>The element reference id of the latest <c>FocusAsync</c> call.</summary>

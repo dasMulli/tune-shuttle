@@ -5,6 +5,8 @@
 //   fsm.rs            -> MdnsAnswers (handle_packet / handle_question / send_unsolicited) + Fsm (socket loop)
 //   address_family.rs -> Fsm.Bind (reuse-address bind on 5353, multicast join per interface)
 //
+// The group, port and hop limit come from an MdnsEndpoint (libmdns hard-codes them); production uses MdnsEndpoint.Default.
+//
 // Deliberate deviations from libmdns, each for multi-NIC hosts (Windows in particular):
 //   * a multicast join failure on one interface is logged and skipped (libmdns' own TODO) instead of failing the
 //     whole address family;
@@ -277,19 +279,19 @@ internal static class MdnsAnswers
 }
 
 /// <summary>
-/// A minimal mDNS responder (libmdns <c>Responder</c>): one socket per address family bound to port 5353, answering
-/// queries for the registered services until disposed.
+/// A minimal mDNS responder (libmdns <c>Responder</c>): one socket per address family bound to port 5353 (or the port of
+/// the <see cref="MdnsEndpoint"/> it was spawned with), answering queries for the registered services until disposed.
 /// </summary>
 internal sealed class MdnsResponder : IAsyncDisposable
 {
-    /// <summary>libmdns <c>MDNS_PORT</c>.</summary>
+    /// <summary>libmdns <c>MDNS_PORT</c> (the port of <see cref="MdnsEndpoint.Default"/>).</summary>
     public const int MdnsPort = 5353;
 
-    /// <summary>The IPv4 mDNS group.</summary>
-    public static readonly IPAddress GroupV4 = IPAddress.Parse("224.0.0.251");
+    /// <summary>The IPv4 mDNS group of <see cref="MdnsEndpoint.Default"/>.</summary>
+    public static readonly IPAddress GroupV4 = MdnsEndpoint.Default.GroupV4;
 
-    /// <summary>The IPv6 mDNS group.</summary>
-    public static readonly IPAddress GroupV6 = IPAddress.Parse("ff02::fb");
+    /// <summary>The IPv6 mDNS group of <see cref="MdnsEndpoint.Default"/>.</summary>
+    public static readonly IPAddress GroupV6 = MdnsEndpoint.Default.GroupV6;
 
     private static readonly ILogger Log = LibrespotLog.CreateLogger<MdnsResponder>();
 
@@ -316,17 +318,22 @@ internal sealed class MdnsResponder : IAsyncDisposable
     /// <param name="allowedIps">If not empty, only these addresses are published in A/AAAA records.</param>
     /// <param name="publishIpv6Addresses">Whether AAAA records are published at all.</param>
     /// <param name="hostname">The host name; defaults to the machine name.</param>
-    public static MdnsResponder Spawn(IReadOnlyList<IPAddress> allowedIps, bool publishIpv6Addresses = true, string? hostname = null)
+    /// <param name="endpoint">
+    /// The groups, port and hop limit to bind, join and send to; <see cref="MdnsEndpoint.Default"/> (the real mDNS
+    /// endpoint) when null. Tests pass a private group so their announcements stay off the LAN's mDNS.
+    /// </param>
+    public static MdnsResponder Spawn(IReadOnlyList<IPAddress> allowedIps, bool publishIpv6Addresses = true, string? hostname = null, MdnsEndpoint? endpoint = null)
     {
         // Deviation from libmdns, which uses the full hostname::get() string (`mybox.fritz.box` -> `mybox.fritz.box.local`):
         // only the first label is used, so the SRV target is a single-label `.local` name as mDNS expects.
         hostname ??= Dns.GetHostName().Split('.')[0];
+        endpoint ??= MdnsEndpoint.Default;
         var services = new MdnsServices(hostname);
 
-        var fsms = new List<Fsm> { Fsm.Bind(AddressFamily.InterNetwork, allowedIps, publishAddresses: true) };
+        var fsms = new List<Fsm> { Fsm.Bind(AddressFamily.InterNetwork, allowedIps, publishAddresses: true, endpoint) };
         try
         {
-            fsms.Add(Fsm.Bind(AddressFamily.InterNetworkV6, allowedIps, publishIpv6Addresses));
+            fsms.Add(Fsm.Bind(AddressFamily.InterNetworkV6, allowedIps, publishIpv6Addresses, endpoint));
         }
         catch (Exception e) when (e is SocketException or NetworkInformationException or PlatformNotSupportedException)
         {
@@ -425,7 +432,7 @@ internal sealed class MdnsResponder : IAsyncDisposable
 
         private readonly Socket _socket;
         private readonly AddressFamily _family;
-        private readonly IPAddress _group;
+        private readonly IPEndPoint _group;
         private readonly IReadOnlyList<IPAddress> _allowedIps;
         private readonly bool _publishAddresses;
         private readonly List<JoinedInterface> _joined;
@@ -435,18 +442,18 @@ internal sealed class MdnsResponder : IAsyncDisposable
         // IfAddrsCacheTime. Replaced as a whole, so concurrent readers always see a consistent snapshot.
         private volatile IfAddrsSnapshot? _ifAddrsCache;
 
-        private Fsm(Socket socket, AddressFamily family, IReadOnlyList<IPAddress> allowedIps, bool publishAddresses, List<JoinedInterface> joined)
+        private Fsm(Socket socket, AddressFamily family, IReadOnlyList<IPAddress> allowedIps, bool publishAddresses, List<JoinedInterface> joined, MdnsEndpoint endpoint)
         {
             _socket = socket;
             _family = family;
-            _group = family == AddressFamily.InterNetwork ? GroupV4 : GroupV6;
+            _group = endpoint.GroupEndPoint(family);
             _allowedIps = allowedIps;
             _publishAddresses = publishAddresses;
             _joined = joined;
         }
 
         /// <summary>libmdns <c>AddressFamily::bind</c> + <c>join_multicast</c>.</summary>
-        public static Fsm Bind(AddressFamily family, IReadOnlyList<IPAddress> allowedIps, bool publishAddresses)
+        public static Fsm Bind(AddressFamily family, IReadOnlyList<IPAddress> allowedIps, bool publishAddresses, MdnsEndpoint endpoint)
         {
             var socket = new Socket(family, SocketType.Dgram, ProtocolType.Udp);
             try
@@ -464,15 +471,15 @@ internal sealed class MdnsResponder : IAsyncDisposable
                     socket.DualMode = false;
                 }
 
-                socket.Bind(new IPEndPoint(v6 ? IPAddress.IPv6Any : IPAddress.Any, MdnsPort));
+                socket.Bind(new IPEndPoint(v6 ? IPAddress.IPv6Any : IPAddress.Any, endpoint.Port));
 
                 var level = v6 ? SocketOptionLevel.IPv6 : SocketOptionLevel.IP;
                 socket.SetSocketOption(level, SocketOptionName.PacketInformation, true);
-                socket.SetSocketOption(level, SocketOptionName.MulticastTimeToLive, 255);
+                socket.SetSocketOption(level, SocketOptionName.MulticastTimeToLive, endpoint.HopLimit);
                 socket.SetSocketOption(level, SocketOptionName.MulticastLoopback, true);
 
-                var joined = JoinMulticast(socket, family);
-                return new Fsm(socket, family, allowedIps, publishAddresses, joined);
+                var joined = JoinMulticast(socket, family, endpoint.GroupOf(family));
+                return new Fsm(socket, family, allowedIps, publishAddresses, joined, endpoint);
             }
             catch
             {
@@ -532,7 +539,7 @@ internal sealed class MdnsResponder : IAsyncDisposable
                 var message = MdnsAnswers.BuildUnsolicited(svc, hostname, ttl, addresses);
                 if (!message.IsEmpty)
                 {
-                    await SendAsync(message.Encode(), new IPEndPoint(_group, MdnsPort), iface, cancellationToken).ConfigureAwait(false);
+                    await SendAsync(message.Encode(), _group, iface, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -559,7 +566,7 @@ internal sealed class MdnsResponder : IAsyncDisposable
 
             if (multicast is not null)
             {
-                await SendAsync(multicast.Encode(), new IPEndPoint(_group, MdnsPort), iface, cancellationToken).ConfigureAwait(false);
+                await SendAsync(multicast.Encode(), _group, iface, cancellationToken).ConfigureAwait(false);
             }
 
             if (unicast is not null)
@@ -682,7 +689,7 @@ internal sealed class MdnsResponder : IAsyncDisposable
         /// libmdns <c>get_one_nonloopback_ipv4_addr_per_iface</c> / <c>get_one_nonloopback_ipv6_index_per_iface</c> +
         /// <c>join_multicast</c>: joins the group once per interface; with no interface, on the default one.
         /// </summary>
-        private static List<JoinedInterface> JoinMulticast(Socket socket, AddressFamily family)
+        private static List<JoinedInterface> JoinMulticast(Socket socket, AddressFamily family, IPAddress group)
         {
             var joined = new List<JoinedInterface>();
             var candidates = GetIfAddrs(family)
@@ -696,11 +703,11 @@ internal sealed class MdnsResponder : IAsyncDisposable
                 {
                     if (family == AddressFamily.InterNetwork)
                     {
-                        socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(GroupV4, iface.V4Address!));
+                        socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(group, iface.V4Address!));
                     }
                     else
                     {
-                        socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, new IPv6MulticastOption(GroupV6, iface.Index));
+                        socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, new IPv6MulticastOption(group, iface.Index));
                     }
 
                     joined.Add(iface);
@@ -715,11 +722,11 @@ internal sealed class MdnsResponder : IAsyncDisposable
             {
                 if (family == AddressFamily.InterNetwork)
                 {
-                    socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(GroupV4, IPAddress.Any));
+                    socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(group, IPAddress.Any));
                 }
                 else
                 {
-                    socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, new IPv6MulticastOption(GroupV6, 0));
+                    socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.AddMembership, new IPv6MulticastOption(group, 0));
                 }
             }
 

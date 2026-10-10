@@ -408,6 +408,38 @@ public sealed class BridgeState
         Mutate(() => SetGroup(group));
     }
 
+    /// <summary>The current time of the state's clock (relative times such as "last seen 3 days ago").</summary>
+    public DateTimeOffset Now => _time.GetUtcNow();
+
+    /// <summary>The state's clock; the components' redraw timers run on it too (<c>BridgeComponentBase.Every</c>).</summary>
+    internal TimeProvider Time => _time;
+
+    /// <summary>
+    /// True when a receiver may be forgotten: offline and not in a session (connecting, connected, streaming), the
+    /// service's own rule for <c>DELETE /receivers/{id}</c>.
+    /// </summary>
+    public static bool IsForgettable(ReceiverDto receiver)
+    {
+        ArgumentNullException.ThrowIfNull(receiver);
+        return !receiver.Online && receiver.State is not (ReceiverConnectionState.Connecting or ReceiverConnectionState.Connected or ReceiverConnectionState.Streaming);
+    }
+
+    /// <summary>Removes receivers (after a successful forget; the service also sends <c>receiverRemoved</c>).</summary>
+    public void RemoveReceivers(IEnumerable<string> receiverIds)
+    {
+        ArgumentNullException.ThrowIfNull(receiverIds);
+        var ids = receiverIds.ToList();
+        Mutate(() =>
+        {
+            foreach (var id in ids)
+            {
+                _receivers.Remove(id);
+            }
+
+            _receiverList = null;
+        });
+    }
+
     /// <summary>Removes a group (after a successful delete).</summary>
     public void RemoveGroup(string groupId)
     {

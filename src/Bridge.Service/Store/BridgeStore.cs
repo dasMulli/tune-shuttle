@@ -71,6 +71,13 @@ public interface IBridgeStore : IPairingStore, IAsyncDisposable
     /// <summary>Sets the per-receiver latency trim. Throws <see cref="KeyNotFoundException"/> for an unknown id.</summary>
     Task SetReceiverOffsetAsync(string id, int offsetFrames, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Moves a receiver's <c>last_seen</c> forward to <paramref name="lastSeen"/> (never back); false when the row is
+    /// unknown or already newer. Discovery writes the whole row only when a record changes, so the inventory touches it
+    /// when a receiver goes away and the pruning job while receivers stay online.
+    /// </summary>
+    Task<bool> TouchReceiverAsync(string id, DateTimeOffset lastSeen, CancellationToken cancellationToken);
+
     /// <summary>Deletes a receiver with its pairing and group memberships (cascade) and clears it as the selected output.</summary>
     Task DeleteReceiverAsync(string id, CancellationToken cancellationToken);
 

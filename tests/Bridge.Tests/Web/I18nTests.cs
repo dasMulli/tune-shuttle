@@ -23,7 +23,11 @@ public sealed partial class I18nTests
     private static readonly string[] CatalogLanguages = I18n.SupportedCultures;
 
     /// <summary>The plural keys of UI-SPEC 10 (base keys).</summary>
-    private static readonly string[] PluralBases = ["diagnostics.liveUpdatesValue", "diagnostics.more", "player.receiversOnline"];
+    private static readonly string[] PluralBases =
+    [
+        "diagnostics.liveUpdatesValue", "diagnostics.more", "notices.receiversForgotten", "player.receiversOnline",
+        "receivers.forgetOfflineConfirm", "receivers.lastSeenDays", "receivers.lastSeenHours", "receivers.lastSeenMinutes",
+    ];
 
     [GeneratedRegex(@"\{\{(\w+)\}\}")]
     private static partial Regex Placeholder();

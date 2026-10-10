@@ -4,17 +4,45 @@
 
 @* The Receivers page (UI-SPEC 4.4): one card per receiver in an auto-fill grid (one column on phones, two from 700px,
    three at 1280px), each with its state pill, the hero volume slider, the capability/pairing/group/output chips, the
-   connect/pair actions and a collapsed <details> holding the offset form and the raw facts. Every text comes from the
-   catalog; receiver names, models, addresses and errors are service text (UI-SPEC 3.5). *@
+   connect/pair actions and a collapsed <details> holding the offset form and the raw facts. Offline receivers also
+   show when they were last seen and a Forget action with an inline confirm; the page head offers to forget every
+   offline receiver at once. Every text comes from the catalog; receiver names, models, addresses and errors are
+   service text (UI-SPEC 3.5). *@
 
 <PageTitle>@L.Format("app.pageTitle", ("page", L["nav.receivers"]))</PageTitle>
 
 <div class="stack">
-    <h1>@L["receivers.title"]</h1>
+    @* tabindex -1: the focus target after a forget removed the card (or the cards) whose button had it. *@
+    <h1 tabindex="-1" @ref="_title">@L["receivers.title"]</h1>
 
     @if (State.Status is { } status)
     {
         <p class="meta">@Lead(status)</p>
+    }
+
+    @{
+        var forgettable = State.Loaded ? State.Receivers.Count(BridgeState.IsForgettable) : 0;
+    }
+    @if (forgettable > 0)
+    {
+        @* Hidden while no receiver is offline (N = 0). The confirm replaces the button; Keep brings it back. *@
+        <div data-bulk="forget-offline">
+            @if (_confirmForgetOffline)
+            {
+                <p><strong>@L.Plural("receivers.forgetOfflineConfirm", forgettable)</strong></p>
+                <div class="actions">
+                    <button type="button" class="btn btn--danger" data-action="forget-offline-yes" aria-disabled="@Busy(_forgettingOffline)" aria-busy="@Busy(_forgettingOffline)"
+                            @onclick="ForgetOfflineAsync">@L["receivers.forget"]</button>
+                    <button type="button" class="btn" data-action="keep-offline" @onclick="KeepOffline" @ref="_keepOfflineButton">@L["common.keep"]</button>
+                </div>
+            }
+            else
+            {
+                <div class="actions">
+                    <button type="button" class="btn" data-action="forget-offline" @onclick="ConfirmForgetOffline" @ref="_forgetOfflineButton">@L.Format("receivers.forgetOffline", ("count", Format.Integer(forgettable)))</button>
+                </div>
+            }
+        </div>
     }
 
     @if (!State.Loaded)
@@ -44,7 +72,9 @@
                         <StatePill Receiver="receiver" />
                     </div>
 
-                    <p class="meta">@Meta(receiver)</p>
+                    @* Offline: when it was last seen, as a second line of the same meta block (no gap of its own). *@
+                    <p class="meta">@Meta(receiver)@if (!receiver.Online && receiver.LastSeen is { } lastSeen)
+                        {<br /><span data-last-seen>@Format.LastSeen(L, lastSeen, State.Now)</span>}</p>
 
                     <div class="field">
                         <span class="label">@L["receivers.volume"]</span>
@@ -99,25 +129,44 @@
 
                     @* While a request runs the buttons are aria-disabled, not disabled (Chromium blurs a focused button that
                        becomes disabled); disabled stays for the static reasons (offline, HomeKit only). Connect and
-                       Disconnect are one element whose role switches, so the focus survives the session starting. *@
-                    <div class="actions">
-                        <button type="button" class="@(session ? "btn" : "btn btn--primary")" data-action="@(session ? "disconnect" : "connect")"
-                                disabled="@(!session && (!receiver.Online || receiver.Pairing == PairingState.Disabled))"
-                                aria-disabled="@ariaBusy" aria-busy="@ariaBusy"
-                                title="@(session ? null : ConnectTitle(receiver))" @ref="_connectButtons[receiver.Id]"
-                                @onclick="() => session ? DisconnectAsync(receiver.Id) : ConnectAsync(receiver.Id)">@(session ? L["receivers.disconnect"] : busy ? L["receivers.connecting"] : L["receivers.connect"])</button>
+                       Disconnect are one element whose role switches, so the focus survives the session starting.
+                       Forget (offline receivers only) asks first: the question and Forget / Keep replace the row. *@
+                    @if (_confirmForget == receiver.Id && BridgeState.IsForgettable(receiver))
+                    {
+                        <p data-confirm="forget-receiver"><strong>@L.Format("receivers.forgetConfirm", ("name", receiver.Name))</strong></p>
+                        <div class="actions">
+                            <button type="button" class="btn btn--danger" data-action="forget-receiver-yes" aria-disabled="@ariaBusy" aria-busy="@ariaBusy"
+                                    @onclick="() => ForgetReceiverAsync(receiver.Id)">@L["receivers.forget"]</button>
+                            <button type="button" class="btn" data-action="keep-receiver" @onclick="() => KeepReceiver(receiver.Id)" @ref="_keepReceiverButton">@L["common.keep"]</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="actions">
+                            <button type="button" class="@(session ? "btn" : "btn btn--primary")" data-action="@(session ? "disconnect" : "connect")"
+                                    disabled="@(!session && (!receiver.Online || receiver.Pairing == PairingState.Disabled))"
+                                    aria-disabled="@ariaBusy" aria-busy="@ariaBusy"
+                                    title="@(session ? null : ConnectTitle(receiver))" @ref="_connectButtons[receiver.Id]"
+                                    @onclick="() => session ? DisconnectAsync(receiver.Id) : ConnectAsync(receiver.Id)">@(session ? L["receivers.disconnect"] : busy ? L["receivers.connecting"] : L["receivers.connect"])</button>
 
-                        @if (receiver.Pairing == PairingState.PinRequired)
-                        {
-                            <button type="button" class="btn" data-action="pair" disabled="@(!receiver.Online)" aria-disabled="@ariaBusy"
-                                    @onclick="() => PairAsync(receiver.Id)">@L["receivers.pairWithPin"]</button>
-                        }
-                        else if (receiver.Pairing == PairingState.Paired)
-                        {
-                            <button type="button" class="btn btn--ghost" data-action="forget" aria-disabled="@ariaBusy"
-                                    @onclick="() => ForgetAsync(receiver.Id)">@L["receivers.forgetPairing"]</button>
-                        }
-                    </div>
+                            @if (receiver.Pairing == PairingState.PinRequired)
+                            {
+                                <button type="button" class="btn" data-action="pair" disabled="@(!receiver.Online)" aria-disabled="@ariaBusy"
+                                        @onclick="() => PairAsync(receiver.Id)">@L["receivers.pairWithPin"]</button>
+                            }
+                            else if (receiver.Pairing == PairingState.Paired)
+                            {
+                                <button type="button" class="btn btn--ghost" data-action="forget" aria-disabled="@ariaBusy"
+                                        @onclick="() => ForgetAsync(receiver.Id)">@L["receivers.forgetPairing"]</button>
+                            }
+
+                            @if (BridgeState.IsForgettable(receiver))
+                            {
+                                <button type="button" class="btn btn--ghost" data-action="forget-receiver" aria-disabled="@ariaBusy"
+                                        @onclick="() => ConfirmForget(receiver.Id)" @ref="_forgetButtons[receiver.Id]">@L["receivers.forget"]</button>
+                            }
+                        </div>
+                    }
 
                     <details class="details">
                         <summary>@L["receivers.details"]</summary>
@@ -182,6 +231,34 @@
     private readonly Dictionary<string, ElementReference> _connectButtons = new(StringComparer.Ordinal);
     private string? _pairingFor;
     private string? _focusConnectOf;
+
+    // Forget a receiver / every offline receiver: the open confirm, the buttons the focus moves between (the confirm
+    // replaces the pressed button; Keep returns to it; a forget removes the card, so the focus goes to the heading).
+    private readonly Dictionary<string, ElementReference> _forgetButtons = new(StringComparer.Ordinal);
+    private ElementReference _title;
+
+    /// <summary>The page heading (tests: where the focus goes after a forget removed the pressed button's card).</summary>
+    internal ElementReference Title => _title;
+    private ElementReference _keepReceiverButton;
+    private ElementReference _forgetOfflineButton;
+    private ElementReference _keepOfflineButton;
+    private string? _confirmForget;
+    private bool _confirmForgetOffline;
+    private bool _forgettingOffline;
+    private PendingFocus _pendingFocus;
+
+    private enum PendingFocus
+    {
+        None,
+        Title,
+        KeepReceiver,
+        ForgetReceiver,
+        KeepOffline,
+        ForgetOffline,
+    }
+
+    // The receiver whose Forget button gets the focus back after Keep.
+    private string? _focusForgetOf;
 
     /// <summary>The Connect / Disconnect button of a receiver's card (tests: the focus target after Pair / Forget).</summary>
     internal ElementReference ConnectButtonOf(string receiverId) => _connectButtons[receiverId];
@@ -314,9 +391,107 @@
         }
     });
 
+    /// <summary>The aria-disabled / aria-busy value: "true" or no attribute.</summary>
+    private static string? Busy(bool busy) => busy ? "true" : null;
+
+    private void ConfirmForget(string id)
+    {
+        if (_busy.Contains(id))
+        {
+            return; // aria-disabled while a request runs
+        }
+
+        _confirmForget = id;
+        _pendingFocus = PendingFocus.KeepReceiver;
+    }
+
+    private void KeepReceiver(string id)
+    {
+        if (_busy.Contains(id))
+        {
+            return;
+        }
+
+        _confirmForget = null;
+        _focusForgetOf = id;
+        _pendingFocus = PendingFocus.ForgetReceiver;
+    }
+
+    private Task ForgetReceiverAsync(string id) => RunAsync(id, async ct =>
+    {
+        // On failure BridgeCommands raises the notice and the confirm stays open, so trying again is one tap.
+        if (await Commands.ForgetReceiverAsync(id, ct))
+        {
+            _confirmForget = null;
+            _pendingFocus = PendingFocus.Title;
+        }
+    });
+
+    private void ConfirmForgetOffline()
+    {
+        _confirmForgetOffline = true;
+        _pendingFocus = PendingFocus.KeepOffline;
+    }
+
+    private void KeepOffline()
+    {
+        if (_forgettingOffline)
+        {
+            return;
+        }
+
+        _confirmForgetOffline = false;
+        _pendingFocus = PendingFocus.ForgetOffline;
+    }
+
+    private async Task ForgetOfflineAsync()
+    {
+        if (_forgettingOffline)
+        {
+            return;
+        }
+
+        _forgettingOffline = true;
+        try
+        {
+            if (await Commands.ForgetOfflineReceiversAsync(Lifetime) is not null)
+            {
+                _confirmForgetOffline = false;
+                _pendingFocus = PendingFocus.Title;
+            }
+        }
+        catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
+        {
+            // the page went away
+        }
+        finally
+        {
+            _forgettingOffline = false;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        RedrawLastSeenPhrases(); // "last seen 5 minutes ago" ages without an event
+    }
+
     /// <inheritdoc />
     protected override void OnBridgeStateChanged()
     {
+        // A confirm whose subject came back online (or whose offline receivers are all gone) closes; it would not
+        // reappear by itself later.
+        if (_confirmForget is { } confirming && !(State.Receiver(confirming) is { } subject && BridgeState.IsForgettable(subject)))
+        {
+            _confirmForget = null;
+        }
+
+        if (_confirmForgetOffline && !_forgettingOffline && !State.Receivers.Any(BridgeState.IsForgettable))
+        {
+            _confirmForgetOffline = false;
+        }
+
         if (_pairingFor is { } id && State.Pairing is null)
         {
             // The dialog closed: paired (the Pair button became Forget) or cancelled (the dialog restores the focus).
@@ -331,13 +506,29 @@
     /// <inheritdoc />
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_focusConnectOf is not { } id)
+        ElementReference? target = null;
+        if (_pendingFocus != PendingFocus.None)
         {
-            return;
+            var forgetOf = _focusForgetOf;
+            target = _pendingFocus switch
+            {
+                PendingFocus.Title => _title,
+                PendingFocus.KeepReceiver => _keepReceiverButton,
+                PendingFocus.ForgetReceiver when forgetOf is not null && _forgetButtons.TryGetValue(forgetOf, out var forget) => forget,
+                PendingFocus.KeepOffline => _keepOfflineButton,
+                PendingFocus.ForgetOffline => _forgetOfflineButton,
+                _ => null,
+            };
+            _pendingFocus = PendingFocus.None;
+            _focusForgetOf = null;
+        }
+        else if (_focusConnectOf is { } id)
+        {
+            _focusConnectOf = null;
+            target = _connectButtons.TryGetValue(id, out var connect) ? connect : null;
         }
 
-        _focusConnectOf = null;
-        if (!_connectButtons.TryGetValue(id, out var button) || button.Context is null)
+        if (target is not { Context: not null } button)
         {
             return;
         }
