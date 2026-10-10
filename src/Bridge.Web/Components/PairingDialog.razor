@@ -17,7 +17,9 @@
 
 @if (State.Pairing is { } prompt)
 {
-    var primaryDisabled = _busy || (!Restartable && string.IsNullOrWhiteSpace(_pin));
+    // Disabled only while there is nothing to submit; while its own request runs the pressed button keeps the focus
+    // (aria-disabled + aria-busy, Submit/Restart return early), so Escape and the Tab trap keep working.
+    var primaryDisabled = !Restartable && string.IsNullOrWhiteSpace(_pin);
     <div class="scrim">
         @* The dialog role sits on a div (a form may not carry it); the form inside is display: contents, so its parts are
            still direct flex / grid items of .dialog, and Enter in the field submits. *@
@@ -50,11 +52,13 @@
                     @if (Restartable)
                     {
                         <button type="button" class="btn btn--primary" data-action="restart" disabled="@primaryDisabled"
+                                aria-disabled="@(_busy ? "true" : null)" aria-busy="@(_busy ? "true" : null)"
                                 @onclick="RestartAsync" @ref="_primaryButton">@L["pairing.startAgain"]</button>
                     }
                     else
                     {
                         <button type="submit" class="btn btn--primary" data-action="pair" disabled="@primaryDisabled"
+                                aria-disabled="@(_busy ? "true" : null)" aria-busy="@(_busy ? "true" : null)"
                                 @ref="_primaryButton">@L["pairing.pair"]</button>
                     }
                     <button type="button" class="btn" data-action="cancel" @onclick="Cancel"
@@ -300,8 +304,8 @@
         }
     }
 
-    /// <summary>True while the primary button can take the focus (a disabled button cannot).</summary>
-    private bool PrimaryFocusable => !_busy && (Restartable || !string.IsNullOrWhiteSpace(_pin));
+    /// <summary>True while the primary button can take the focus (a disabled button cannot; a busy one can).</summary>
+    private bool PrimaryFocusable => Restartable || !string.IsNullOrWhiteSpace(_pin);
 
     private Task OnPinKeyDown(KeyboardEventArgs e)
     {

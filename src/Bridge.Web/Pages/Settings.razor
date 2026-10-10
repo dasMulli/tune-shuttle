@@ -22,14 +22,14 @@
             {
                 <p class="meta text-err" role="alert">@L.Format("settings.loadFailed", ("detail", BridgeCommands.Describe(_loadFailure, L)))</p>
                 <div class="actions">
-                    <button type="button" class="btn" @onclick="LoadAsync">@L["common.retry"]</button>
+                    <button type="button" class="btn" @onclick="RetryLoadAsync" @ref="_retryButton">@L["common.retry"]</button>
                 </div>
             }
         </section>
     }
     else
     {
-        <EditForm EditContext="_editContext" OnValidSubmit="SaveAsync" class="card settings" aria-labelledby="settings-bridge">
+        <EditForm EditContext="_editContext" OnValidSubmit="SaveAsync" class="card settings" novalidate aria-labelledby="settings-bridge">
             <DataAnnotationsValidator />
             <div class="card__head"><h2 id="settings-bridge">@L["settings.bridge"]</h2></div>
             @if (_loadFailure is not null)
@@ -43,7 +43,7 @@
 
             <div class="field">
                 <label for="device-name">@L["settings.deviceName"]</label>
-                <InputText id="device-name" class="input" @bind-Value="_model.DeviceName" maxlength="64" autocomplete="off" aria-describedby="device-name-hint" />
+                <InputText id="device-name" class="input" @bind-Value="_model.DeviceName" maxlength="64" autocomplete="off" aria-describedby="device-name-hint" @ref="_deviceName" />
                 <ValidationMessage For="() => _model.DeviceName" role="alert" />
                 <p class="hint" id="device-name-hint">@L["settings.deviceNameHint"]</p>
             </div>
@@ -124,7 +124,7 @@
     </section>
 
     <section class="card" aria-labelledby="settings-spotify">
-        <div class="card__head"><h2 id="settings-spotify">@L["settings.spotify"]</h2></div>
+        <div class="card__head"><h2 id="settings-spotify" tabindex="-1" @ref="_spotifyTitle">@L["settings.spotify"]</h2></div>
         @if (State.Status is { } status)
         {
             <p>@SpotifyLine(status)</p>
@@ -138,13 +138,13 @@
             <p>@L["settings.forgetConfirm"]</p>
             <div class="actions">
                 <button type="button" class="btn btn--danger" @onclick="ForgetSpotifyAsync" aria-disabled="@Busy(_forgetting)" aria-busy="@Busy(_forgetting)">@L["settings.forget"]</button>
-                <button type="button" class="btn" @onclick="KeepSpotify" aria-disabled="@Busy(_forgetting)">@L["common.keep"]</button>
+                <button type="button" class="btn" @onclick="KeepSpotify" aria-disabled="@Busy(_forgetting)" @ref="_keepButton">@L["common.keep"]</button>
             </div>
         }
         else
         {
             <div class="actions">
-                <button type="button" class="btn btn--ghost" @onclick="() => _confirmForget = true">@L["settings.forgetSpotify"]</button>
+                <button type="button" class="btn btn--ghost" @onclick="ConfirmForget" @ref="_forgetButton">@L["settings.forgetSpotify"]</button>
             </div>
         }
     </section>
@@ -174,6 +174,28 @@
     private bool _confirmForget;
     private string? _theme;
     private bool _disposed;
+
+    // The element to focus after the next render: the swaps below replace the pressed button (Forget Spotify ↔ the
+    // Forget/Keep pair, the load Retry → the form), which would drop the keyboard focus to <body>.
+    private Focus _focus;
+    private ElementReference _retryButton;
+    private InputText? _deviceName;
+    private ElementReference _spotifyTitle;
+    private ElementReference _forgetButton;
+    private ElementReference _keepButton;
+
+    /// <summary>The Spotify card's heading (tests: where the focus goes after a successful forget).</summary>
+    internal ElementReference SpotifyTitle => _spotifyTitle;
+
+    private enum Focus
+    {
+        None,
+        Retry,
+        DeviceName,
+        ForgetSpotify,
+        Keep,
+        SpotifyTitle,
+    }
 
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()
@@ -216,6 +238,11 @@
     /// <inheritdoc />
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_focus != Focus.None)
+        {
+            await FocusAsync();
+        }
+
         if (!firstRender)
         {
             return;
@@ -229,6 +256,36 @@
         catch (JSException)
         {
             // The module could not answer (blocked storage is handled in app.js); the radios stay unchecked.
+        }
+    }
+
+    private async Task FocusAsync()
+    {
+        ElementReference? element = _focus switch
+        {
+            Focus.Retry => _retryButton,
+            Focus.DeviceName => _deviceName?.Element,
+            Focus.ForgetSpotify => _forgetButton,
+            Focus.Keep => _keepButton,
+            _ => _spotifyTitle,
+        };
+        _focus = Focus.None;
+        if (element is not { Context: not null } target)
+        {
+            return; // not rendered (yet)
+        }
+
+        try
+        {
+            await target.FocusAsync();
+        }
+        catch (JSException)
+        {
+            // the element went away between the render and the call
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
         }
     }
 
@@ -304,11 +361,25 @@
     /// <summary>Reset and the in-form Retry: ignored while a save runs (the buttons are aria-disabled then).</summary>
     private Task ReloadAsync() => _saving ? Task.CompletedTask : LoadAsync();
 
+    /// <summary>The Retry of a failed first load: the form replaces the button, so the focus goes to its first field.</summary>
+    private async Task RetryLoadAsync()
+    {
+        await LoadAsync();
+        _focus = _editContext is not null ? Focus.DeviceName : Focus.Retry;
+    }
+
+    private void ConfirmForget()
+    {
+        _confirmForget = true;
+        _focus = Focus.Keep;
+    }
+
     private void KeepSpotify()
     {
         if (!_forgetting)
         {
             _confirmForget = false;
+            _focus = Focus.ForgetSpotify;
         }
     }
 
@@ -354,6 +425,7 @@
             if (await Commands.ForgetSpotifyAsync(Lifetime))
             {
                 _confirmForget = false;
+                _focus = Focus.SpotifyTitle; // the pair is gone; the card's heading leads on to its new state
             }
         }
         finally

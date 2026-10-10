@@ -321,6 +321,7 @@
     "connectFailedDefault": "подключение не удалось.",
     "unreachable": "Bridge недоступен.",
     "unreadable": "Не удалось прочитать ответ Bridge.",
+    "httpError": "Bridge ответил ошибкой {{status}}.",
     "timeout": "Bridge не ответил вовремя."
   },
   "actions": {

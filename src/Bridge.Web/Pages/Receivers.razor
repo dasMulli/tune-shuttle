@@ -104,7 +104,7 @@
                         <button type="button" class="@(session ? "btn" : "btn btn--primary")" data-action="@(session ? "disconnect" : "connect")"
                                 disabled="@(!session && (!receiver.Online || receiver.Pairing == PairingState.Disabled))"
                                 aria-disabled="@ariaBusy" aria-busy="@ariaBusy"
-                                title="@(session ? null : ConnectTitle(receiver))"
+                                title="@(session ? null : ConnectTitle(receiver))" @ref="_connectButtons[receiver.Id]"
                                 @onclick="() => session ? DisconnectAsync(receiver.Id) : ConnectAsync(receiver.Id)">@(session ? L["receivers.disconnect"] : busy ? L["receivers.connecting"] : L["receivers.connect"])</button>
 
                         @if (receiver.Pairing == PairingState.PinRequired)
@@ -175,6 +175,16 @@
 
     private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _offsetDrafts = new(StringComparer.Ordinal);
+
+    // Pair and Forget pairing swap each other when the pairing state changes, so the pressed button goes away: the focus
+    // moves to the row's Connect / Disconnect button (one element in both states) instead of dropping to <body>. A Pair
+    // opens the dialog first; its row is remembered until the dialog closes (focus never moves behind the open modal).
+    private readonly Dictionary<string, ElementReference> _connectButtons = new(StringComparer.Ordinal);
+    private string? _pairingFor;
+    private string? _focusConnectOf;
+
+    /// <summary>The Connect / Disconnect button of a receiver's card (tests: the focus target after Pair / Forget).</summary>
+    internal ElementReference ConnectButtonOf(string receiverId) => _connectButtons[receiverId];
     // What went wrong, not its text: the message is rendered in the current language (a language switch re-renders).
     private readonly Dictionary<string, OffsetError> _offsetErrors = new(StringComparer.Ordinal);
 
@@ -288,9 +298,63 @@
 
     private Task DisconnectAsync(string id) => RunAsync(id, ct => Commands.DisconnectAsync(id, ct));
 
-    private Task PairAsync(string id) => RunAsync(id, ct => Commands.StartPairingAsync(id, ct));
+    private Task PairAsync(string id) => RunAsync(id, async ct =>
+    {
+        if (await Commands.StartPairingAsync(id, ct))
+        {
+            _pairingFor = id;
+        }
+    });
 
-    private Task ForgetAsync(string id) => RunAsync(id, ct => Commands.ForgetPairingAsync(id, ct));
+    private Task ForgetAsync(string id) => RunAsync(id, async ct =>
+    {
+        if (await Commands.ForgetPairingAsync(id, ct))
+        {
+            _focusConnectOf = id;
+        }
+    });
+
+    /// <inheritdoc />
+    protected override void OnBridgeStateChanged()
+    {
+        if (_pairingFor is { } id && State.Pairing is null)
+        {
+            // The dialog closed: paired (the Pair button became Forget) or cancelled (the dialog restores the focus).
+            _pairingFor = null;
+            if (State.Receiver(id) is { Pairing: not PairingState.PinRequired })
+            {
+                _focusConnectOf = id;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusConnectOf is not { } id)
+        {
+            return;
+        }
+
+        _focusConnectOf = null;
+        if (!_connectButtons.TryGetValue(id, out var button) || button.Context is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await button.FocusAsync();
+        }
+        catch (JSException)
+        {
+            // the element went away between the render and the call
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+    }
 
     private async Task RunAsync(string id, Func<CancellationToken, Task> action)
     {

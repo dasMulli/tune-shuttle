@@ -235,7 +235,8 @@ public sealed class BridgeApiClient
         throw new BridgeApiException(
             response.StatusCode,
             title ?? response.ReasonPhrase ?? ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture),
-            detail ?? $"{request.Method} {request.RequestUri} failed with {(int)response.StatusCode}.");
+            detail ?? $"{request.Method} {request.RequestUri} failed with {(int)response.StatusCode}.",
+            isProblemDetails: title is not null);
     }
 }
 
@@ -251,12 +252,18 @@ public sealed record BridgeSnapshot(StatusDto Status, IReadOnlyList<ReceiverDto>
 public sealed class BridgeApiException : Exception
 {
     /// <summary>Creates the exception.</summary>
-    public BridgeApiException(HttpStatusCode statusCode, string title, string detail, Exception? inner = null)
+    /// <param name="statusCode">The HTTP status of the answer.</param>
+    /// <param name="title">The problem's title, or the client's own wording when the service sent no problem details.</param>
+    /// <param name="detail">The problem's detail, or the client's own wording.</param>
+    /// <param name="inner">The exception that caused this one.</param>
+    /// <param name="isProblemDetails">True when <paramref name="title"/> and <paramref name="detail"/> come from a problem-details body the service sent.</param>
+    public BridgeApiException(HttpStatusCode statusCode, string title, string detail, Exception? inner = null, bool isProblemDetails = false)
         : base($"{title}: {detail}", inner)
     {
         StatusCode = statusCode;
         Title = title;
         Detail = detail;
+        IsProblemDetails = isProblemDetails;
     }
 
     /// <summary>Creates an exception without status (required by the exception pattern).</summary>
@@ -279,6 +286,12 @@ public sealed class BridgeApiException : Exception
 
     /// <summary>The HTTP status.</summary>
     public HttpStatusCode StatusCode { get; }
+
+    /// <summary>
+    /// True when the service answered with RFC 9457 problem details (a title the app shows as sent, UI-SPEC 3.5); false
+    /// for what the client composed itself (an unreadable or empty body, a proxy's error page, a bare status).
+    /// </summary>
+    public bool IsProblemDetails { get; }
 
     /// <summary>The problem's title ("Wrong PIN", "Receiver error", ...).</summary>
     public string Title { get; }

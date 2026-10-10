@@ -4,13 +4,17 @@
 
 .DESCRIPTION
     As a setup script (tools/web-screenshots.ps1 -Setup / tools/web-audit.ps1 -Setup) it waits for the two fake
-    receivers, creates the group "Downstairs" (master G 32, Fake Receiver 1 at 40, Fake Receiver 2 at 24) and activates
-    it, so every page has the busiest realistic state: the Player shows an active group row with its Edit button, Stop
-    output and the members chip (phone) / member bars (wide); Receivers shows two connected cards with group and output
-    chips; Groups lists one group. Only the in-process fakes are contacted.
+    receivers, creates the group "Wohnzimmerlautsprechergruppe_Erdgeschoss_Terrasse_Sommerbetrieb" (master G 32, Fake
+    Receiver 1 at 40, Fake Receiver 2 at 24) and activates it, so every page has the busiest realistic state: the Player
+    shows an active group row with its Edit button, Stop output and the members chip (phone) / member bars (wide);
+    Receivers shows two connected cards with group and output chips; Groups lists one group. Only the in-process fakes
+    are contacted. The name is 63 characters without a space (the API allows 64): the worst case for the master label,
+    the group chip, the editor heading and its Name card, which must wrap instead of scrolling the page sideways
+    (UI-SPEC 1.5; tools/web-audit.ps1's overflow check exercises it).
 
     Spotify is off in every dev run, so the hero says "Nothing playing". -HeroShots <dir> additionally captures the
-    Player with a track on screen, to compare the phone hero with the phone mockup: for each size and theme it starts a
+    Player with a track on screen (a long artist line and album, which the phone hero clamps to one line each,
+    UI-SPEC 5.3), to compare the phone hero with the phone mockup: for each size and theme it starts a
     headless Edge over the DevTools protocol and installs, before any page script runs, a browser-side demo: a wrapper
     around window.fetch that answers GET /api/status with Spotify connected (user "martin") and GET /api/playback with
     a playing track, and a WebSocket wrapper that rewrites the statusChanged / playbackChanged events of the live
@@ -51,6 +55,8 @@ $ErrorActionPreference = 'Stop'
 
 $one = '02:FA:CE:00:00:01'
 $two = '02:FA:CE:00:00:02'
+# 63 characters, no space: the worst case for text that must wrap on a phone (see the description).
+$groupName = 'Wohnzimmerlautsprechergruppe_Erdgeschoss_Terrasse_Sommerbetrieb'
 
 function Invoke-Json([string] $Method, [string] $Path, $Body) {
     $arguments = @{ Method = $Method; Uri = "$BaseUrl$Path" }
@@ -73,7 +79,7 @@ function Wait-Connected([string] $Id) {
     return $state
 }
 
-# ---- the state: the active group "Downstairs" of both fakes ---------------------------------------------------
+# ---- the state: the active group $groupName of both fakes ---------------------------------------------------
 
 $deadline = (Get-Date).AddSeconds(30)
 do {
@@ -88,13 +94,13 @@ if (-not ($ids -contains $one -and $ids -contains $two)) {
 
 # ForEach-Object unrolls the JSON array (an empty one arrives as a single empty array object).
 $existing = Invoke-Json Get '/api/groups' $null | ForEach-Object { $_ } |
-    Where-Object { $_ -and $_.PSObject.Properties['name'] -and $_.name -eq 'Downstairs' } | Select-Object -First 1
+    Where-Object { $_ -and $_.PSObject.Properties['name'] -and $_.name -eq $groupName } | Select-Object -First 1
 if ($existing) {
     $group = $existing
     $groupId = [Uri]::EscapeDataString($group.id)
 }
 else {
-    $group = Invoke-Json Post '/api/groups' @{ name = 'Downstairs' }
+    $group = Invoke-Json Post '/api/groups' @{ name = $groupName }
     $groupId = [Uri]::EscapeDataString($group.id)
     # G first: setting it later would scale the members' r_i (the members keep the levels they are added with).
     Invoke-Json Put "/api/groups/$groupId/volume" @{ level = 32 } | Out-Null
@@ -116,8 +122,10 @@ $demo = @'
     var started = Date.now();
     function status(s) { s.spotifyConnected = true; s.spotifyUser = "martin"; return s; }
     function playback() {
-        return { playing: true, trackId: "spotify:track:demo", title: "Strobeheart", artist: "Niki & The Dove",
-                 album: "Instinct", positionMs: 72000 + (Date.now() - started), durationMs: 214000, artworkUrl: null, spotifyVolume: 32 };
+        // A long artist line and album: the phone hero clamps each to one line (UI-SPEC 5.3).
+        return { playing: true, trackId: "spotify:track:demo", title: "Strobeheart",
+                 artist: "Niki & The Dove, Malin Dahlstrom, Gustaf Karlof and the Stockholm Session Strings",
+                 album: "Instinct (Deluxe Edition, Remastered 2026 with Bonus Tracks)", positionMs: 72000 + (Date.now() - started), durationMs: 214000, artworkUrl: null, spotifyVolume: 32 };
     }
     var realFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {

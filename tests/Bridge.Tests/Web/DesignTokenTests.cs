@@ -156,8 +156,36 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
         Assert.Equal("44px", Css.Rules.Single(r => r.Selector == ".lang-select" && r.Media.SequenceEqual([Touch]) && r.Value("min-height") is not null).Value("min-height"));
         Assert.Equal("44px", Css.Rules.Single(r => r.Selector == ".brand" && r.Media.SequenceEqual(["(max-width: 359px)"])).Value("min-width"));
 
-        // 4.9: at most the two newest toasts on a phone.
-        Assert.Equal("none", Css.Rules.Single(r => r.Selector == ".toasts .toast:nth-last-child(n + 3)").Value("display"));
+        // 4.9: at most the two newest toasts on phones, landscape phones and touch tablets (REVIEW cycle 2: the cap
+        // once sat in the phone block only, so three toasts covered the transport at 844x390 and 768x1024).
+        var cap = Css.Rules.Single(r => r.Selector == ".toasts .toast:nth-last-child(n + 3)");
+        Assert.Equal("none", cap.Value("display"));
+        Assert.True(cap.Media.SequenceEqual([Touch]), "the toast cap must sit in the touch block of 5.4 only");
+    }
+
+    [Fact]
+    public void Long_names_wrap_and_the_phone_hero_and_dialog_stay_touch_safe()
+    {
+        // 1.5: user-named text (64 characters, possibly without a space) wraps instead of scrolling the page sideways.
+        var wrap = Css.Rules.Where(r => r.Media.Count == 0 && r.Value("overflow-wrap") == "anywhere")
+            .SelectMany(r => r.Selector.Split(',').Select(x => x.Trim()))
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var selector in new[] { "h1", ".label", ".chip", ".dialog h2", ".card > p" })
+        {
+            Assert.True(wrap.Contains(selector), $"{selector} does not resolve overflow-wrap: anywhere");
+        }
+
+        // 5.3: with a track playing the phone hero clamps the artist line and the album meta to one line each.
+        const string Phone = "(max-width: 699px)";
+        var clamp = Css.Rules.Single(r => r.Media.SequenceEqual([Phone]) && r.Value("-webkit-line-clamp") is not null);
+        Assert.Contains(".hero__artist", clamp.Selector.Split(',').Select(x => x.Trim()));
+        Assert.Equal("1", clamp.Value("-webkit-line-clamp"));
+        Assert.Equal("1", clamp.Value("line-clamp"));
+        Assert.Equal("hidden", clamp.Value("overflow"));
+
+        // 4.11: touches on the scrim never pan the page behind it; the dialog keeps its own vertical scroll.
+        Assert.Equal("none", Css.Rules.Single(r => r.Selector == ".scrim" && r.Media.Count == 0).Value("touch-action"));
+        Assert.Equal("pan-y", Css.Rules.Single(r => r.Selector == ".dialog" && r.Media.Count == 0).Value("touch-action"));
     }
 
     [Fact]
@@ -171,6 +199,11 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
         Assert.Equal(Boundary, Css.Rules.Single(r => r.Selector == ".level input[type=\"range\"]::-webkit-slider-runnable-track" && r.Media.Count == 0).Value("border"));
         Assert.Equal(Boundary, Css.Rules.Single(r => r.Selector == ".level input[type=\"range\"]::-moz-range-track" && r.Media.Count == 0).Value("border"));
         Assert.Equal("var(--muted)", Css.Rules.Single(r => r.Selector == ".row.is-quiet .level").Value("--fill-color"));
+        // Inside the active row (--accent-soft) the track boundary is --muted: --control-border is below 3:1 there.
+        foreach (var selector in new[] { ".row.is-active .level input[type=\"range\"]::-webkit-slider-runnable-track", ".row.is-active .level input[type=\"range\"]::-moz-range-track", ".row.is-active .track" })
+        {
+            Assert.Equal("var(--muted)", Css.Rules.Single(r => r.Selector == selector && r.Media.Count == 0).Value("border-color"));
+        }
 
 
         // Busy buttons are aria-disabled (they keep the focus) and look like disabled ones.
@@ -192,6 +225,20 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
             .SelectMany(r => r.Declarations.Where(d => d.Name == "order").Select(d => $"{r.Selector} {{ order: {d.Value} }}"))
             .ToList();
         Assert.True(offenders.Count == 0, "order declarations: " + string.Join(" | ", offenders));
+    }
+
+    [Fact]
+    public void Plain_focus_never_hides_the_outline_from_keyboard_users()
+    {
+        // 6.2 / WCAG 2.4.7: FocusOnNavigate puts the focus on the page's h1 after every navigation; `h1:focus { outline:
+        // none }` hid where a keyboard navigation left it (REVIEW cycle 2). Only pointer focus may drop the ring.
+        var offenders = Css.Rules
+            .Where(r => r.Value("outline") is "none" or "0")
+            .SelectMany(r => r.Selector.Split(',').Select(s => s.Trim()))
+            .Where(s => PlainFocus().IsMatch(s) && !s.Contains(":not(:focus-visible)", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(offenders.Count == 0, "outline: none on :focus without :not(:focus-visible): " + string.Join(" | ", offenders));
+        Assert.Equal("none", Css.Rules.Single(r => r.Selector == "h1:focus:not(:focus-visible)" && r.Media.Count == 0).Value("outline"));
     }
 
     [Fact]
@@ -348,6 +395,9 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
         yield return new("--control-border", "--surface-2", Kind.NonText);
         yield return new("--control-border", "--bg", Kind.NonText);
         yield return new("--muted", "--surface-2", Kind.NonText); // the quiet slider fill of Output rows on its track
+        // The track boundary inside the active Output row: --control-border is below 3:1 there (printed), --muted is used.
+        yield return new("--control-border", "--accent-soft", Kind.Report, Over: "--surface");
+        yield return new("--muted", "--accent-soft", Kind.NonText, Over: "--surface");
     }
 
     private static Dictionary<string, string> Tokens(string theme)
@@ -403,22 +453,12 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
         return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
     }
 
-    private static string CssPath()
-    {
-        foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
-        {
-            for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
-            {
-                var candidate = Path.Combine(dir.FullName, "src", "Bridge.Web", "wwwroot", "css", "app.css");
-                if (File.Exists(Path.Combine(dir.FullName, "AirplayBridge.sln")) && File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-        }
+    // Resolved like the other source checks, including the fallback for an --artifacts-path build outside the tree.
+    private static string CssPath() => Path.Combine(CatalogUsageTests.WebRoot(), "wwwroot", "css", "app.css");
 
-        throw new FileNotFoundException("src/Bridge.Web/wwwroot/css/app.css not found above the test directory");
-    }
+    // ":focus" itself, not ":focus-visible" or ":focus-within".
+    [GeneratedRegex(@":focus(?![-\w])")]
+    private static partial Regex PlainFocus();
 
     // ":hover" that is not the ":not(:hover)" of the theme picker's collapse rule.
     [GeneratedRegex(@"(?<!:not\():hover")]

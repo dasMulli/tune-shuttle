@@ -315,6 +315,7 @@
     "connectFailedDefault": "la conexión ha fallado.",
     "unreachable": "No se puede acceder al Bridge.",
     "unreadable": "No se pudo leer la respuesta del Bridge.",
+    "httpError": "El Bridge ha respondido con el error {{status}}.",
     "timeout": "El Bridge no ha respondido a tiempo."
   },
   "actions": {

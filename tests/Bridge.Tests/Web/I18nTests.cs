@@ -537,6 +537,17 @@ public sealed partial class I18nTests
         Assert.Equal("The bridge did not answer in time.", BridgeCommands.Describe(new TimeoutException()));
         Assert.Equal("Die Antwort der Bridge war nicht lesbar.", BridgeCommands.Describe(new System.Text.Json.JsonException("'<' is an invalid start of a value."), de));
         Assert.Equal("The bridge's answer could not be read.", BridgeCommands.Describe(new InvalidOperationException("boom")));
+
+        // What BridgeApiClient composes itself is not the service's problem details: an unreadable body, a proxy's error page.
+        var unreadable = new BridgeApiException(System.Net.HttpStatusCode.OK, "Unreadable response", "GET http://bridge/api/snapshot: '<' is an invalid start of a value.", new System.Text.Json.JsonException("'<' is an invalid start of a value."));
+        Assert.Equal("Die Antwort der Bridge war nicht lesbar.", BridgeCommands.Describe(unreadable, de));
+        var proxy = new BridgeApiException(System.Net.HttpStatusCode.BadGateway, "Bad Gateway", "<html><head><title>502 Bad Gateway</title></head></html>");
+        Assert.Equal("Die Bridge hat mit Fehler 502 geantwortet.", BridgeCommands.Describe(proxy, de));
+        Assert.Equal("The bridge answered with error 502.", BridgeCommands.Describe(proxy));
+
+        // The service's own problem details are shown as sent (3.5).
+        var problem = new BridgeApiException(System.Net.HttpStatusCode.NotFound, "Not found", "No receiver x.", isProblemDetails: true);
+        Assert.Equal("Not found: No receiver x.", BridgeCommands.Describe(problem, de));
     }
 
     [Theory]

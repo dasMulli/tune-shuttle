@@ -3,13 +3,15 @@
    first toast arrives. It is a plain div with aria-live, not an aside: an always-present complementary landmark without
    a name would be noise in a screen reader's landmark list (REVIEW-2 #10). Errors are role="alert" (announced at once)
    and stay 15 s, so a forgotten one does not cover the Output rows above the phone tab bar for good; success and info
-   toasts (role="status") go away after 6 s. Every toast can be dismissed earlier. *@
+   toasts go away after 6 s. Every toast can be dismissed earlier. Success and info toasts carry no role of their own:
+   the container is their one live region (a role="status" inside it nested a second one, REVIEW cycle 2), and it
+   stays aria-live because a status region inserted together with its text is not announced reliably. *@
 @inherits BridgeComponentBase
 
 <div class="toasts" aria-live="polite">
     @foreach (var notice in State.Notices)
     {
-        <div @key="notice.Id" class="@ClassOf(notice.Kind)" role="@(notice.Kind == NoticeKind.Error ? "alert" : "status")">
+        <div @key="notice.Id" class="@ClassOf(notice.Kind)" role="@(notice.Kind == NoticeKind.Error ? "alert" : null)">
             <span>@notice.Text</span>
             <button type="button" class="toast__close" aria-label="@L["common.dismiss"]" title="@L["common.dismiss"]" @onclick="() => State.Dismiss(notice.Id)"><span aria-hidden="true">×</span></button>
         </div>

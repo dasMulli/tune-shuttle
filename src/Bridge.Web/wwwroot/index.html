@@ -30,7 +30,9 @@
                 }
                 override.content = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: ' + theme + ')"]').content;
             }
+            var current = "system";
             function apply(theme, persist) {
+                current = theme === "light" || theme === "dark" ? theme : "system";
                 if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
                 else document.documentElement.removeAttribute("data-theme");
                 applyThemeColor(theme);
@@ -41,12 +43,14 @@
                     } catch (e) { }
                 }
             }
-            function read() {
+            function stored() {
                 try { var t = localStorage.getItem(KEY); return t === "light" || t === "dark" ? t : "system"; }
                 catch (e) { return "system"; }
             }
+            // read() reports the effective choice, a ?theme= override included, so the picker and the Appearance radios match the page.
+            function read() { return current; }
             var q = new URLSearchParams(location.search).get("theme");
-            apply(q === "light" || q === "dark" || q === "system" ? q : read(), false);
+            apply(q === "light" || q === "dark" || q === "system" ? q : stored(), false);
             window.bridgeTheme = { apply: function (t) { apply(t, true); }, read: read };
         })();
 

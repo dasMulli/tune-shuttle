@@ -1,8 +1,9 @@
 @* The live-updates pill of the top bar (UI-SPEC 7): the state of the event connection (/ws/events) as one of four
-   classes, a short word and a longer title. role="status" so a transition is announced. Only "live" pulses (CSS). *@
+   classes, a short word and a longer title. Not a live region: the connection banner's slot is the one that announces
+   a transition (a second region would say each one twice). Only "live" pulses (CSS). *@
 @inherits BridgeComponentBase
 
-<span class="@CssClass" role="status" title="@Title"><span class="status__text">@Text</span></span>
+<span class="@CssClass" title="@Title"><span class="status__text">@Text</span></span>
 
 @code {
     /// <summary>The four states of section 7.</summary>

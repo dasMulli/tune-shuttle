@@ -409,6 +409,7 @@ public sealed class PlayerTests : ComponentTestBase
         {
             "/api/groups/g/activate" => StubHandler.Json(new OutputDto("g", null, 50, [new("a", "Kitchen", 30, ReceiverConnectionState.Connected), new("b", "Living room", 80, ReceiverConnectionState.Connected)])),
             "/api/receivers/b/connect" => StubHandler.Json(Dto.Receiver("b", "Living room", state: ReceiverConnectionState.Connected)),
+            "/api/output" => StubHandler.Json(Dto.NoOutput), // b is a member of the active group: stopped first (4.3)
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         });
         _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "Kitchen")));
@@ -436,6 +437,7 @@ public sealed class PlayerTests : ComponentTestBase
 
         cut.Find("[data-receiver-id=b] input[type=radio]").Change(true);
         cut.WaitForAssertion(() => Assert.Contains(api.Requests, r => r.Method == HttpMethod.Post && r.Path == "/api/receivers/b/connect"));
+        Assert.Contains(api.Requests, r => r.Method == HttpMethod.Put && r.Path == "/api/output");
 
         // The output follows with outputChanged.
         _state.Apply(new BridgeEvent.OutputChanged(new OutputDto(null, "b", 50, [new("b", "Living room", 50, ReceiverConnectionState.Connected)])));
@@ -493,6 +495,14 @@ public sealed class PlayerTests : ComponentTestBase
             Assert.Equal("token", _state.Pairing?.Token);
         });
         Assert.Equal("Pair", cut.Find("[data-receiver-id=pin] button").TextContent);
+
+        // Paired: the compact slider replaces the Pair button the dialog would give the focus back to, so once the
+        // dialog has closed the row's radio takes the focus.
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("pin", "TV", pairing: PairingState.Paired)));
+        _state.ClosePairing();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-receiver-id=pin] .level--compact")));
+        var radio = cut.FindComponent<OutputList>().Instance.RadioOf("pin").Id;
+        cut.WaitForAssertion(() => Assert.Equal(radio, Assert.IsType<Microsoft.AspNetCore.Components.ElementReference>(_ctx.JSInterop.Invocations["Blazor._internal.domWrapper.focus"].Last().Arguments[0]).Id));
     }
 
     [Fact]
@@ -677,6 +687,9 @@ public sealed class PlayerTests : ComponentTestBase
         Step("b");
         Step("c");
         Assert.Empty(api.Requests); // nothing is sent while the keys still move
+        // ... and no row the keys stepped over (or stopped on) says "connecting…" before its request is on its way.
+        Assert.Empty(cut.FindAll(".row[aria-busy]"));
+        Assert.Empty(cut.FindAll(".row .pill--accent"));
 
         // Only the row the user stopped on is connected, once.
         cut.WaitForAssertion(() => Assert.Single(api.Requests), TimeSpan.FromSeconds(5));
@@ -684,6 +697,52 @@ public sealed class PlayerTests : ComponentTestBase
         Thread.Sleep(OutputList.KeyboardSelectDelay * 2);
         Assert.Single(api.Requests);
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".row[aria-busy]")));
+    }
+
+    [Fact]
+    public void Picking_a_member_of_the_active_group_stops_the_group_and_connects_it_alone()
+    {
+        // POST /receivers/{id}/connect would connect a member back into the active group (the service's design), so the
+        // pick would silently revert: the Output card stops the group first, then connects the receiver alone.
+        var api = UseApi((request, _) => (request.Method.Method, PathOf(request)) switch
+        {
+            ("PUT", "/api/output") => StubHandler.Json(Dto.NoOutput),
+            ("POST", "/api/receivers/a/connect") => StubHandler.Json(Dto.Receiver("a", "Kitchen", state: ReceiverConnectionState.Connected)),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "Kitchen", state: ReceiverConnectionState.Connected, groupId: "g")));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("b", "Living room", state: ReceiverConnectionState.Connected, groupId: "g")));
+        _state.Apply(new BridgeEvent.GroupChanged(Dto.Group("g", "Downstairs", 50, true, ("a", "Kitchen", 30), ("b", "Living room", 80))));
+        _state.Apply(new BridgeEvent.OutputChanged(new OutputDto("g", null, 50, [new("a", "Kitchen", 30, ReceiverConnectionState.Connected), new("b", "Living room", 80, ReceiverConnectionState.Connected)])));
+        var cut = _ctx.Render<OutputList>();
+
+        // The member row stays selectable (selection = activation).
+        var radio = cut.Find("[data-receiver-id=a] input[type=radio]");
+        Assert.False(radio.HasAttribute("disabled"));
+        cut.Find("[data-receiver-id=a] .row__label").PointerDown();
+        radio.Change(true);
+
+        cut.WaitForAssertion(() => Assert.Equal(2, api.Requests.Count), TimeSpan.FromSeconds(5));
+        Assert.Equal([(HttpMethod.Put, "/api/output"), (HttpMethod.Post, "/api/receivers/a/connect")], api.Requests.Select(r => (r.Method, r.Path)));
+    }
+
+    [Fact]
+    public void Picking_a_receiver_outside_the_active_group_connects_it_without_stopping_the_group_first()
+    {
+        var api = UseApi((request, _) => PathOf(request) == "/api/receivers/c/connect"
+            ? StubHandler.Json(Dto.Receiver("c", "Office", state: ReceiverConnectionState.Connected))
+            : new HttpResponseMessage(HttpStatusCode.NotFound));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "Kitchen", state: ReceiverConnectionState.Connected, groupId: "g")));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("c", "Office")));
+        _state.Apply(new BridgeEvent.GroupChanged(Dto.Group("g", "Downstairs", 50, true, ("a", "Kitchen", 30))));
+        _state.Apply(new BridgeEvent.OutputChanged(new OutputDto("g", null, 50, [new("a", "Kitchen", 30, ReceiverConnectionState.Connected)])));
+        var cut = _ctx.Render<OutputList>();
+
+        cut.Find("[data-receiver-id=c] .row__label").PointerDown();
+        cut.Find("[data-receiver-id=c] input[type=radio]").Change(true);
+
+        cut.WaitForAssertion(() => Assert.Single(api.Requests), TimeSpan.FromSeconds(5));
+        Assert.Equal("/api/receivers/c/connect", api.Requests.Single().Path);
     }
 
     [Theory]

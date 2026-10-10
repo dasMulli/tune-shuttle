@@ -250,6 +250,14 @@ public sealed class ReceiversTests : ComponentTestBase
             Assert.Equal("p", _state.Pairing?.ReceiverId);
         });
 
+        // Paired in the dialog: the Pair button the dialog would give the focus back to is gone, so the row's Connect
+        // button takes it once the dialog has closed (never while it is still open).
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("p", "P", pairing: PairingState.Paired)));
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("article[data-receiver-id='p'] [data-action=forget]")));
+        Assert.Empty(_ctx.JSInterop.Invocations[Focus]);
+        _state.ClosePairing();
+        cut.WaitForAssertion(() => Assert.Equal(cut.Instance.ConnectButtonOf("p").Id, LastFocusedId()));
+
         cut.Find("article[data-receiver-id='f'] [data-action=forget]").Click();
         cut.WaitForAssertion(() =>
         {
@@ -263,7 +271,15 @@ public sealed class ReceiversTests : ComponentTestBase
             Assert.Empty(cut.FindAll("article[data-receiver-id='f'] [data-action=forget]"));
             Assert.Equal("no PIN needed", cut.Find("article[data-receiver-id='f'] [data-pairing=transient]").TextContent);
         });
+        // The pressed Forget button went away: the row's Connect button takes the focus.
+        cut.WaitForAssertion(() => Assert.Equal(cut.Instance.ConnectButtonOf("f").Id, LastFocusedId()));
     }
+
+    private const string Focus = "Blazor._internal.domWrapper.focus";
+
+    /// <summary>The element reference id of the latest <c>FocusAsync</c> call.</summary>
+    private string LastFocusedId() =>
+        Assert.IsType<Microsoft.AspNetCore.Components.ElementReference>(_ctx.JSInterop.Invocations[Focus].Last().Arguments[0]).Id;
 
     [Fact]
     public void Error_line_is_an_alert_while_the_receiver_is_in_error()

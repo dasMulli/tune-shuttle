@@ -36,7 +36,7 @@
         </section>
 
         <section class="card" aria-labelledby="diagnostics-network">
-            <div class="card__head"><h2 id="diagnostics-network">@L["diagnostics.network"]</h2></div>
+            <div class="card__head"><h2 id="diagnostics-network" tabindex="-1" @ref="_networkTitle">@L["diagnostics.network"]</h2></div>
             @if (_diagnostics is { } d)
             {
                 <dl class="facts">
@@ -85,7 +85,7 @@
             {
                 <p class="meta text-err" role="alert">@L.Format("diagnostics.unavailable", ("detail", BridgeCommands.Describe(_error, L)))</p>
                 <div class="actions">
-                    <button type="button" class="btn" @onclick="RetryAsync">@L["common.retry"]</button>
+                    <button type="button" class="btn" @onclick="RetryAsync" @ref="_retryButton">@L["common.retry"]</button>
                 </div>
             }
             else
@@ -173,6 +173,13 @@
     private bool _historyCleared;
     private IReadOnlyList<ShownLine>? _pausedView;
     private bool _subscribed;
+
+    // After Retry the facts (or the "loading" line in between) replace the pressed button: the focus goes to the card's
+    // heading on success and back to the new Retry button on another failure, never to <body>.
+    private bool _focusTitle;
+    private bool _focusRetry;
+    private ElementReference _networkTitle;
+    private ElementReference _retryButton;
 
     // The page re-renders on every state change, most of which are not log lines: the formatted text of each live line
     // is kept, and the lists are rebuilt only when the log (BridgeState.LogVersion), the REST history or the filter
@@ -403,6 +410,39 @@
     {
         _error = null;
         await RefreshAsync(Lifetime);
+        _focusTitle = _diagnostics is not null;
+        _focusRetry = _diagnostics is null && _error is not null;
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The Retry button of the next render is a new element: its reference is known only after that render.
+        if (!_focusTitle && !_focusRetry)
+        {
+            return;
+        }
+
+        var target = _focusTitle ? _networkTitle : _retryButton;
+        _focusTitle = false;
+        _focusRetry = false;
+        if (target.Context is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await target.FocusAsync();
+        }
+        catch (JSException)
+        {
+            // the element went away between the render and the call
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
     }
 
     private async Task RefreshAsync(CancellationToken ct)

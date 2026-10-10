@@ -142,7 +142,7 @@ a { color: var(--accent-ink); text-decoration: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 h1 { font-size: 1.25rem; font-weight: 700; margin: 0 0 1rem; }
-h1:focus { outline: none; } /* FocusOnNavigate moves focus here after navigation; the heading is not a control */
+h1:focus:not(:focus-visible) { outline: none; } /* FocusOnNavigate moves focus here after navigation: pointer and touch navigations stay ring-free, keyboard ones show the ring of 1.3 */
 h2 { font-size: 1.05rem; font-weight: 700; margin: 0; }
 p { margin: 0; }
 fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
@@ -272,10 +272,13 @@ legend { padding: 0; }
 /* Collapse. Hover-capable pointers: hover, keyboard focus or the open class keep it unfolded. Touch (the component sets
    theme-picker--touch when hoverCapable() is false): the twin rule has no :hover in it, because a tap leaves :hover stuck
    on the tapped button until the next tap elsewhere, which kept the pill unfolded after a choice (REVIEW-2 #1). */
+/* theme-picker--closed: Escape collapses the pill while the focus stays on the radio (it keeps :focus-within). */
 .theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open),
-.theme-picker--touch:not(:focus-within):not(.theme-picker--open) { gap: 0; }
+.theme-picker--touch:not(:focus-within):not(.theme-picker--open),
+.theme-picker--closed { gap: 0; }
 .theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open) .theme-btn:not(.is-active),
-.theme-picker--touch:not(:focus-within):not(.theme-picker--open) .theme-btn:not(.is-active) {
+.theme-picker--touch:not(:focus-within):not(.theme-picker--open) .theme-btn:not(.is-active),
+.theme-picker--closed .theme-btn:not(.is-active) {
     width: 0;
     opacity: 0;
     pointer-events: none;
@@ -391,6 +394,10 @@ legend { padding: 0; }
 
 .label { font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .meta { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+/* User-named text (group and receiver names: up to 64 characters, possibly without a space) wraps anywhere instead of
+   widening the page on a phone: the master label, the group chip, the editor heading, its Name card and the pairing
+   dialog's heading (UI-SPEC 1.5). */
+h1, .label, .chip, .dialog h2, .card > p { overflow-wrap: anywhere; }
 
 .pill {
     display: inline-block;
@@ -509,7 +516,6 @@ legend { padding: 0; }
     padding-left: .7rem;
     padding-right: .7rem;
 }
-.row.is-active + .row { border-top-color: transparent; }
 a.row { color: var(--text); }
 .row__chevron { color: var(--muted); font-size: 1.2rem; line-height: 1; flex: none; }
 .row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
@@ -700,6 +706,11 @@ select.input {
 }
 .level input[type="range"]::-moz-range-track { height: 6px; border-radius: var(--radius-pill); border: 1px solid var(--control-border); background: var(--surface-2); }
 .level input[type="range"]::-moz-range-progress { height: 6px; border-radius: var(--radius-pill); background: var(--fill-color); }
+/* Inside the active row (--accent-soft over --surface) --control-border is below 3:1; --muted keeps the track boundary
+   at 3:1 (UI-SPEC 6.3). Separate rules: a selector list with an unknown vendor pseudo-element is dropped as a whole. */
+.row.is-active .level input[type="range"]::-webkit-slider-runnable-track { border-color: var(--muted); }
+.row.is-active .level input[type="range"]::-moz-range-track { border-color: var(--muted); }
+.row.is-active .track { border-color: var(--muted); }
 .level input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 18px;
@@ -848,6 +859,7 @@ select.input {
     place-items: center;
     padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
     background: var(--scrim);
+    touch-action: none; /* a touch on the dim area never pans the page behind it (iOS ignores the root's overflow: hidden) */
 }
 /* While the pairing dialog is open the page behind it does not scroll (REVIEW-2 #7); the styleguide's in-flow dialog
    sample is excluded. */
@@ -857,6 +869,7 @@ select.input {
     max-height: calc(100dvh - 2rem);
     overflow: auto;
     overscroll-behavior: contain;
+    touch-action: pan-y; /* the dialog keeps its own vertical scroll inside the touch-action: none scrim */
     display: flex;
     flex-direction: column;
     gap: .9rem;
@@ -948,9 +961,11 @@ select.input {
     /* The 34px buttons are in the touch block (5.4), which covers phones by width. Collapsed, the pill is the mockup's
        single round button; the same two selectors as the collapse rules of 2.4 (touch twin included). */
     .theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open),
-    .theme-picker--touch:not(:focus-within):not(.theme-picker--open) { padding: 0; border-color: transparent; background: transparent; }
+    .theme-picker--touch:not(:focus-within):not(.theme-picker--open),
+    .theme-picker--closed { padding: 0; border-color: transparent; background: transparent; }
     .theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open) .theme-btn.is-active,
-    .theme-picker--touch:not(:focus-within):not(.theme-picker--open) .theme-btn.is-active {
+    .theme-picker--touch:not(:focus-within):not(.theme-picker--open) .theme-btn.is-active,
+    .theme-picker--closed .theme-btn.is-active {
         border: 1px solid var(--line-strong);
         background: var(--surface);
     }
@@ -980,11 +995,23 @@ select.input {
     .hero__info > .chip { align-self: center; }
     .hero__title { font-size: 1.2rem; }
     .hero__artist { font-size: .78rem; color: var(--muted); }
-    .hero .art { width: 120px; height: 120px; }
+    /* With a track playing the artist line and the album meta take one line each, so the Output card's first row stays
+       on the first screen (UI-SPEC 5.3); the full text stays in the DOM for screen readers. The "Nothing playing" hint
+       (the meta after a muted title) is an instruction and keeps every line. */
+    .hero__artist, .hero__title:not(.text-muted) ~ .meta {
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        line-clamp: 1;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .hero .art { width: 120px; height: 120px; border-radius: 14px; }
     .hero .art--placeholder svg { width: 36.67%; height: 36.67%; } /* the 44px note on the 120px art of the phone mockup */
     .hero__progress, .master { align-self: stretch; width: 100%; }
     .master__head { justify-content: center; } /* the label and "follows the Spotify slider" centred like the rest of the hero */
+    .hero__progress { gap: .5rem; }
     .hero__progress .track { height: 5px; }
+    .step { font-size: 1.1rem; }
     .step--lg { width: 44px; height: 44px; }
     .play { width: 56px; height: 56px; }
     .play svg { width: 24px; height: 24px; }
@@ -997,7 +1024,7 @@ select.input {
     .master__row .level--hero output.big { grid-column: 2; justify-self: end; line-height: 1; }
     .big, .level output.big { font-size: 1.3rem; min-width: 2rem; }
 
-    .output { padding: .8rem 1rem; }
+    .output { padding: .8rem 1rem; gap: .2rem; }
     .output .level--compact { display: none; }
     /* Stop output keeps its 44px box but less side padding, so the head fits one line in longer languages (de). */
     .output .card__actions .btn--sm { padding-inline: .5rem; }
@@ -1025,9 +1052,6 @@ select.input {
         bottom: calc(var(--tabbar-h) + .75rem);
         flex-direction: column-reverse;
     }
-    /* Only the two newest toasts on a phone, so a pile never covers the Player's lower half (the others stay in the
-       DOM and come back as these are dismissed or time out). */
-    .toasts .toast:nth-last-child(n + 3) { display: none; }
 
     .scrim { align-items: start; padding: max(.75rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(.75rem, env(safe-area-inset-left)); }
     .dialog { width: 100%; }
@@ -1140,6 +1164,9 @@ select.input {
     .level--compact { width: 220px; }
     .toast__close { width: 44px; height: 44px; top: .1rem; right: .1rem; }
     .toast { padding-right: 3.2rem; }
+    /* Only the two newest toasts on phones, landscape phones and touch tablets, so a pile never covers the Player's
+       transport (the others stay in the DOM and come back as these are dismissed or time out). */
+    .toasts .toast:nth-last-child(n + 3) { display: none; }
     /* .btn--sm keeps its small type and padding but its box is 44 x 44 (an invisible ::before hit area would not count
        for the layout audit, 5.6, which measures the element's own box). Inside rows and the banner it overlaps their
        padding, so a row with a button is no taller than one without. */

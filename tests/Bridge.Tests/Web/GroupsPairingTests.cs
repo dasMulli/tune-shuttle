@@ -21,13 +21,13 @@ public sealed class GroupsPairingTests : ComponentTestBase
     [Fact]
     public void Pairing_dialog_opens_on_pairing_required_handles_a_wrong_pin_and_pairs()
     {
+        var wrong = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var api = UseApi((request, body) => PathOf(request) switch
         {
-            "/api/receivers/pin/pair/pin" when body!.Contains("\"pin\":\"0000\"", StringComparison.Ordinal) =>
-                StubHandler.Problem(HttpStatusCode.UnprocessableEntity, "Wrong PIN", "The receiver rejected the PIN; start the pairing again."),
-            "/api/receivers/pin/pair/pin" => StubHandler.Json(Dto.Receiver("pin", "PIN Speaker", pairing: PairingState.Paired)),
-            "/api/receivers/pin/pair" => StubHandler.Json(new PairingStartedDto("token-2", "Enter the PIN that PIN Speaker shows.")),
-            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+            "/api/receivers/pin/pair/pin" when body!.Contains("\"pin\":\"0000\"", StringComparison.Ordinal) => wrong.Task,
+            "/api/receivers/pin/pair/pin" => Task.FromResult(StubHandler.Json(Dto.Receiver("pin", "PIN Speaker", pairing: PairingState.Paired))),
+            "/api/receivers/pin/pair" => Task.FromResult(StubHandler.Json(new PairingStartedDto("token-2", "Enter the PIN that PIN Speaker shows."))),
+            _ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)),
         });
         _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("pin", "PIN Speaker", pairing: PairingState.PinRequired)));
         var cut = _ctx.Render<PairingDialog>();
@@ -53,6 +53,17 @@ public sealed class GroupsPairingTests : ComponentTestBase
 
         cut.Find("input.pin").Input("0000");
         cut.Find("form.dialog__form").Submit();
+
+        // While the PIN request runs the pressed button keeps the focus (Escape and the Tab trap still work there):
+        // aria-disabled and aria-busy, never disabled.
+        cut.WaitForAssertion(() =>
+        {
+            var pending = cut.Find("button[data-action=pair]");
+            Assert.False(pending.HasAttribute("disabled"));
+            Assert.Equal("true", pending.GetAttribute("aria-disabled"));
+            Assert.Equal("true", pending.GetAttribute("aria-busy"));
+        });
+        wrong.SetResult(StubHandler.Problem(HttpStatusCode.UnprocessableEntity, "Wrong PIN", "The receiver rejected the PIN; start the pairing again."));
         cut.WaitForAssertion(() =>
         {
             Assert.Equal("The receiver rejected the PIN. Start again; it then shows a new PIN.", cut.Find("[role=alert]").TextContent);
@@ -471,6 +482,27 @@ public sealed class GroupsPairingTests : ComponentTestBase
         remove.Click();
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".row[data-receiver-id=a]")));
         Assert.Contains(api.Requests, r => r.Method == HttpMethod.Delete && r.Path == "/api/groups/g/members/a");
+        // The last member's row went with the pressed button: the focus goes to the Members heading, not to <body>.
+        Assert.Equal("-1", cut.Find("#group-members-title").GetAttribute("tabindex"));
+        cut.WaitForAssertion(() => Assert.Equal(cut.Instance.MembersTitle.Id, LastFocusedId()));
+    }
+
+    [Fact]
+    public void Group_editor_moves_the_focus_to_the_next_remove_button_after_a_remove()
+    {
+        UseApi((request, _) => (request.Method.Method, PathOf(request)) switch
+        {
+            ("DELETE", "/api/groups/g/members/a") => StubHandler.Json(Dto.Group("g", "Upstairs", 50, false, ("b", "Attic", 40))),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        _state.Load(Snapshot([Dto.Receiver("a", "Bedroom"), Dto.Receiver("b", "Attic")], [Dto.Group("g", "Upstairs", 50, false, ("a", "Bedroom", 50), ("b", "Attic", 40))]));
+        var cut = RenderEditor("g");
+        var next = ReferenceOf(cut, ".row[data-receiver-id=b] button[data-action=remove]");
+
+        cut.Find(".row[data-receiver-id=a] button[data-action=remove]").Click();
+
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".row[data-receiver-id=a]")));
+        cut.WaitForAssertion(() => Assert.Equal(next, LastFocusedId()));
     }
 
     [Theory]

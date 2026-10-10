@@ -4,8 +4,10 @@
    which a tap leaves stuck on the tapped button. Keyboard: one Tab stop (roving tabindex on the checked button), arrows/Home/End move focus and
    selection, Escape collapses. Touch (no hover): the first pointer tap opens the pill (theme-picker--open) instead of
    selecting, the next tap selects; a document click outside (BrowserBridge.OnOutsideClickAsync, a bubbling click
-   listener) or Escape collapses it. A pointer selection and Escape also move the focus out of the pill
-   (BrowserBridge.BlurAsync), since Chromium focuses a tapped button and focus-within would keep it unfolded.
+   listener) or Escape collapses it. A pointer selection also moves the focus out of the pill
+   (BrowserBridge.BlurAsync), since Chromium focuses a tapped button and focus-within would keep it unfolded. Escape
+   keeps the focus on the radio and collapses with theme-picker--closed instead (cleared by the next other key, a click
+   or the focus leaving the group).
    Selecting stores and applies the choice through BrowserBridge.SetThemeAsync; a choice
    made elsewhere (the Settings Appearance card) arrives through BrowserBridge.ThemeChanged. The navigation keys are
    kept from scrolling the page (BrowserBridge.PreventKeysAsync). *@
@@ -13,7 +15,8 @@
 @using Microsoft.JSInterop
 @inject BrowserBridge Browser
 
-<div @ref="_picker" class="@PickerClass" role="radiogroup" aria-label="@L["theme.groupLabel"]" @onkeydown="OnKeyDownAsync">
+<div @ref="_picker" class="@PickerClass" role="radiogroup" aria-label="@L["theme.groupLabel"]" @onkeydown="OnKeyDownAsync"
+     @onfocusout="() => _closed = false">
     @for (var i = 0; i < Themes.Length; i++)
     {
         var index = i;
@@ -38,6 +41,7 @@
     private ElementReference _picker;
     private string _theme = "system";
     private bool _open;
+    private bool _closed;
     private bool _hoverCapable = true;
     private int _focused = -1;
     private DotNetObjectReference<ThemePicker>? _self;
@@ -63,7 +67,10 @@
         (true, true) => "theme-picker theme-picker--open",
         (false, false) => "theme-picker theme-picker--touch",
         (false, true) => "theme-picker theme-picker--touch theme-picker--open",
-    };
+    } + (_closed ? " theme-picker--closed" : string.Empty);
+
+    /// <summary>True after Escape while the focus stays in the group (<c>theme-picker--closed</c> collapses it).</summary>
+    public bool IsClosed => _closed;
 
     /// <summary>
     /// Called by app.js for a document click outside the picker (registered on touch screens only, where the pill can
@@ -210,6 +217,7 @@
     {
         // Touch: the collapsed pill shows only the active option, so the first pointer tap unfolds the choices instead
         // of re-selecting what is already active. Keyboard activation (Enter/Space: detail 0) always selects.
+        _closed = false;
         if (!_hoverCapable && e.Detail != 0 && !_open)
         {
             _open = true;
@@ -229,9 +237,10 @@
     {
         if (e.Key == "Escape")
         {
-            // Collapse: the open class goes, and so does the focus that would keep the pill unfolded (:focus-within).
+            // Collapse without moving the focus (a blur would leave a keyboard or screen reader user nowhere): the open
+            // class goes and theme-picker--closed collapses the pill although :focus-within still holds.
             _open = false;
-            await LeaveAsync();
+            _closed = true;
             return;
         }
 
@@ -246,10 +255,11 @@
         };
         if (next < 0)
         {
-            return;
+            return; // Tab, Shift and the like leave a collapsed pill collapsed (focusout clears the class)
         }
 
-        // A radio group: moving the focus moves the choice.
+        // A radio group: moving the focus moves the choice (and unfolds a pill collapsed by Escape again).
+        _closed = false;
         _focused = next;
         await SelectAsync(Themes[next], keepOpen: _open);
         try

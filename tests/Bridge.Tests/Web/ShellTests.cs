@@ -185,13 +185,14 @@ public sealed class ShellTests : ComponentTestBase
             Assert.DoesNotContain("theme-picker--open", cut.Find(".theme-picker").ClassList);
             Assert.Equal("system", ThemeOf(cut));
             Assert.Empty(module.Invocations["setTheme"]);
-            // The focus leaves the group too, so :focus-within no longer unfolds the pill (REVIEW-1 finding 3).
-            Assert.Single(module.Invocations["blur"]);
+            // The focus stays on the radio (REVIEW cycle 2); theme-picker--closed collapses the pill despite :focus-within.
+            Assert.Contains("theme-picker--closed", cut.Find(".theme-picker").ClassList);
+            Assert.Empty(module.Invocations["blur"]);
         }
     }
 
     [Fact]
-    public async Task Theme_picker_escape_with_the_mouse_layout_also_moves_the_focus_out()
+    public async Task Theme_picker_escape_with_the_mouse_layout_collapses_and_keeps_the_focus()
     {
         var (ctx, _, _, _, module) = UiTest.Create("en", hoverCapable: true);
         await using (ctx)
@@ -199,10 +200,22 @@ public sealed class ShellTests : ComponentTestBase
             var cut = ctx.Render<ThemePicker>();
             cut.WaitForAssertion(() => Assert.Single(module.Invocations["hoverCapable"]));
 
-            // A keyboard user tabbed in (focus-within unfolds the pill) and presses Escape: only a blur collapses it.
+            // A keyboard user tabbed in (focus-within unfolds the pill) and presses Escape: the closed class collapses
+            // it and the focus stays on the checked radio (a blur would drop it to <body>, REVIEW cycle 2).
             cut.Find(".theme-btn.is-active").KeyDown(Key.Escape);
-            Assert.Single(module.Invocations["blur"]);
+            Assert.Contains("theme-picker--closed", cut.Find(".theme-picker").ClassList);
+            Assert.Empty(module.Invocations["blur"]);
             Assert.Empty(module.Invocations["setTheme"]);
+
+            // Tab leaves it collapsed; the focus leaving the group or an arrow key clears the class again.
+            cut.Find(".theme-btn.is-active").KeyDown(Key.Tab);
+            Assert.Contains("theme-picker--closed", cut.Find(".theme-picker").ClassList);
+            cut.Find(".theme-picker").FocusOut();
+            Assert.DoesNotContain("theme-picker--closed", cut.Find(".theme-picker").ClassList);
+            cut.Find(".theme-btn.is-active").KeyDown(Key.Escape);
+            cut.Find(".theme-btn.is-active").KeyDown(Key.Right);
+            Assert.DoesNotContain("theme-picker--closed", cut.Find(".theme-picker").ClassList);
+            Assert.Equal("light", ThemeOf(cut)); // from "system", the last option, Right wraps to the first
         }
     }
 
@@ -432,7 +445,8 @@ public sealed class ShellTests : ComponentTestBase
             Assert.Equal(css, pill.ClassName);
             Assert.Equal(text, pill.TextContent);
             Assert.Equal(title, pill.GetAttribute("title"));
-            Assert.Equal("status", pill.GetAttribute("role"));
+            // Not a live region: the banner slot announces the transitions (one announcement each).
+            Assert.Null(pill.GetAttribute("role"));
         }
     }
 
@@ -594,7 +608,8 @@ public sealed class ShellTests : ComponentTestBase
             var toasts = cut.FindAll(".toast");
             // Oldest first in the DOM: newest at the bottom on desktop; the phone CSS reverses the column.
             Assert.Equal(["toast toast--ok", "toast toast--info", "toast toast--err"], toasts.Select(t => t.ClassName));
-            Assert.Equal(["status", "status", "alert"], toasts.Select(t => t.GetAttribute("role")));
+            // One live region per toast: the polite container announces success and info, an error is its own alert.
+            Assert.Equal(new string?[] { null, null, "alert" }, toasts.Select(t => t.GetAttribute("role")));
             Assert.Equal("Settings saved.", toasts[0].QuerySelector("span")!.TextContent);
             Assert.All(toasts, t => Assert.Equal("button", t.QuerySelector("button.toast__close")!.GetAttribute("type")));
             Assert.All(toasts, t => Assert.NotNull(t.QuerySelector(".toast__close [aria-hidden=true]")));

@@ -38,6 +38,7 @@ public sealed class WebApiClientTests
         var invalid = await Assert.ThrowsAsync<BridgeApiException>(() => api.SetSettingsAsync(settings with { LatencyFrames = 5 }, ct));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, invalid.StatusCode);
         Assert.Equal("Invalid request", invalid.Title);
+        Assert.True(invalid.IsProblemDetails); // the service's own problem details, shown as sent (UI-SPEC 3.5)
         Assert.Contains("latency", invalid.Detail, StringComparison.OrdinalIgnoreCase);
 
         var unknown = await Assert.ThrowsAsync<BridgeApiException>(() => api.GetReceiverAsync("no:such:id", ct));
@@ -226,6 +227,40 @@ public sealed class WebApiClientTests
         Assert.Null(state.ConnectionError);
         events.Start(); // idempotent
         Assert.Equal(EventConnectionState.Connecting, state.Connection);
+    }
+
+    [Fact]
+    public async Task Event_client_announces_connecting_once_then_stays_paused_through_the_retries_until_connected()
+    {
+        // The banner is the live region of these states: a retry must not flip paused -> connecting -> paused (two
+        // announcements per back-off cycle for as long as the bridge is down).
+        var state = new BridgeState();
+        var seen = new ConcurrentQueue<string>();
+        state.Changed += () => seen.Enqueue(state.Connection switch
+        {
+            EventConnectionState.Connected => "connected",
+            EventConnectionState.Connecting => "connecting",
+            _ when state.NextAttemptAt is not null => "paused",
+            _ => "offline",
+        });
+        var attempts = 0;
+        var socket = new ScriptedWebSocket();
+        await using var events = new BridgeEventClient(
+            state,
+            new Uri("ws://localhost/ws/events"),
+            NullLogger<BridgeEventClient>.Instance,
+            new BridgeEventClientOptions { InitialRetryDelay = TimeSpan.FromMilliseconds(10), MaxRetryDelay = TimeSpan.FromMilliseconds(20) },
+            (_, _) => Interlocked.Increment(ref attempts) <= 3
+                ? Task.FromException<WebSocket>(new WebSocketException("connection refused"))
+                : Task.FromResult<WebSocket>(socket));
+        events.Start();
+
+        await WebClients.WaitUntilAsync(() => state.Connection == EventConnectionState.Connected, "the connection after three failures", TimeSpan.FromSeconds(10));
+        Assert.Equal(4, Volatile.Read(ref attempts));
+        var kinds = seen.ToArray();
+        var distinct = kinds.Where((kind, i) => i == 0 || kinds[i - 1] != kind).TakeWhile(kind => kind != "connected").Append("connected");
+        Assert.Equal(["connecting", "paused", "connected"], distinct);
+        Assert.Single(kinds.TakeWhile(kind => kind != "connected"), kind => kind == "connecting");
     }
 
     [Fact]

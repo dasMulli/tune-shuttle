@@ -8,7 +8,9 @@
    r_i preview while it is dragged and the clamp hint), the Members card (one row per member with its compact r_i
    slider and a remove button, then the add form) and the danger card (delete with an inline confirm). An unknown id
    shows the not-found state. The commands and the busy/preview logic are the ones of the former single-page Groups
-   view. Focus follows the inline swaps: Rename → the name field, Save/Cancel/Escape → Rename, Delete → Keep, Keep → Delete. *@
+   view. Focus follows the inline swaps: Rename → the name field, Save/Cancel/Escape → Rename, Delete → Keep, Keep → Delete,
+   and a removed member's row (its pressed button goes with it) → the next member's remove button, else the previous
+   one's, else the Members heading. *@
 
 <PageTitle>@L.Format("app.pageTitle", ("page", L["nav.groups"]))</PageTitle>
 
@@ -100,7 +102,7 @@
         </section>
 
         <section class="card" aria-labelledby="group-members-title" data-card="members">
-            <h2 id="group-members-title">@L["groups.members"]</h2>
+            <h2 id="group-members-title" tabindex="-1" @ref="_membersTitle">@L["groups.members"]</h2>
             @if (members.Count == 0)
             {
                 <p class="meta">@L["groups.noMembers"]</p>
@@ -135,7 +137,7 @@
                                      Send="(level, ct) => Commands.SetMemberLevelAsync(group.Id, member.ReceiverId, level, ct)" />
                         <button type="button" class="btn btn--icon" data-action="remove" aria-disabled="@Busy(_busy)"
                                 aria-label="@L.Format("groups.remove", ("name", name))"
-                                @onclick="() => RemoveAsync(member.ReceiverId)">
+                                @onclick="() => RemoveAsync(member.ReceiverId)" @ref="_removeButtons[member.ReceiverId]">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
                         </button>
                     </div>
@@ -222,6 +224,12 @@
     private ElementReference _deleteButton;
     private ElementReference _keepButton;
     private ElementReference _outputButton;
+    private ElementReference _membersTitle;
+    private readonly Dictionary<string, ElementReference> _removeButtons = new(StringComparer.Ordinal);
+    private string? _focusMember;
+
+    /// <summary>The Members heading (tests: where the focus goes after the last member is removed).</summary>
+    internal ElementReference MembersTitle => _membersTitle;
 
     /// <summary>The Activate / Stop button (tests: the same element in both states).</summary>
     internal ElementReference OutputButton => _outputButton;
@@ -236,6 +244,8 @@
         RenameInput,
         DeleteButton,
         KeepButton,
+        RemoveButton,
+        MembersTitle,
     }
 
     /// <summary>The group id of <c>/groups/{id}</c>; null on <c>/groups/new</c>.</summary>
@@ -272,8 +282,11 @@
             Focus.RenameButton => _renameButton,
             Focus.RenameInput => _renameInput,
             Focus.DeleteButton => _deleteButton,
+            Focus.RemoveButton when _focusMember is { } member && _removeButtons.TryGetValue(member, out var remove) => remove,
+            Focus.RemoveButton or Focus.MembersTitle => _membersTitle,
             _ => _keepButton,
         };
+        _focusMember = null;
         _focus = Focus.None;
         if (element.Context is null)
         {
@@ -408,7 +421,19 @@
 
     private Task DeactivateAsync() => RunAsync((_, ct) => Commands.ClearOutputAsync(ct));
 
-    private Task RemoveAsync(string receiverId) => RunAsync((groupId, ct) => Commands.RemoveMemberAsync(groupId, receiverId, ct));
+    private Task RemoveAsync(string receiverId) => RunAsync(async (groupId, ct) =>
+    {
+        // The pressed button goes with its row: the focus moves on to the next member's remove button (else the
+        // previous one's, else the Members heading) instead of dropping to <body>.
+        var ids = State.Group(groupId)?.Members.Select(m => m.ReceiverId).ToList() ?? [];
+        if (await Commands.RemoveMemberAsync(groupId, receiverId, ct))
+        {
+            var index = ids.IndexOf(receiverId);
+            _focusMember = index >= 0 && index + 1 < ids.Count ? ids[index + 1] : index > 0 ? ids[index - 1] : null;
+            _focus = _focusMember is null ? Focus.MembersTitle : Focus.RemoveButton;
+            _removeButtons.Remove(receiverId);
+        }
+    });
 
     private Task AddAsync() => RunAsync(async (groupId, ct) =>
     {

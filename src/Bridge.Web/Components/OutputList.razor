@@ -59,7 +59,7 @@
                 {
                     var active = output.GroupId == group.Id;
                     var key = GroupKey(group.Id);
-                    var busy = _busy.Contains(key);
+                    var busy = InFlight(key);
                     var reachable = group.Members.Any(m => State.Receiver(m.ReceiverId)?.Online ?? m.State != ReceiverConnectionState.Offline);
                     var names = string.Join(", ", group.Members.Select(m => State.Receiver(m.ReceiverId)?.Name ?? m.Name));
                     var nameId = "output-group-" + group.Id;
@@ -97,7 +97,7 @@
                     var active = output.GroupId is null && output.ReceiverId == receiver.Id;
                     var inOutput = output.ReceiverId == receiver.Id || State.IsInOutput(receiver.Id);
                     var key = ReceiverKey(receiver.Id);
-                    var busy = _busy.Contains(key);
+                    var busy = InFlight(key);
                     var model = receiver.Model is { Length: > 0 } m ? m : L["player.unknownModel"];
                     var nameId = "output-receiver-" + receiver.Id;
                     var metaId = nameId + "-meta";
@@ -107,7 +107,7 @@
                             <input type="radio" name="output" class="visually-hidden" checked="@Checked(key, active)"
                                    disabled="@(!receiver.Online || receiver.Pairing == PairingState.Disabled)"
                                    aria-labelledby="@nameId" aria-describedby="@(metaId + " " + pillId)"
-                                   @onchange="() => ConnectAsync(receiver)" />
+                                   @onchange="() => ConnectAsync(receiver)" @ref="_receiverRadios[receiver.Id]" />
                             <span class="@(active ? "radio is-on" : "radio")" aria-hidden="true"></span>
                             <span class="row__main">
                                 <strong id="@nameId">@receiver.Name</strong>
@@ -188,6 +188,10 @@
 
     private bool Checked(string key, bool active) => _echo is { } echo ? echo == key : active;
 
+    // Busy as the row shows it: a request on its way. A keyboard pick still waiting for the arrow keys to settle is not
+    // (no "connecting…" and no aria-busy on every row the keys step over, REVIEW cycle 2).
+    private bool InFlight(string key) => _busy.Contains(key) && _pending?.Key != key;
+
     private void OnPointerDown() => _pointerDownAt = Environment.TickCount64;
 
     private string? OutputKey() => State.Output switch
@@ -199,7 +203,12 @@
 
     private Task ActivateAsync(GroupDto group) => SelectAsync(GroupKey(group.Id), ct => Commands.ActivateGroupAsync(group.Id, ct));
 
-    private Task ConnectAsync(ReceiverDto receiver) => SelectAsync(ReceiverKey(receiver.Id), ct => Commands.ConnectAsync(receiver.Id, ct));
+    // POST /receivers/{id}/connect connects a member of the active group back into the group (by design, OutputManager)
+    // instead of making it the single output, so a pick of such a row would silently revert. Picking a row means "this
+    // receiver alone": the group output is stopped first (decided when the pick is sent, not when it is made).
+    private Task ConnectAsync(ReceiverDto receiver) => SelectAsync(ReceiverKey(receiver.Id), async ct =>
+        (State.Output.GroupId is null || !State.IsInOutput(receiver.Id) || await Commands.ClearOutputAsync(ct))
+        && await Commands.ConnectAsync(receiver.Id, ct));
 
     private async Task SelectAsync(string key, Func<CancellationToken, Task<bool>> select)
     {
@@ -278,11 +287,64 @@
         }
     }
 
+    // A successful pairing replaces the row's Pair button with the compact slider, so the dialog cannot give the focus
+    // back to it: once the dialog closes with the receiver paired, the row's radio takes the focus instead.
+    private readonly Dictionary<string, ElementReference> _receiverRadios = new(StringComparer.Ordinal);
+    private string? _pairingFor;
+    private string? _focusRadioOf;
+
+    /// <summary>The radio of a receiver's row (tests: the focus target after a pairing from the row).</summary>
+    internal ElementReference RadioOf(string receiverId) => _receiverRadios[receiverId];
+
+    /// <inheritdoc />
+    protected override void OnBridgeStateChanged()
+    {
+        if (_pairingFor is { } id && State.Pairing is null)
+        {
+            _pairingFor = null;
+            if (State.Receiver(id) is { Pairing: not PairingState.PinRequired })
+            {
+                _focusRadioOf = id;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusRadioOf is not { } id)
+        {
+            return;
+        }
+
+        _focusRadioOf = null;
+        if (!_receiverRadios.TryGetValue(id, out var radio) || radio.Context is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await radio.FocusAsync();
+        }
+        catch (JSException)
+        {
+            // the element went away between the render and the call
+        }
+        catch (JSDisconnectedException)
+        {
+            // the page is going away
+        }
+    }
+
     private async Task PairAsync(ReceiverDto receiver)
     {
         try
         {
-            await Commands.StartPairingAsync(receiver.Id, Lifetime);
+            if (await Commands.StartPairingAsync(receiver.Id, Lifetime))
+            {
+                _pairingFor = receiver.Id;
+            }
         }
         catch (OperationCanceledException) when (Lifetime.IsCancellationRequested)
         {

@@ -195,8 +195,12 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         Assert.Equal("Spotify-Gerätename", cut.Find("label[for=device-name]").TextContent);
         Assert.Contains("= 1.750 ms bei 44,1 kHz (22.050–176.400).", cut.Find("#latency-hint").TextContent, StringComparison.Ordinal);
 
+        // novalidate: the browser's own constraint bubble (min/max/step, in the browser's language) would block the
+        // submit before these catalog texts could show (bUnit runs no native constraint validation, so pin the attribute).
+        Assert.True(cut.Find("form.settings").HasAttribute("novalidate"));
+
         cut.Find("#device-name").Change("   ");
-        cut.Find("#latency").Change("100");
+        cut.Find("#latency").Change("1000");
         cut.Find("form").Submit();
         cut.WaitForAssertion(() => Assert.Equal(
             ["Der Gerätename ist leer.", "Die Latenz muss zwischen 22.050 und 176.400 Frames liegen."],
@@ -305,6 +309,8 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
 
         cut.Find(".card .btn").Click();
         cut.WaitForAssertion(() => Assert.Equal("AirPlay Bridge", cut.Find("#device-name").GetAttribute("value")));
+        // The form replaced the pressed Retry button: the focus goes to its first field, not to <body>.
+        cut.WaitForAssertion(() => Assert.Equal(ReferenceOf(cut, "#device-name"), LastFocusedId()));
     }
 
     [Fact]
@@ -427,14 +433,22 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         cut.WaitForAssertion(() => Assert.Contains("Not connected. Select the bridge in a Spotify app to log in.", SpotifyCard(cut).TextContent, StringComparison.Ordinal));
 
         Assert.Empty(SpotifyCard(cut).QuerySelectorAll(".btn--danger"));
+        Assert.Equal("-1", cut.Find("#settings-spotify").GetAttribute("tabindex"));
         cut.Find("#settings-spotify").ParentElement!.ParentElement!.QuerySelector(".btn--ghost")!.Click();
         cut.WaitForAssertion(() => Assert.Contains("Forget the cached Spotify login?", SpotifyCard(cut).TextContent, StringComparison.Ordinal));
         Assert.Equal("Keep", SpotifyCard(cut).QuerySelector(".actions .btn:not(.btn--danger)")!.TextContent);
         Assert.DoesNotContain(api.Requests, r => r.Path.Contains("spotify", StringComparison.OrdinalIgnoreCase));
+        // The pressed button went away: the focus goes to Keep (the safe choice), and Keep gives it back to the button.
+        cut.WaitForAssertion(() => Assert.Equal(SpotifyCard(cut).QuerySelector(".actions .btn:not(.btn--danger)")!.GetAttribute("blazor:elementReference"), LastFocusedId()));
+        SpotifyCard(cut).QuerySelector(".actions .btn:not(.btn--danger)")!.Click();
+        cut.WaitForAssertion(() => Assert.Equal(SpotifyCard(cut).QuerySelector(".btn--ghost")!.GetAttribute("blazor:elementReference"), LastFocusedId()));
+        SpotifyCard(cut).QuerySelector(".btn--ghost")!.Click();
 
         SpotifyCard(cut).QuerySelector(".btn--danger")!.Click();
         cut.WaitForAssertion(() => Assert.Contains(api.Requests, r => r.Path.Contains("spotify", StringComparison.OrdinalIgnoreCase)));
         cut.WaitForAssertion(() => Assert.Empty(SpotifyCard(cut).QuerySelectorAll(".btn--danger")));
+        // A successful forget removes the pair: the card's heading takes the focus.
+        cut.WaitForAssertion(() => Assert.Equal(cut.Instance.SpotifyTitle.Id, LastFocusedId()));
     }
 
     [Fact]
@@ -721,9 +735,13 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         var cut = _ctx.Render<Diagnostics>();
 
         cut.WaitForAssertion(() => Assert.StartsWith("Diagnostics unavailable. Boom", cut.Find("[role=alert]").TextContent, StringComparison.Ordinal));
+        var title = ReferenceOf(cut, "#diagnostics-network");
+        Assert.Equal("-1", cut.Find("#diagnostics-network").GetAttribute("tabindex"));
         cut.Find("#diagnostics-network").ParentElement!.ParentElement!.QuerySelector(".btn")!.Click();
         cut.WaitForAssertion(() => Assert.Equal("1,234", Fact(cut, "Packets sent")));
         Assert.Empty(cut.FindAll("[role=alert]"));
+        // The facts replaced the pressed Retry button: the card's heading takes the focus.
+        cut.WaitForAssertion(() => Assert.Equal(title, LastFocusedId()));
     }
 
     [Fact]
@@ -768,6 +786,14 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
     }
 
     private static IElement SpotifyCard(IRenderedComponent<Settings> cut) => cut.Find("#settings-spotify").ParentElement!.ParentElement!;
+
+    /// <summary>The element reference id bUnit rendered on the element matching <paramref name="selector"/>.</summary>
+    private static string? ReferenceOf<T>(IRenderedComponent<T> cut, string selector)
+        where T : Microsoft.AspNetCore.Components.IComponent => cut.Find(selector).GetAttribute("blazor:elementReference");
+
+    /// <summary>The element reference id of the latest <c>FocusAsync</c> call.</summary>
+    private string LastFocusedId() =>
+        Assert.IsType<Microsoft.AspNetCore.Components.ElementReference>(_ctx.JSInterop.Invocations["Blazor._internal.domWrapper.focus"].Last().Arguments[0]).Id;
 
     /// <summary>The text of the <c>dd</c> that follows the <c>dt</c> reading <paramref name="label"/>.</summary>
     private static string Fact<T>(IRenderedComponent<T> cut, string label)

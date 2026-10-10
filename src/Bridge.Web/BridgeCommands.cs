@@ -231,7 +231,9 @@ public sealed class BridgeCommands
     /// <summary>
     /// A one-line description of a failure for a notice or an inline error: the service's problem details as it sends
     /// them (title and detail, untranslated, UI-SPEC 3.5), otherwise notices.unreachable / notices.timeout /
-    /// notices.unreadable from <paramref name="i18n"/> (pages pass their <c>L</c>; English when null). Client and runtime
+    /// notices.unreadable (also a success answer whose body is unreadable or empty) / notices.httpError (an error status
+    /// without problem details, a proxy's error page, say) from <paramref name="i18n"/> (pages pass their <c>L</c>;
+    /// English when null). Client and runtime
     /// exception text (the browser's "TypeError: Failed to fetch", JSON parser messages) is never shown; callers log it.
     /// </summary>
     public static string Describe(Exception ex, I18n? i18n = null)
@@ -240,7 +242,9 @@ public sealed class BridgeCommands
         var l = i18n ?? s_english.Value;
         return ex switch
         {
-            BridgeApiException api => $"{api.Title}: {api.Detail}",
+            BridgeApiException { IsProblemDetails: true } api => $"{api.Title}: {api.Detail}",
+            BridgeApiException { StatusCode: var s } when (int)s is >= 200 and < 300 => l["notices.unreadable"],
+            BridgeApiException api => l.Format("notices.httpError", ("status", (int)api.StatusCode)),
             HttpRequestException => l["notices.unreachable"],
             TaskCanceledException or TimeoutException => l["notices.timeout"],
             _ => l["notices.unreadable"],

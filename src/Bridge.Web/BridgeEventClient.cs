@@ -193,7 +193,13 @@ public sealed class BridgeEventClient : IAsyncDisposable
                 string? error = null;
                 try
                 {
-                    SetConnection(EventConnectionState.Connecting);
+                    // Only the first attempt says Connecting: a retry keeps the "paused, retrying" state set before
+                    // its delay, so the banner does not flip (and announce) twice per back-off cycle during an outage.
+                    if (failures == 0)
+                    {
+                        SetConnection(EventConnectionState.Connecting);
+                    }
+
                     using var socket = await ConnectWithTimeoutAsync(cancellationToken).ConfigureAwait(false);
                     failures = 0;
                     Connections++;
