@@ -7,7 +7,7 @@
   Scans every file `git ls-files` lists (tracked, plus new files that are not ignored), except reference/ (third-party sources) and this script. Binary files are
   read byte for byte (Latin-1), so captured binary plists are covered too. Checks:
 
-    subnet        the home network's subnets (192.168.x.x)
+    subnet        any 192.168.x.x address (the repository only uses the RFC 5737 documentation ranges)
     host          the home network's domain (the PC, TV and cluster host names come from the patterns file);
                   the public repository URL github.com/dasMulli/tune-shuttle is allowed
     device-name   the TV's user-given name
