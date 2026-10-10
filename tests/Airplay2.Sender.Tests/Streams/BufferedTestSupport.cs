@@ -18,8 +18,8 @@ namespace Airplay2.Sender.Tests.Streams;
 internal sealed record BufferedPacketSeen(int Connection, int Length, uint Sequence, bool Marker, uint Timestamp, uint Ssrc, byte[]? Frame, short[]? Pcm);
 
 /// <summary>
-/// The receiver side of the buffered stream's data connection (the "fake-receiver buffered reader" of WORK-PLAN.md
-/// buffered-stream "Verify"): a loopback TCP listener that reads length-prefixed packets the way shairport-sync does
+/// The receiver side of the buffered stream's data connection (the fake
+/// receiver's buffered reader): a loopback TCP listener that reads length-prefixed packets the way shairport-sync does
 /// (<c>[sps] ap2_buffered_audio_processor.c:242-297</c>), decrypts them with the stream key (AAD bytes 4..11, nonce tail)
 /// and decodes ALAC 44.1/16 frames. Reading can be paused to exercise TCP backpressure.
 /// </summary>

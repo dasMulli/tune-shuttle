@@ -6,7 +6,7 @@ using Airplay2.Sender.Plist;
 namespace Airplay2.Sender.Rtsp;
 
 /// <summary>
-/// Renders messages for the decrypted wire log (WORK-PLAN.md: <c>Debug</c> for wire-level detail; every live test logs
+/// Renders messages for the decrypted wire log (docs/DEVELOPMENT.md, "Code conventions": <c>Debug</c> for wire-level detail; every live test logs
 /// the complete decrypted exchange). Heads are shown verbatim, bodies as text for <c>text/*</c>, as a decoded plist for
 /// bplist bodies, otherwise as hex (a preview at Debug, everything at Trace).
 /// </summary>

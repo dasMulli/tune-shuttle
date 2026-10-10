@@ -2,7 +2,7 @@ using Airplay2.Sender.Discovery;
 
 namespace Airplay2.Sender.Cli;
 
-/// <summary>Where the CLI finds receivers: mDNS in production, a fixed list in tests ("discover is mocked", WORK-PLAN.md).</summary>
+/// <summary>Where the CLI finds receivers: mDNS in production, a fixed list in tests.</summary>
 public interface IReceiverDirectory : IAsyncDisposable
 {
     /// <summary>Browses for <paramref name="duration"/> and returns everything seen.</summary>

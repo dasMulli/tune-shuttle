@@ -29,7 +29,7 @@
   </ItemGroup>
 
   <!--
-    Development switch Bridge:FakeReceivers (WORK-PLAN.md web-app): Debug builds from the full repository reference the
+    Development switch Bridge:FakeReceivers (docs/DEVELOPMENT.md, "Test receivers"): Debug builds from the full repository reference the
     in-process fake receiver. The container build copies src/ only (tests/ is in .dockerignore) and Release builds never
     reference it, so neither ships test code.
   -->

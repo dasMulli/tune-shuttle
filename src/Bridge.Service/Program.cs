@@ -9,7 +9,7 @@ using Librespot.Playback;
 namespace Bridge.Service;
 
 /// <summary>
-/// Host entry point (docs/PLAN.md "Deployment"): ASP.NET Core generic host with Windows Service and systemd integration,
+/// Host entry point (docs/ARCHITECTURE.md, "Deployment"): ASP.NET Core generic host with Windows Service and systemd integration,
 /// configuration from appsettings.json and environment variables (prefix <c>BRIDGE_</c>), the SQLite file in a
 /// configurable data directory, the Blazor web app served from the same process.
 /// </summary>
@@ -77,7 +77,7 @@ public static class Program
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<BridgePaths>();
 
-        // Logging: the in-memory ring for the diagnostics page and, on Windows, daily files (PLAN.md "Logging").
+        // Logging: the in-memory ring for the diagnostics page and, on Windows, daily files (docs/ARCHITECTURE.md, "Deployment").
         services.AddSingleton<LogBuffer>();
         services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<LogBuffer>());
         services.AddSingleton<FileLoggerProvider>();

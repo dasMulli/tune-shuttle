@@ -6,8 +6,8 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Cli;
 
 /// <summary>
-/// Sender M1 (PLAN.md) through the CLI against the Test Speaker ABCD: <c>airplay2 play tone:3 --to "Test Speaker ABCD"
-/// --level 15 --i-know</c> with real mDNS discovery, transient pairing and the D5 start-up (WORK-PLAN.md section 4: a
+/// One receiver through the CLI against the Test Speaker ABCD: <c>airplay2 play tone:3 --to "Test Speaker ABCD"
+/// --level 15 --i-know</c> with real mDNS discovery, transient pairing and the D5 start-up (docs/DEVELOPMENT.md, "Live-device rules": a
 /// 3-second quiet tone at -24 dBFS, level 15). Returns early unless <c>AIRPLAY_LIVE=1</c> and <c>AIRPLAY_AUDIO_I_KNOW=1</c>;
 /// the complete Debug log goes to <c>artifacts/live/&lt;date&gt;-sender-M1-play.log</c>. Run alone:
 /// <c>$env:AIRPLAY_LIVE=1; $env:AIRPLAY_AUDIO_I_KNOW=1; dotnet test --filter "FullyQualifiedName~SpeakerA_sender_M1"</c>.
@@ -26,7 +26,7 @@ public sealed class CliLiveTests(ITestOutputHelper output)
 
         if (Environment.GetEnvironmentVariable("AIRPLAY_AUDIO_I_KNOW") != "1")
         {
-            output.WriteLine("AIRPLAY_AUDIO_I_KNOW not set: audio needs the explicit acknowledgement (WORK-PLAN.md section 4)");
+            output.WriteLine("AIRPLAY_AUDIO_I_KNOW not set: audio needs the explicit acknowledgement (docs/DEVELOPMENT.md, \"Live-device rules\")");
             return;
         }
 

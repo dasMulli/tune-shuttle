@@ -28,8 +28,8 @@ public static class PcmSource
     public static readonly TimeSpan MaxTone = TimeSpan.FromMinutes(10);
 
     /// <summary>
-    /// <c>tone:&lt;s&gt;</c>: a 440 Hz sine at -24 dBFS with 10 ms fades (<see cref="PlaybackProbes.Tone"/>, WORK-PLAN.md
-    /// section 4's quiet test tone); anything else is a WAV path (<see cref="WavReader"/>).
+    /// <c>tone:&lt;s&gt;</c>: a 440 Hz sine at -24 dBFS with 10 ms fades (<see cref="PlaybackProbes.Tone"/>, the quiet test tone of
+    /// docs/DEVELOPMENT.md, "Live-device rules"); anything else is a WAV path (<see cref="WavReader"/>).
     /// </summary>
     /// <exception cref="FormatException">The tone length or the WAV format is invalid.</exception>
     /// <exception cref="FileNotFoundException">The WAV file does not exist.</exception>
@@ -79,7 +79,7 @@ public sealed class ArrayPcmSource(string title, short[] interleaved) : IPcmSour
 }
 
 /// <summary>
-/// A RIFF/WAVE reader for exactly what the sender streams (PLAN.md: 16-bit, 44.1 kHz, stereo, little-endian PCM):
+/// A RIFF/WAVE reader for exactly what the sender streams (librespot's output: 16-bit, 44.1 kHz, stereo, little-endian PCM):
 /// <c>WAVE_FORMAT_PCM</c> or <c>WAVE_FORMAT_EXTENSIBLE</c> with the PCM sub-format; unknown chunks (<c>LIST</c>,
 /// <c>fact</c>, ...) are skipped with their pad byte; a data size of 0 or 0xFFFFFFFF (streamed WAVs) reads to the end of
 /// the file. Anything else is refused with a message naming the format found; resampling is not this tool's job.

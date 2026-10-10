@@ -9,8 +9,8 @@ using Xunit;
 namespace Airplay2.Sender.Tests.Streams;
 
 /// <summary>
-/// <see cref="PtpMaster"/> against the fake receiver's <see cref="FakePtpSlave"/> on loopback (WORK-PLAN ptp-master
-/// "Verify": the slave's offset converges, Delay_Req is answered, a silent peer is dropped after 15 s). Both sides use
+/// <see cref="PtpMaster"/> against the fake receiver's <see cref="FakePtpSlave"/> on loopback (the
+/// slave's offset converges, Delay_Req is answered, a silent peer is dropped after 15 s). Both sides use
 /// OS-chosen ports; the master is told the slave's ports with <see cref="PtpMaster.AddPeer(IPAddress, int, int)"/>.
 /// </summary>
 public class PtpMasterLoopbackTests

@@ -1,6 +1,6 @@
 # Local test receiver: evaluation and setup
 
-Status: 2026-10-09. Question: can shairport-sync (AirPlay 2) run locally as a test receiver on this Windows host, and
+Evaluated 2026-10-09. Question: can shairport-sync (AirPlay 2) run locally as a test receiver on this Windows host, and
 what would it test? Short answer: it runs in Docker Desktop and is reachable **from inside the Docker VM**, not from
 Windows; it refuses the NTP-timed realtime stream that v1 uses; so it is a secondary target for the pairing/RTSP/event
 paths and for the PTP/buffered path, while the in-process fake receiver plus the SpeakerA speaker remain the primary
@@ -29,8 +29,8 @@ targets (SPEC.md D16).
 | Retransmit requests, timing requests to the sender | yes inside the VM, no from Windows | UDP back to the sender only works in the shared namespace. |
 | Audible output / latency measurement | no | `dummy` backend; use the SpeakerA with a microphone (P7). |
 
-Conclusion: worth keeping as a **secondary** target for the control plane and for the PTP/buffered packages
-(`ptp-master`, `buffered-stream`), run through the VM script below; not a substitute for the fake receiver (which tests the NTP
+Conclusion: worth keeping as a **secondary** target for the control plane and for the PTP and buffered
+stream paths, run through the VM script below; not a substitute for the fake receiver (which tests the NTP
 path and every quirk switch deterministically) or the SpeakerA (the real Apple-SDK behaviour, SPEC.md section 4).
 
 ## How to start it
@@ -49,7 +49,7 @@ docker compose -f docker/shairport-sync/compose.yaml down
 ./docker/shairport-sync/run-live-tests-in-vm.ps1 -Filter "FullyQualifiedName~Pairing"
 ```
 
-Correction (2026-10-09, wave 4 gate, from `ptp-master`'s live runs): row "Realtime stream under PTP" holds only when our
+Correction (2026-10-09, from the PTP master's live runs): row "Realtime stream under PTP" holds only when our
 grandmaster is **not** in the receiver's namespace. With `--net host` (`run-live-tests-in-vm.ps1`) nqptp already owns UDP
 319/320, so `PtpMaster` cannot bind them (`PtpMasterException`). The PTP tests run in a bridge-networked SDK container
 that reaches shairport-sync at the bridge gateway (`SPS_HOST=172.17.0.1`):
@@ -66,15 +66,15 @@ the corrections below).
 ## The Test Speaker ABCD and the fake receiver
 
 - SpeakerA (192.0.2.26:7000, `srcvers 366.0`, features `0x1C340445F8A00`, flags `0x404`): the live target with the
-  allowances of WORK-PLAN.md section 4 (discovery and `GET /info` any time; pairing and SETUP/TEARDOWN from wave 3;
-  audio only as a 3-second quiet tone from wave 4; the LG TV never).
-- `tests/Airplay2.FakeReceiver`: the in-process receiver every test project uses (WORK-PLAN package `fake-receiver`);
+  live-device rules of `docs/DEVELOPMENT.md` (discovery, `GET /info`, pairing and SETUP/TEARDOWN; audio only as a
+  3-second quiet tone; the LG TV never).
+- `tests/Airplay2.FakeReceiver`: the in-process receiver every test project uses;
   it implements both NTP and the 501 refusal, both TEARDOWN forms, optional `streamID`, `updateInfo` timing, packet
-  loss and retransmit requests, so each open question's branches can be exercised deterministically.
+  loss and retransmit requests, so the branches of every receiver question can be exercised deterministically.
 
 ## What shairport-sync actually exercised (2026-10-09, final integration)
 
-By the end of wave 8, every ShairportLive test had run against shairport-sync 5.5.2 in the Docker VM, and the final
+By the end of the implementation, every ShairportLive test had run against shairport-sync 5.5.2 in the Docker VM, and the final
 integration ran all of them again. The table gives the complete list. Logs:
 `artifacts/live/2026-10-09-final-shairport-*.log`, `-final-bridge-container-shairport.log` (git-ignored, local only).
 
@@ -84,7 +84,7 @@ integration ran all of them again. The table gives the complete list. Logs:
 | Transient pair-setup M1-M4, encrypted `GET /info` | `PairingLiveTests.Shairport_transient_pairing_then_encrypted_get_info` | host network | Pairing completes; the encrypted `GET /info` answers 200 |
 | PIN pair-setup M1-M6 with `--password`, pair-verify on the same and on a new connection | `PairingLiveTests.Shairport_password_pin_pairing_then_verify` | Second, password-protected container on the default bridge network (see below) | Transient is refused (TLV `Authentication`); PIN M1-M6 succeeds and the M6 signature verifies; pair-verify succeeds twice. The connection stays plaintext after verify, which is a shairport-sync gap (SPEC-control.md 3.7 note), not ours. |
 | PTP session start-up: session SETUP with `timingPeerInfo`, event channel (`updateInfo` on connect), RECORD, SETPEERS, stream SETUP without `streamID`, `GET_PARAMETER` with the leading blank line, `TEARDOWN {}` with `Connection: close` | `SessionLiveTests.Shairport_ptp_session_startup` | host network | Passes |
-| NTP session refusal | (session-streams, wave 3) | host network | `200` with an empty body, not `501` (SPEC-control.md 4.2 note). The sender treats it as a refusal, and `KnownReceiverQuirks` puts shairport-sync on PTP. |
+| NTP session refusal | `SessionLiveTests` (session start-up) | host network | `200` with an empty body, not `501` (SPEC-control.md 4.2 note). The sender treats it as a refusal, and `KnownReceiverQuirks` puts shairport-sync on PTP. |
 | Our PTP grandmaster as nqptp's master; 0xD7-synced realtime stream (silence into the dummy backend) | `PtpLiveTests.Shairport_follows_our_clock_and_plays_ptp_synced_silence`, `.Shairport_plays_silence_through_the_realtime_transport_under_ptp` | `run-ptp-live-tests-in-vm.ps1` (bridge network) | Pass. nqptp sends two Announces and then nothing (P17); `PtpMaster` keeps the silent peer. |
 | Buffered stream (type 103): run-ahead push, flush and re-anchor; through the group player with pause/resume | `BufferedLiveTests.Shairport_plays_a_run_ahead_buffered_stream_with_flush_and_reanchor`, `.Shairport_plays_the_buffered_stream_through_the_group_player` | `run-ptp-live-tests-in-vm.ps1 -Filter "FullyQualifiedName~BufferedLiveTests&Category=ShairportLive"` | Pass. shairport-sync drops one block after each immediate flush (SPEC-audio.md 4.5 note). |
 | **The bridge from its container image**: mDNS discovery of shairport-sync, then through the REST API: connect (transient pairing, PTP session with our grandmaster, event channel, RECORD, stream SETUP), receiver volume 20 → 35, disconnect (`TEARDOWN` 200 with `Connection: close`) | Manual, `docker run tune-shuttle:dev` on the default bridge network with `BRIDGE_Bridge__EnableSpotify=false`, then `curl` against `/api/receivers/{id}/connect`, `/volume`, `/disconnect` | Default bridge network | All steps 200; state *Connected*, then *Available*. Both the image's own mDNS browser and shairport-sync's Avahi are on the bridge network, so discovery works there. |

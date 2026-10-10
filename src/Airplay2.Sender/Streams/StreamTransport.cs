@@ -8,14 +8,14 @@ namespace Airplay2.Sender.Streams;
 public sealed record ReceiverStreamEndpoint(IPEndPoint Data, IPEndPoint Control, byte[] StreamKey, int OffsetFrames, bool RetransmitOnDataPort);
 
 /// <summary>
-/// The pluggable stream layer (PLAN.md: realtime first, buffered second). One transport serves a whole group: it takes
+/// The pluggable stream layer (docs/ARCHITECTURE.md, "Design decisions": realtime first, buffered second). One transport serves a whole group: it takes
 /// each encoded ALAC frame once and delivers it to every registered receiver with per-receiver encryption, and it
 /// produces whatever anchoring the stream type needs (NTP/PTP syncs or SETRATEANCHORTIME).
 /// </summary>
 public interface IStreamTransport : IAsyncDisposable
 {
     /// <summary>
-    /// The one master clock of this transport (PLAN.md: the sender is the clock master; SPEC-audio.md 8.5, SPEC.md D3).
+    /// The one master clock of this transport (docs/ARCHITECTURE.md, "Design decisions": the sender is the clock master; SPEC-audio.md 8.5, SPEC.md D3).
     /// The timing responder / PTP grandmaster, the sync builder and the group player's pacer all read this instance.
     /// </summary>
     IMasterClock Clock { get; }

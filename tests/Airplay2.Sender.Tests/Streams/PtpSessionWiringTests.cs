@@ -14,7 +14,7 @@ using Xunit;
 namespace Airplay2.Sender.Tests.Streams;
 
 /// <summary>
-/// The SETPEERS wiring (WORK-PLAN ptp-master): a PTP session SETUP carrying the master's clock id, the receiver's
+/// The SETPEERS wiring: a PTP session SETUP carrying the master's clock id, the receiver's
 /// <c>timingPeerInfo</c> turned into a grandmaster peer, <c>SETPEERS</c> with the peer list, and PTP traffic reaching the
 /// fake receiver's slave.
 /// </summary>

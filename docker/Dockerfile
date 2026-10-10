@@ -1,4 +1,4 @@
-# Linux container image of TuneShuttle (docs/PLAN.md "Deployment"). Build from the repository root:
+# Linux container image of TuneShuttle (docs/ARCHITECTURE.md, "Deployment"). Build from the repository root:
 #   docker build -f docker/Dockerfile -t tune-shuttle .
 # Cross-build for the Raspberry Pi clusters (the SDK stage runs natively on the build host and cross-compiles;
 # only the runtime stage is pulled for the target platform, so nothing runs under QEMU):

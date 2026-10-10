@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <RootNamespace>Airplay2.Sender</RootNamespace>
-    <Description>AirPlay 2 sender library: discovery, HomeKit pairing, RTSP control channel, ALAC/RTP realtime stream, timing and group playback. No ASP.NET dependency and no Spotify session or playback code; it references Librespot.Discovery only for its mDNS packet codec (Librespot.Core comes along transitively as a library, see WORK-PLAN.md section 2).</Description>
+    <Description>AirPlay 2 sender library: discovery, HomeKit pairing, RTSP control channel, ALAC/RTP realtime stream, timing and group playback. No ASP.NET dependency and no Spotify session or playback code; it references Librespot.Discovery only for its mDNS packet codec (Librespot.Core comes along transitively as a library, see docs/ARCHITECTURE.md, "Design decisions").</Description>
   </PropertyGroup>
 
   <ItemGroup>

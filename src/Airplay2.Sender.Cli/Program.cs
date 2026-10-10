@@ -4,10 +4,10 @@ using Microsoft.Extensions.Logging;
 namespace Airplay2.Sender.Cli;
 
 /// <summary>
-/// CLI harness (docs/PLAN.md): <c>discover</c>, <c>info</c>, <c>pair</c>, <c>play &lt;file.wav&gt; --to &lt;name&gt; [--to ...] --i-know</c>,
+/// CLI harness (README.md, "The CLI"): <c>discover</c>, <c>info</c>, <c>pair</c>, <c>play &lt;file.wav&gt; --to &lt;name&gt; [--to ...] --i-know</c>,
 /// <c>volume</c>, plus <c>probe &lt;P-id&gt; &lt;name&gt;</c> for SPEC.md section 4 (ids <c>P1</c>..<c>P21</c>). Pairings are
 /// stored in a JSON file next to the executable (<c>airplay2-pairings.json</c>). Audio is never sent without <c>--i-know</c>
-/// (WORK-PLAN.md section 4: 3-second quiet tone rule); probes that send audio require it too.
+/// (docs/DEVELOPMENT.md, "Live-device rules": 3-second quiet tone); probes that send audio require it too.
 /// </summary>
 /// <remarks>
 /// Exit codes (<see cref="ExitCodes"/>): 0 success; 1 failure (bad input, receiver not found, network/protocol error,
@@ -77,7 +77,7 @@ public static class Program
         pair.Add(forget);
         pair.SetAction((parse, ct) => WithLogging(services, LogOptions(parse), logging => commands.PairAsync(parse.GetValue(pairTarget)!, parse.GetValue(pin), parse.GetValue(forget), logging, ct)));
 
-        var play = new Command("play", "Play a 16-bit 44.1 kHz stereo WAV (or a generated test tone) to one or more receivers in sync. Refuses to send audio without --i-know (WORK-PLAN.md section 4).");
+        var play = new Command("play", "Play a 16-bit 44.1 kHz stereo WAV (or a generated test tone) to one or more receivers in sync. Refuses to send audio without --i-know (docs/DEVELOPMENT.md, \"Live-device rules\").");
         var file = new Argument<string>("file") { Description = "WAV file path, or 'tone:<seconds>' for a quiet 440 Hz test tone (-24 dBFS)" };
         var to = new Option<string[]>("--to") { Description = "Receiver name (repeatable)", AllowMultipleArgumentsPerToken = true, Required = true };
         var level = new Option<int>("--level") { Description = "Level 0..100 (live rule: <= 20 until final integration)", DefaultValueFactory = _ => 15 };

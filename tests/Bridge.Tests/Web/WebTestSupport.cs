@@ -221,7 +221,7 @@ internal static class WebClients
 }
 
 /// <summary>
-/// The bUnit setup of the redesigned components (WORK-PLAN 2.1): everything a component needs, with the browser module
+/// The bUnit setup of the redesigned components (docs/DEVELOPMENT.md, "Component tests"): everything a component needs, with the browser module
 /// <c>./js/app.js</c> mocked so no component ever needs a real browser.
 /// </summary>
 internal static class UiTest

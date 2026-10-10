@@ -5,7 +5,7 @@
 .DESCRIPTION
   Starts the receivers (docker compose, including the password-protected sps-pin of profile "pin") if needed, then runs
   `dotnet test` in a host-networked .NET SDK container with the repository mounted. Tests opt in with
-  [Trait("Category", "ShairportLive")], return early unless AIRPLAY_LIVE=1 (WORK-PLAN.md section 1; this script sets it)
+  [Trait("Category", "ShairportLive")], return early unless AIRPLAY_LIVE=1 (docs/DEVELOPMENT.md, "Live tests"; this script sets it)
   and read SPS_HOST / SPS_PORT; the PIN pairing test reads SPS_PIN_HOST / SPS_PASSWORD, which this script resolves from
   the sps-pin container. A test that returns early is reported as passed, so the script names any test that cannot run.
 .PARAMETER Filter

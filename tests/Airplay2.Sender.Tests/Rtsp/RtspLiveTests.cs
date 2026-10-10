@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Rtsp;
 
 /// <summary>
-/// Live checks of the transport (WORK-PLAN.md section 4: unauthenticated <c>GET /info</c> is allowed any time). They
+/// Live checks of the transport (docs/DEVELOPMENT.md, "Live-device rules": unauthenticated <c>GET /info</c> is allowed any time). They
 /// return early unless <c>AIRPLAY_LIVE=1</c>. SpeakerA: <c>$env:AIRPLAY_LIVE=1; dotnet test --filter Category=SpeakerALive</c>
 /// (address from <c>SpeakerA_HOST</c>, default the documented 192.0.2.26:7000). shairport-sync: run inside the Docker VM
 /// with <c>docker/shairport-sync/run-live-tests-in-vm.ps1</c> (<c>SPS_HOST</c>/<c>SPS_PORT</c>). Each run writes the

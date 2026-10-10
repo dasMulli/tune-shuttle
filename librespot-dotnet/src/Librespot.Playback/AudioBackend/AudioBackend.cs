@@ -2,7 +2,7 @@
 //
 // Backends in this port: "naudio" (WASAPI via NAudio; replaces rodio/cpal from rodio.rs and is the default),
 // "pipe" (stdout or file; pipe.rs) and "subprocess" (subprocess.rs). Not ported, because they are Linux/native-only
-// (see docs/PORT-PLAN.md package `playback-backends`): alsa.rs ("alsa"), portaudio.rs ("portaudio"),
+// (see docs/PORTING-NOTES.md, "NuGet mapping"): alsa.rs ("alsa"), portaudio.rs ("portaudio"),
 // pulseaudio.rs ("pulseaudio"), jackaudio.rs ("jackaudio"), gstreamer.rs ("gstreamer"), sdl.rs ("sdl"), the
 // "rodiojack" variant of rodio.rs, and mixer/alsamixer.rs. Like upstream builds without those cargo features,
 // `AudioBackends.Find` returns null for their names. "rodio" is accepted by `Find` as an alias of "naudio".

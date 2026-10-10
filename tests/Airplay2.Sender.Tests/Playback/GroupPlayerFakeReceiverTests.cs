@@ -11,8 +11,8 @@ using TestReceiver = Airplay2.FakeReceiver.FakeReceiver;
 namespace Airplay2.Sender.Tests.Playback;
 
 /// <summary>
-/// <see cref="GroupPlayer"/> over the real transport with two in-process fake receivers in one group (WORK-PLAN.md
-/// audio-pipeline-group-sync "Verify"): D5 start-up, identical packets under per-receiver keys, sync relation and cadence,
+/// <see cref="GroupPlayer"/> over the real transport with two in-process fake receivers in one group:
+/// D5 start-up, identical packets under per-receiver keys, sync relation and cadence,
 /// mid-stream join, flush/pause/resume, retransmits from the history, PTP syncs, progress bodies, volume and events.
 /// </summary>
 public sealed class GroupPlayerFakeReceiverTests

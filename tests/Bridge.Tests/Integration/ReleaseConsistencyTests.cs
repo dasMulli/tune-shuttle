@@ -6,7 +6,7 @@ using Xunit.Abstractions;
 namespace Bridge.Tests.Integration;
 
 /// <summary>
-/// Final integration (WORK-PLAN.md section 6): the pieces a release is made of agree with each other. The shipped
+/// Release consistency: the pieces a release is made of agree with each other. The shipped
 /// <c>appsettings.json</c> states the same defaults as <see cref="BridgeOptions"/> (so the README's configuration table
 /// holds whether a key is present or not), <c>build.ps1</c> publishes the bridge where
 /// <c>install/windows/install-service.ps1</c> looks for it, and the web port is the same everywhere.

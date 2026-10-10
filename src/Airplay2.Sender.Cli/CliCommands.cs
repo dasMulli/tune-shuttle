@@ -16,16 +16,15 @@ using Microsoft.Extensions.Logging;
 namespace Airplay2.Sender.Cli;
 
 /// <summary>
-/// The command implementations behind <see cref="Program"/> (docs/PLAN.md "CLI harness", WORK-PLAN.md package
-/// <c>sender-api-cli</c>), over replaceable <see cref="CliServices"/>. Every command that sets up a session tears it down
+/// The command implementations behind <see cref="Program"/> (README.md, "The CLI"), over replaceable <see cref="CliServices"/>. Every command that sets up a session tears it down
 /// (SPEC.md D7) also on failure and on Ctrl+C; audio is never sent without <c>--i-know</c>.
 /// </summary>
 public sealed class CliCommands(CliServices services)
 {
-    /// <summary>The live-test level ceiling until final integration (WORK-PLAN.md section 4).</summary>
+    /// <summary>The live-test level ceiling (docs/DEVELOPMENT.md, "Live-device rules").</summary>
     public const int LiveLevelCeiling = 20;
 
-    /// <summary>The live-test audio budget per run (WORK-PLAN.md section 4).</summary>
+    /// <summary>The live-test audio budget per run (docs/DEVELOPMENT.md, "Live-device rules").</summary>
     public static readonly TimeSpan LiveAudioBudget = TimeSpan.FromSeconds(3);
 
     /// <summary>The name we announce in session SETUPs (the host name is appended).</summary>
@@ -51,8 +50,8 @@ public sealed class CliCommands(CliServices services)
         ArgumentNullException.ThrowIfNull(logging);
         if (!iKnow)
         {
-            // The guard comes first: no file, no store, no socket (WORK-PLAN.md section 4).
-            await Error.WriteLineAsync("Refusing to send audio without --i-know. Live rule (WORK-PLAN.md section 4): only the Test Speaker ABCD, a 3-second quiet tone (tone:3), --level 15, with the user's go-ahead. Nothing was sent.").ConfigureAwait(false);
+            // The guard comes first: no file, no store, no socket (docs/DEVELOPMENT.md, "Live-device rules").
+            await Error.WriteLineAsync("Refusing to send audio without --i-know. Live rule (docs/DEVELOPMENT.md, \"Live-device rules\"): only the Test Speaker ABCD, a 3-second quiet tone (tone:3), --level 15, with the user's go-ahead. Nothing was sent.").ConfigureAwait(false);
             return ExitCodes.AudioRefused;
         }
 
@@ -92,12 +91,12 @@ public sealed class CliCommands(CliServices services)
             var duration = source.TotalFrames < 0 ? (TimeSpan?)null : TimeSpan.FromSeconds(source.TotalFrames / (double)RealtimeStreamConstants.SampleRate);
             if (level > LiveLevelCeiling)
             {
-                logger.LogWarning("Level {Level} is above the live-test ceiling of {Ceiling} (WORK-PLAN.md section 4)", level, LiveLevelCeiling);
+                logger.LogWarning("Level {Level} is above the live-test ceiling of {Ceiling} (docs/DEVELOPMENT.md, \"Live-device rules\")", level, LiveLevelCeiling);
             }
 
             if (duration is null || duration > LiveAudioBudget)
             {
-                logger.LogWarning("The source is {Duration}, longer than the 3-second live-test budget (WORK-PLAN.md section 4); only play it with the user present", duration is { } d ? $"{d.TotalSeconds:0.0} s" : "of unknown length");
+                logger.LogWarning("The source is {Duration}, longer than the 3-second live-test budget (docs/DEVELOPMENT.md, \"Live-device rules\"); only play it with the user present", duration is { } d ? $"{d.TotalSeconds:0.0} s" : "of unknown length");
             }
 
             await using var directory = Services.CreateDirectory(logging);

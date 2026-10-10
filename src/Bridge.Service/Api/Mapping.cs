@@ -11,7 +11,7 @@ namespace Bridge.Service.Api;
 /// Conversions between the store rows (<see cref="ReceiverRow"/>, <see cref="GroupRow"/>), discovery
 /// (<see cref="DiscoveredReceiver"/>) and the API DTOs of <c>Bridge.Contracts</c>. Pure functions without I/O; the
 /// runtime state the store does not know (online, connection state, errors, the active output) is passed in.
-/// Owned by bridge-store; bridge-service may extend it for new DTO fields (docs/airplay2/WORK-PLAN.md section 2).
+/// Extend it when a DTO gains a field.
 /// </summary>
 public static class Mapping
 {

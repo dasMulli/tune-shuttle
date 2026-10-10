@@ -9,8 +9,8 @@ using Bridge.Service.Diagnostics;
 namespace Bridge.Service.Api;
 
 /// <summary>
-/// Fans <see cref="BridgeEvent"/>s out to every connected WebSocket as JSON, one message per frame (WORK-PLAN.md section
-/// 7, <c>/ws/events</c>). Each client has its own bounded queue that drops the oldest event when the client cannot keep
+/// Fans <see cref="BridgeEvent"/>s out to every connected WebSocket as JSON, one message per frame (docs/ARCHITECTURE.md,
+/// "Bridge API", <c>/ws/events</c>). Each client has its own bounded queue that drops the oldest event when the client cannot keep
 /// up, so a slow browser never blocks the publisher. Log lines go only to clients that sent <c>subscribe {log: true}</c>;
 /// a <c>ping</c> is answered with <c>pong</c>.
 /// </summary>

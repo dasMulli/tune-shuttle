@@ -132,7 +132,7 @@ public sealed class ShellTests : ComponentTestBase
             var cut = ctx.Render<ThemePicker>();
             cut.WaitForAssertion(() => Assert.Single(module.Invocations["onOutsideClick"]));
             // A pointer that cannot hover: the CSS collapses the pill without :hover, which a tap leaves stuck on the
-            // tapped button (REVIEW-2 #1).
+            // tapped button.
             cut.WaitForAssertion(() => Assert.Contains("theme-picker--touch", cut.Find(".theme-picker").ClassList));
 
             // First tap on the collapsed pill (it shows only the active "system" button): opens, selects nothing.
@@ -551,7 +551,7 @@ public sealed class ShellTests : ComponentTestBase
             Assert.Equal(closed, cut.Find(".banner__text").TextContent);
 
             // A runtime exception message is left out in every language, English included: the WASM runtime reports a
-            // resource key instead of a sentence (REVIEW-2 #2). The error-free sentence stays.
+            // resource key instead of a sentence. The error-free sentence stays.
             foreach (var runtime in new[] { "net_webstatus_ConnectFailure", "Unable to connect to the remote server." })
             {
                 state.SetConnection(EventConnectionState.Disconnected, runtime, DateTimeOffset.UnixEpoch);

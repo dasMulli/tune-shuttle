@@ -14,7 +14,7 @@ public static class ExitCodes
     public const int Failure = 1;
 
     /// <summary>
-    /// Audio refused: <c>play</c> or an audio-sending probe without <c>--i-know</c> (WORK-PLAN.md section 4). Nothing was
+    /// Audio refused: <c>play</c> or an audio-sending probe without <c>--i-know</c> (docs/DEVELOPMENT.md, "Live-device rules"). Nothing was
     /// sent and no socket was opened.
     /// </summary>
     public const int AudioRefused = 2;

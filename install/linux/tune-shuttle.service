@@ -1,4 +1,4 @@
-# systemd unit for TuneShuttle (docs/PLAN.md "Deployment"). Install:
+# systemd unit for TuneShuttle (docs/ARCHITECTURE.md, "Deployment"). Install:
 #   sudo cp tune-shuttle.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now tune-shuttle
 [Unit]
 Description=TuneShuttle (Spotify Connect to AirPlay 2 bridge)

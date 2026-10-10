@@ -8,7 +8,7 @@ using static Airplay2.Sender.Tests.Fake.FakeReceiverHarness;
 namespace Airplay2.Sender.Tests.Fake;
 
 /// <summary>
-/// Self-tests of the fake receiver's UDP side (WORK-PLAN fake-receiver "Verify": audio decode of the reference ALAC packets
+/// Self-tests of the fake receiver's UDP side (audio decode of the reference ALAC packets
 /// sent as RTP; gap detection and retransmit requests in both reply forms; timing requests; sync recording).
 /// </summary>
 public class FakeReceiverAudioTests

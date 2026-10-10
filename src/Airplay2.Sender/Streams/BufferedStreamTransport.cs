@@ -114,7 +114,7 @@ public sealed record BufferedReceiverStatus(string ReceiverId, bool DataConnecte
 
 /// <summary>
 /// Type 103 over TCP with PTP timing, SETRATEANCHORTIME and FLUSHBUFFERED (SPEC-audio.md 4.1-4.3, 4.5; SPEC-control.md
-/// 4.7, 4.8). The second implementation of <see cref="IStreamTransport"/> (PLAN.md: realtime first, buffered if needed).
+/// 4.7, 4.8). The second implementation of <see cref="IStreamTransport"/> (docs/ARCHITECTURE.md, "Design decisions": realtime first, buffered if needed).
 /// </summary>
 /// <remarks>
 /// <para>

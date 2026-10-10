@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace Bridge.Service.Output;
 
 /// <summary>
-/// The receiver inventory (WORK-PLAN.md bridge-service "receiver inventory (browser + store merge)"): runs the mDNS
+/// The receiver inventory (docs/ARCHITECTURE.md, "Receiver inventory and pruning"): runs the mDNS
 /// browser, writes every discovered receiver into the store (<see cref="Mapping.ToReceiverRow"/> keeps the user's level,
 /// offset and quirks), publishes <c>receiverChanged</c> on every change, asks the output manager to retry a receiver that
 /// (re)appears, and resolves a receiver id to a <see cref="DiscoveredReceiver"/> for connecting, with the stored last

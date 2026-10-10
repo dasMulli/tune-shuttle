@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Registers TuneShuttle (the Spotify Connect to AirPlay 2 bridge) as a Windows Service and opens the firewall ports (docs/PLAN.md "Deployment").
+  Registers TuneShuttle (the Spotify Connect to AirPlay 2 bridge) as a Windows Service and opens the firewall ports (docs/ARCHITECTURE.md, "Deployment").
 .PARAMETER PublishDir
   Folder with the published bridge (dotnet publish src/Bridge.Service -c Release -r win-x64 -o <dir>).
 .PARAMETER DataDir
@@ -53,7 +53,7 @@ if (-not (Get-Service $serviceName -ErrorAction SilentlyContinue)) {
     New-Service -Name $serviceName -BinaryPathName $binPath -DisplayName "TuneShuttle" -StartupType Automatic -Description "TuneShuttle: Spotify Connect to AirPlay 2 bridge" | Out-Null
 }
 
-# Firewall (PLAN.md "Deployment"): the Zeroconf HTTP port and the sender's RTP/timing/control UDP ports are chosen at
+# Firewall (docs/ARCHITECTURE.md, "Deployment"): the Zeroconf HTTP port and the sender's RTP/timing/control UDP ports are chosen at
 # run time, so a per-program rule covers them; mDNS 5353 and the web app port are explicit.
 New-NetFirewallRule -DisplayName "TuneShuttle (program)" -Program $exe -Direction Inbound -Action Allow -Profile Private,Domain | Out-Null
 New-NetFirewallRule -DisplayName "TuneShuttle mDNS" -Protocol UDP -LocalPort 5353 -Direction Inbound -Action Allow -Profile Private,Domain | Out-Null

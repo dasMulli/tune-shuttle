@@ -18,7 +18,7 @@ using TestReceiver = Airplay2.FakeReceiver.FakeReceiver;
 namespace Airplay2.Sender.Tests.Cli;
 
 /// <summary>
-/// The <c>airplay2</c> CLI (WORK-PLAN.md sender-api-cli "Verify"): argument parsing and the <c>--i-know</c> guard (exit 2,
+/// The <c>airplay2</c> CLI: argument parsing and the <c>--i-know</c> guard (exit 2,
 /// no socket opened: the directory, store and sender factories are never called), the probe id rules, the WAV reader and
 /// the tone source, and the commands end to end against fake receivers with a mocked directory.
 /// </summary>

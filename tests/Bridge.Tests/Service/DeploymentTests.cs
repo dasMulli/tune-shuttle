@@ -7,7 +7,7 @@ using Xunit;
 namespace Bridge.Tests.Service;
 
 /// <summary>
-/// Deployment wiring (PLAN.md "Deployment", WORK-PLAN.md bridge-service): the web port reaches Kestrel the same way from
+/// Deployment wiring (docs/ARCHITECTURE.md, "Deployment"): the web port reaches Kestrel the same way from
 /// the Windows install script (command line), the container and the systemd unit (<c>BRIDGE_</c> variables), and both
 /// override the endpoint in appsettings.json; Windows log files roll per day.
 /// </summary>

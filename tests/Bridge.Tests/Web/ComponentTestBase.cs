@@ -7,7 +7,7 @@ using Microsoft.JSInterop;
 namespace Bridge.Tests.Web;
 
 /// <summary>
-/// Fixture of the bUnit component tests (WORK-PLAN.md web-app "Verify": bUnit 2.11.3 supports .NET 10), shared by the
+/// Fixture of the bUnit component tests (bUnit, docs/DEVELOPMENT.md, "Component tests"), shared by the
 /// per-page test classes. The API is a stub handler that records requests; the state is fed directly, as the event
 /// client would. The catalog is English (<c>_l.SetLanguage("de")</c> switches it; that also changes the process-wide
 /// default-thread cultures, so a class that does it joins <see cref="ProcessCultureCollection"/>, and one that asserts

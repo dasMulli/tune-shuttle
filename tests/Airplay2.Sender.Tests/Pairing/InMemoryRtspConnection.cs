@@ -21,7 +21,7 @@ internal sealed record RecordedRequest(string Method, string Uri, IReadOnlyDicti
 internal delegate HapAccessoryResponse ResponseTransform(string path, Tlv8Document? request, HapAccessoryResponse response);
 
 /// <summary>
-/// In-memory <see cref="IRtspConnection"/> test double (WORK-PLAN.md "pairing" verify list): pipes each
+/// In-memory <see cref="IRtspConnection"/> test double: pipes each
 /// <see cref="RtspRequest"/> straight to a <see cref="HapAccessoryPairing"/> and wraps its answer in an
 /// <see cref="RtspResponse"/>, so the pairing tests need no socket and no rtsp-transport.
 /// </summary>

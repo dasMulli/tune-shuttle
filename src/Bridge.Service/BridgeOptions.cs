@@ -35,7 +35,7 @@ public sealed class BridgeOptions
     /// <summary>Starts the mDNS receiver browser. Tests that inject their own browser switch it off.</summary>
     public bool BrowseReceivers { get; set; } = true;
 
-    /// <summary>Writes log files to <c>&lt;DataDirectory&gt;/logs</c> on Windows (PLAN.md "Logging").</summary>
+    /// <summary>Writes log files to <c>&lt;DataDirectory&gt;/logs</c> on Windows (docs/ARCHITECTURE.md, "Deployment").</summary>
     public bool FileLogging { get; set; } = true;
 
     /// <summary>Days of log files to keep.</summary>
@@ -43,7 +43,7 @@ public sealed class BridgeOptions
 
     /// <summary>
     /// Development switch: start this many in-process fake receivers on loopback and show them instead of the LAN
-    /// (WORK-PLAN.md web-app: <c>bridge --Bridge:FakeReceivers=2</c>). Only available in Debug builds made from the full
+    /// (docs/DEVELOPMENT.md, "Test receivers": <c>bridge --Bridge:FakeReceivers=2</c>). Only available in Debug builds made from the full
     /// repository (the fake receiver lives under <c>tests/</c>).
     /// </summary>
     public int FakeReceivers { get; set; }
@@ -92,7 +92,7 @@ public static class BridgeSettingKeys
 
     /// <summary>
     /// Prefix of the per-group reference master level: while a group's G is 0 its member levels keep the values they had at
-    /// this level, so raising G again restores the relative levels (PLAN.md volume model).
+    /// this level, so raising G again restores the relative levels (docs/ARCHITECTURE.md, "Group volume model").
     /// </summary>
     public const string GroupReferenceLevelPrefix = "group_reference_level:";
 
@@ -189,7 +189,7 @@ public sealed record BridgeSettings(string DeviceName, int LatencyFrames, bool P
     }
 }
 
-/// <summary>Where the bridge keeps its files (PLAN.md "Deployment": a configurable data directory, a volume in the container).</summary>
+/// <summary>Where the bridge keeps its files (docs/ARCHITECTURE.md, "Deployment": a configurable data directory, a volume in the container).</summary>
 public sealed class BridgePaths
 {
     /// <summary>Resolves <c>DataDirectory</c> from the configuration (default <c>&lt;app&gt;/data</c>) and creates it.</summary>

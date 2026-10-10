@@ -58,7 +58,7 @@ public static class VolumeMapping
 }
 
 /// <summary>
-/// PLAN.md's volume model (SPEC-audio.md 6.3): per-receiver level <c>r_i</c> (0..100) and one group master level <c>G</c>.
+/// The group volume model (docs/ARCHITECTURE.md, "Group volume model"; SPEC-audio.md 6.3): per-receiver level <c>r_i</c> (0..100) and one group master level <c>G</c>.
 /// Moving G scales every r_i by G'/G (relative differences preserved; receivers that reach 100 clamp). A change reported
 /// by a receiver updates only its r_i. Pure state; the group player applies the resulting levels to the sessions.
 /// </summary>

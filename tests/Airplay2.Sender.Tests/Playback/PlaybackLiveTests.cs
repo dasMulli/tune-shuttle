@@ -9,7 +9,7 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Playback;
 
 /// <summary>
-/// Live audio probes against the Test Speaker ABCD (WORK-PLAN.md section 4, wave 4): <b>at most 3 s of a quiet 440 Hz
+/// Live audio probes against the Test Speaker ABCD (docs/DEVELOPMENT.md, "Live-device rules"): <b>at most 3 s of a quiet 440 Hz
 /// tone at -24 dBFS and level 15</b> per run, through the real <see cref="GroupPlayer"/>. They return early unless
 /// <c>AIRPLAY_LIVE=1</c>, and additionally require <c>AIRPLAY_AUDIO_I_KNOW=1</c> (the test-run equivalent of the CLI's
 /// <c>--i-know</c>). Every run ends with TEARDOWN and appends the wire log to <c>artifacts/live/&lt;date&gt;-&lt;probe&gt;.log</c>.
@@ -79,7 +79,7 @@ public sealed class PlaybackLiveTests(ITestOutputHelper output)
 
         if (Environment.GetEnvironmentVariable("AIRPLAY_AUDIO_I_KNOW") != "1")
         {
-            output.WriteLine("AIRPLAY_AUDIO_I_KNOW not set: audio probes need the explicit acknowledgement (WORK-PLAN.md section 4)");
+            output.WriteLine("AIRPLAY_AUDIO_I_KNOW not set: audio probes need the explicit acknowledgement (docs/DEVELOPMENT.md, \"Live-device rules\")");
             return;
         }
 

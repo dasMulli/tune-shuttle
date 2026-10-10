@@ -13,7 +13,7 @@ using ArtistRole = Spotify.Metadata.ArtistWithRole.Types.ArtistRole;
 namespace Bridge.Tests.Service;
 
 /// <summary>
-/// The SPEC-audio.md 8.4 mapping with a stubbed librespot event stream (WORK-PLAN.md bridge-service "Verify", no Spotify
+/// The SPEC-audio.md 8.4 mapping with a stubbed librespot event stream (no Spotify
 /// login): which events flush, when the now-playing goes out and with which position, how the volume becomes G.
 /// </summary>
 public sealed class PlayerEventMapperTests

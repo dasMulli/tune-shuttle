@@ -2,7 +2,7 @@
 // Player.Create -> LocalFileLookup.Create(config.LocalFileDirectories) and PlayerTrackLoader -> lookup.Get(trackUri).
 //
 // Probing uses this port's decoders instead of symphonia: of the supported extensions only MP3 files (ID3v2 tags,
-// NLayer) can be probed. MP4/M4P (no AAC/MP4 demuxer) and FLAC (not ported, see PORT-PLAN section 2) fail the probe
+// NLayer) can be probed. MP4/M4P (no AAC/MP4 demuxer) and FLAC (not ported, see docs/PORTING-NOTES.md, "NuGet mapping") fail the probe
 // and are skipped with the same warning upstream logs for unreadable files.
 using System.Text;
 using Librespot.Core;

@@ -14,7 +14,7 @@ namespace Bridge.Tests.Web;
 
 /// <summary>
 /// The web app's <see cref="BridgeApiClient"/>, <see cref="BridgeEventClient"/> and <see cref="BridgeState"/> against the
-/// bridge in-process (WebApplicationFactory, temp database, in-process fake receivers), WORK-PLAN.md web-app "Verify".
+/// bridge in-process (WebApplicationFactory, temp database, in-process fake receivers).
 /// </summary>
 public sealed class WebApiClientTests
 {

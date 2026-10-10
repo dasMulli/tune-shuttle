@@ -17,7 +17,7 @@ internal delegate ValueTask UdpDatagramHandler(Socket socket, ReadOnlyMemory<byt
 /// the socket, await the loop) on <see cref="DisposeAsync"/>.
 /// </summary>
 /// <remarks>
-/// Error ladder (WORK-PLAN 1: errors are never swallowed silently): a transient receive error (one datagram, or a stale
+/// Error ladder (docs/DEVELOPMENT.md, "Code conventions": errors are never swallowed silently): a transient receive error (one datagram, or a stale
 /// ICMP) is logged at Debug and the loop carries on; any other receive failure is logged at Error and the loop backs off
 /// 300 ms before receiving again, as shairport-sync does (<c>[sps] rtp.c:1211-1214</c>). A socket error while the handler
 /// replies is logged at Warning; any other handler failure (e.g. from a foreign <see cref="IPacketHistory"/>) is logged at

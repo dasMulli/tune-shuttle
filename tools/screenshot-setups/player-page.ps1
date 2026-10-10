@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Screenshot state of the player-page package (docs/web/WORK-PLAN.md, player-page).
+    Screenshot state of the player-page package.
 
 .DESCRIPTION
     Run by tools/web-screenshots.ps1 once the bridge answers. The screenshot script passes only -BaseUrl, so:

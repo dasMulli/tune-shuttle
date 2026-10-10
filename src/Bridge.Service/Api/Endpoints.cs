@@ -3,7 +3,7 @@ using Bridge.Contracts;
 namespace Bridge.Service.Api;
 
 /// <summary>
-/// The REST + WebSocket surface (docs/airplay2/WORK-PLAN.md section 7 "Bridge API surface"). Every handler delegates to
+/// The REST + WebSocket surface (docs/ARCHITECTURE.md, "Bridge API"). Every handler delegates to
 /// <see cref="BridgeController"/>; this file only maps routes.
 /// </summary>
 public static class Endpoints

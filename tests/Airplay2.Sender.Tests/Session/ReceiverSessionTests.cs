@@ -14,7 +14,7 @@ using Harness = Airplay2.Sender.Tests.Fake.FakeReceiverHarness;
 
 namespace Airplay2.Sender.Tests.Session;
 
-/// <summary><see cref="ReceiverSession"/> against the in-process fake receiver (WORK-PLAN.md session-streams "Verify").</summary>
+/// <summary><see cref="ReceiverSession"/> against the in-process fake receiver.</summary>
 public sealed class ReceiverSessionTests
 {
     private static readonly CancellationToken None = CancellationToken.None;

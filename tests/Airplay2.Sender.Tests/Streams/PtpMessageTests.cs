@@ -4,7 +4,7 @@ using Xunit;
 namespace Airplay2.Sender.Tests.Streams;
 
 /// <summary>
-/// Byte-exact layouts of every PTP message the grandmaster sends (SPEC-audio.md 4.4, WORK-PLAN ptp-master "Verify"). The
+/// Byte-exact layouts of every PTP message the grandmaster sends (SPEC-audio.md 4.4). The
 /// expected bytes are written out field by field from the spec's table (header: <c>messageType | 0x10</c>, version 2,
 /// length, domain 0, flags, correction 0, sourcePortIdentity = clock id + <c>80 05</c>, sequence, control, log interval).
 /// </summary>

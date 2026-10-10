@@ -20,7 +20,7 @@ using TestReceiver = Airplay2.FakeReceiver.FakeReceiver;
 namespace Bridge.Tests.Service;
 
 /// <summary>
-/// The bridge in-process (WORK-PLAN.md bridge-service "Verify": WebApplicationFactory against a temp database and fake
+/// The bridge in-process (WebApplicationFactory against a temp database and fake
 /// receivers): Spotify and mDNS off, file logging off, a <see cref="StaticReceiverBrowser"/> instead of mDNS, the sender
 /// bound to loopback.
 /// </summary>

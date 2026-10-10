@@ -8,7 +8,7 @@ namespace Airplay2.Sender.Tests.Rtp;
 
 /// <summary>
 /// UDP loopback tests of <see cref="TimingResponder"/> and <see cref="ControlPort"/> against <see cref="LoopbackReceiver"/>
-/// (WORK-PLAN rtp-timing-control "Verify"; the drop-every-50th test is probe P14 on the fake).
+/// (the drop-every-50th test is probe P14 on the fake).
 /// </summary>
 public class ControlAndTimingLoopbackTests
 {

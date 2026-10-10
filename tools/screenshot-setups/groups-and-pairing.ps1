@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Screenshot state of the groups-and-pairing package (docs/web/WORK-PLAN.md, groups-and-pairing).
+    Screenshot state of the groups-and-pairing package.
 
 .DESCRIPTION
     Run by tools/web-screenshots.ps1 once the bridge answers (it passes only -BaseUrl):

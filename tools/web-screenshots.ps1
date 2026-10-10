@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Screenshots of the web app with headless Edge (docs/web/WORK-PLAN.md 2.2).
+    Screenshots of the web app with headless Edge (docs/DEVELOPMENT.md, "Screenshots").
 
 .DESCRIPTION
     Starts the bridge with two in-process fake receivers (unless -NoStart), waits for /api/status, runs the optional
@@ -80,7 +80,7 @@ param(
     # ".png". Shows the sticky/translucent top bar over content and the phone bar scrolling away.
     [int] $ScrollY = 0,
 
-    # Keep the scrollbars visible (default: --hide-scrollbars, as WORK-PLAN 2.2 specifies).
+    # Keep the scrollbars visible (default: --hide-scrollbars).
     [switch] $ShowScrollbars,
 
     # Path of msedge.exe.
@@ -126,7 +126,7 @@ function Stop-Tree($process, [string] $commandLineMark) {
         finally { $ErrorActionPreference = $previous }
     }
     if ($commandLineMark) {
-        # Edge helper processes that left the launcher's tree (REVIEW-2 #11, not reproduced, kept as a safety net):
+        # Edge helper processes that left the launcher's tree (not reproduced, kept as a safety net):
         # everything whose command line names this screenshot's own profile directory, and nothing else.
         Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -and $_.CommandLine.Contains($commandLineMark) } |

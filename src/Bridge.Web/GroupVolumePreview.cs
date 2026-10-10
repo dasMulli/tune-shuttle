@@ -3,7 +3,7 @@ using Bridge.Contracts;
 namespace Bridge.Web;
 
 /// <summary>
-/// What the members' r_i become when the master level G of a group moves (docs/PLAN.md "Volume model", SPEC-audio.md
+/// What the members' r_i become when the master level G of a group moves (docs/ARCHITECTURE.md, "Group volume model"; SPEC-audio.md
 /// 6.3), so the Groups page can show the scaled levels live while the master slider is dragged, before the service
 /// answers. Mirrors the service's <c>GroupVolumeModel</c> (Airplay2.Sender/Playback/Volume.cs): each member keeps the
 /// weight r_i / G (r_i / 100 when G is 0), the new level is <c>round(weight * G')</c> away from zero, clamped to 0..100.

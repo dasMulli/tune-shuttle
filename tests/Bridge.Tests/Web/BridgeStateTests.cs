@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Bridge.Tests.Web;
 
-/// <summary>The web app's state container fed with WebSocket events and REST answers (WORK-PLAN.md web-app "Verify").</summary>
+/// <summary>The web app's state container fed with WebSocket events and REST answers.</summary>
 public sealed class BridgeStateTests
 {
     private static BridgeSnapshot Snapshot(IReadOnlyList<ReceiverDto> receivers, IReadOnlyList<GroupDto>? groups = null, OutputDto? output = null) =>

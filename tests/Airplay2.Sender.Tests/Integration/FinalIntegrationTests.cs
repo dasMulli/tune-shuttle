@@ -12,7 +12,7 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Integration;
 
 /// <summary>
-/// Final integration (WORK-PLAN.md section 6, <c>final-integration</c>): checks over the whole repository that the
+/// Release checks: checks over the whole repository that the
 /// plan's exit conditions hold: no contract stub marker remains, production code throws no
 /// <see cref="NotImplementedException"/>, every live test is gated by <c>AIRPLAY_LIVE</c>, and <c>build.ps1</c> excludes
 /// the live categories. The checks read the source tree. When the tests run from a copy without it (the Docker VM
@@ -172,7 +172,7 @@ public sealed class RepositoryHygieneTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// True when the code (comments stripped) compares <c>AIRPLAY_LIVE</c> with <c>"1"</c> (WORK-PLAN.md section 1) and the
+    /// True when the code (comments stripped) compares <c>AIRPLAY_LIVE</c> with <c>"1"</c> (docs/DEVELOPMENT.md, "Live tests") and the
     /// comparison is used as a gate: either inline in an <c>if</c>, or through a property such as <c>LiveEnabled</c> that an
     /// <c>if</c> tests. A mention in a doc comment alone does not count.
     /// </summary>

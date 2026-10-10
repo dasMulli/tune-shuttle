@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Screenshot state of the shell package (docs/web/WORK-PLAN.md, shell): Fake Receiver 1 connected, so the status pill
+    Screenshot state of the shell package: Fake Receiver 1 connected, so the status pill
     is "live" and the Player has an output; optionally the error-toast screenshots.
 
 .DESCRIPTION

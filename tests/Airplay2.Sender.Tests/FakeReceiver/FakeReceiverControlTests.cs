@@ -15,7 +15,7 @@ namespace Airplay2.Sender.Tests.Fake;
 
 /// <summary>
 /// Self-tests of the fake receiver's control plane, driven with hand-built requests through the library's
-/// <see cref="RtspConnection"/> and <see cref="HapPairingClient"/> (WORK-PLAN fake-receiver "Verify": pairing, SETUP,
+/// <see cref="RtspConnection"/> and <see cref="HapPairingClient"/> (pairing, SETUP,
 /// option switches, dropped connection).
 /// </summary>
 public class FakeReceiverControlTests

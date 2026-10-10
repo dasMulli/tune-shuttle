@@ -2,7 +2,7 @@ using Airplay2.Sender.Pairing;
 
 namespace Bridge.Service.Store;
 
-/// <summary>A row of <c>receivers</c> (docs/airplay2/WORK-PLAN.md section 8).</summary>
+/// <summary>A row of <c>receivers</c> (docs/ARCHITECTURE.md, "Persistence").</summary>
 /// <param name="Id">The receiver's <c>deviceid</c> (primary key).</param>
 /// <param name="Name">User-visible name.</param>
 /// <param name="Model">TXT <c>model</c>.</param>
@@ -40,7 +40,7 @@ public sealed record GroupMemberRow(string GroupId, string ReceiverId, int Level
 public sealed record SpotifyCredentialRow(string Username, int AuthType, byte[] AuthData);
 
 /// <summary>
-/// Persistence for the bridge (docs/PLAN.md "Persistence"): receivers, pairings, groups, settings and the Spotify
+/// Persistence for the bridge (docs/ARCHITECTURE.md, "Persistence"): receivers, pairings, groups, settings and the Spotify
 /// credential cache. Also implements <see cref="IPairingStore"/> for the sender. All methods are safe to call from
 /// any thread; SQLite serialises writes.
 /// </summary>

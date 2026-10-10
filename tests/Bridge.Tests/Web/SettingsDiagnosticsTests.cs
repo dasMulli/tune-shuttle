@@ -301,7 +301,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         cut.WaitForAssertion(() => Assert.Equal("77175", cut.Find("#latency").GetAttribute("value")));
 
         // InputNumber's own parse check runs before any attribute: an empty field (or "1e") must not show its built-in
-        // "The LatencyFrames field must be a number." (REVIEW-1 finding 1).
+        // "The LatencyFrames field must be a number.".
         cut.Find("#latency").Change("");
         cut.WaitForAssertion(() => Assert.Equal("Gib die Latenz als ganze Zahl an Frames ein.", cut.Find(".validation-message").TextContent));
         Assert.Equal("alert", cut.Find(".validation-message").GetAttribute("role"));

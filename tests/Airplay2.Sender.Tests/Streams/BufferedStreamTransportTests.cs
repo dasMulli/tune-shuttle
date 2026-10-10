@@ -13,8 +13,8 @@ using Xunit;
 namespace Airplay2.Sender.Tests.Streams;
 
 /// <summary>
-/// <see cref="BufferedStreamTransport"/> against the loopback buffered reader and a recording session (WORK-PLAN.md
-/// buffered-stream "Verify": fake-receiver buffered reader): TCP packets, the 23-bit extension, anchoring with the first
+/// <see cref="BufferedStreamTransport"/> against the loopback buffered reader and a recording session:
+/// TCP packets, the 23-bit extension, anchoring with the first
 /// packet (SPEC-audio.md 4.3), flushing (4.5), run-ahead flow control (4.2), failures.
 /// </summary>
 public sealed class BufferedStreamTransportTests

@@ -1,19 +1,20 @@
 # AirPlay 2 sender specification: audio plane
 
-Status: research draft, 2026-10-09; contradictions with the control plane resolved by the architect the same day
-(see `SPEC.md`, which indexes both parts, holds the v1 decisions and the merged open-question list); review pass of
+Written 2026-10-09 from the reference sources; contradictions with the control plane resolved the same day
+(see `SPEC.md`, which indexes both parts and holds the decisions and the receiver findings with every probe result); review pass of
 the same day re-verified every `[pyatv] airplayv2.py`, `hap_session.py`, `chacha20.py` and `channels.py` line number
 against the b277a4c checkout (the `airplayv2.py` numbers had been taken from a different tree and are corrected),
 added the control-port lookup rule (2.4) and the `GET_PARAMETER` body shape (6.2). Companion to
-`docs/PLAN.md` (binding goals and decisions) and to `SPEC-control.md` (discovery, pairing, RTSP, event channel). This document
+`docs/ARCHITECTURE.md` (the project's design decisions) and to `SPEC-control.md` (discovery, pairing, RTSP, event channel). This document
 covers everything that moves audio and time: the realtime RTP stream, NTP-style timing, the control port, group
 playback, the buffered stream and its PTP master, the ALAC encoder, volume on the wire, metadata timing, and the
 sender-side pipeline that feeds all of this from librespot.
 
 The audience is an implementer who must not have to re-derive anything. Every packet layout, formula and key
 derivation is written out with a citation into the reference sources; where sources disagree the disagreement is
-stated and a decision is recommended. Nothing in this document was verified against a real receiver beyond the two
-unauthenticated probes in Appendix A; Section 9 lists what must be tested before the numbers here are trusted.
+stated and a decision is recommended. The research itself used only the two unauthenticated probes in Appendix A; the dated **Notes** in the
+sections record what the live probes later showed, and section 9 lists the receiver questions, whose results are in
+`SPEC.md` section 4.
 
 ## 0. Conventions, sources and the one-paragraph summary
 
@@ -104,7 +105,7 @@ classifies the session by this string and refuses NTP ("Shairport Sync can not h
 `[ot]` warns that with `timingProtocol: "None"` an Apple TV 4 will not respond to the stream `SETUP`
 (`airplay.c:2705`).
 
-**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** the session SETUP with `timingProtocol:
+**Note (2026-10-09, live against the Test Speaker ABCD 192.0.2.26, no audio):** the session SETUP with `timingProtocol:
 "NTP"` and our `timingPort` is accepted (answer `{eventPort, timingPort: 7001}`), and the SpeakerA sends 0xD2 timing
 requests to our timing port from its port 7001 as soon as the stream SETUP is processed (3 within 2 s, then about every
 3 s), before any audio. The stream SETUP answer has `dataPort`/`controlPort` and no `streamID`. See SPEC.md P1.
@@ -438,7 +439,7 @@ them).
 Unknown control packets: `[sps]` logs and ignores anything other than 0xD4/0xD6 (AirPlay 1) or 0xD7/0xD6
 (AirPlay 2) on its control port; log and ignore anything other than 0xD5 on ours.
 
-**Note (2026-10-09, `audio-pipeline-group-sync`, live against the Test Speaker ABCD, quiet tone):** (probe P14) with every
+**Note (2026-10-09, live against the Test Speaker ABCD, quiet tone):** (probe P14) with every
 50th packet withheld, the SpeakerA sent an 8-byte 0xD5 request (`80 D5`, from its announced control port) for each of the
 13 missing packets and accepted the wrapped 0xD6 answer from our control port: none was requested twice. During a
 normal 3 s tone it also asked for 3 real Wi-Fi losses. Form 1 (the default of D8) is right for the SpeakerA.
@@ -515,7 +516,7 @@ positive `offset_frames` for a receiver whose output chain is faster than the ot
 `audioLatencies.outputLatencyMicros` when published (Section 1.5) plus a user trim stored per receiver in the
 `receivers` table. The audio packets themselves are identical for all receivers; only the sync packet differs.
 
-**Note (2026-10-09, `audio-pipeline-group-sync`, not live):** 1.5 says to treat a published output latency as an offset
+**Note (2026-10-09, not live):** 1.5 says to treat a published output latency as an offset
 "to subtract from that receiver's `now_frame`", while this section says subtracting `d` makes the receiver play `d`
 frames **later**. A receiver whose output lags by `d` frames must play earlier, so the group player sets
 `offset_frames = configured offset - Audio-Latency` (i.e. it *adds* the published latency to `now_frame`); the user trim
@@ -549,14 +550,14 @@ publishes none: P7 fields, SPEC.md section 4).
 - PTP instead of NTP: with `[ot]`'s current code, any receiver advertising feature bit 41 (`SupportsPTP`, with
   `srcvers >= 366`) is driven with PTP unless configured otherwise (`airplay.c:420, 4066-4067`); NTP is only the
   fallback when the PTP daemon cannot be started (`airplay.c:4336-4342`). The SpeakerA advertises bit 41 and not
-  bit 45. `docs/PLAN.md` assumes NTP realtime is "the path a third-party multi-room sender has already proven";
+  bit 45. the project plan assumed NTP realtime is "the path a third-party multi-room sender has already proven";
   that was true of OwnTone releases before `libairptp` landed and remains true for `ptp_disable`d devices, but
   the current default is PTP. Keep the stream layer pluggable as planned and treat the NTP-vs-PTP choice as
-  Section 9, Q3. **Resolution** (SPEC.md D1): NTP first as PLAN.md says, gated by probe P1; the timing protocol is
+  Section 9, Q3. **Resolution** (SPEC.md D1): NTP first as planned, gated by probe P1 (the SpeakerA accepted it); the timing protocol is
   a pluggable part of the stream layer, so a refusal moves the realtime stream to PTP (0xD7 syncs, Section 4.4)
   without touching the ALAC/RTP/group code.
 
-**Note (2026-10-09, `audio-pipeline-group-sync`, live against the Test Speaker ABCD, quiet tone):** (probe P12, one
+**Note (2026-10-09, live against the Test Speaker ABCD, quiet tone):** (probe P12, one
 receiver) after a session SETUP with our `groupUUID` and `groupContainsGroupLeader: false`, the SpeakerA's mDNS record
 kept `gid=<its device id>` and `gcgl=0` while streaming; unlike `[sps]` it does not republish the sender's group id.
 Nothing in the audio plane depends on it.
@@ -617,7 +618,7 @@ time has passed are not even decrypted (`:521, 660-665`), blocks older than the 
 (`:617-648`). A sender can therefore push the whole `audioBufferSize` worth of packets immediately and then top
 up as the socket accepts writes.
 
-**Note (2026-10-09, `buffered-stream`, live; logs `artifacts/live/2026-10-09-buffered-shairport.log`,
+**Note (2026-10-09, live; logs `artifacts/live/2026-10-09-buffered-shairport.log`,
 `-P16-*.log`).** `BufferedStreamTransport` sends exactly this layout. shairport-sync 5.5.2 (Docker VM, PTP from our
 grandmaster) accepts SSRC `0x0000FACE` with ALAC 44.1/16 frames (`incoming audio encoding is "ALAC/44100/S16_LE/2"`,
 "AirPlay 2 Buffered playback") and answers the stream SETUP with `audioBufferSize 8388608`. The Test Speaker ABCD
@@ -655,7 +656,7 @@ then a new anchor with the new `rtpTime`/time pair; pause: `rate 0`; resume: `ra
 
 `flushUntilTS` is the timestamp of the first block to keep; `[sps]` stores it but decides by sequence number.
 
-**Note (2026-10-09, `buffered-stream`, live).** shairport-sync accepts `SETRATEANCHORTIME` before or after the first
+**Note (2026-10-09, live).** shairport-sync accepts `SETRATEANCHORTIME` before or after the first
 audio and plays from it (rate 1, rate 0 + `FLUSHBUFFERED` + rate 1 all answered 200 within milliseconds). The SpeakerA MOTIV
 HOME answers **rate 1 with `400 Bad Request`** (after 0.2-16 s) in every case tried with its data connection open: empty
 connection; anchor time now-1 s, now-0.2 s, now, now+0.5 s, now+2 s; fraction and timeline id as signed 8-byte or
@@ -724,7 +725,7 @@ control.py:44-52, 79-85`):
 
 `[sps]` anchors `now_frame - 11025` at T (`rtp.c:1728`) and does not need 0xD2/0xD3 timing in this mode.
 
-**Note (2026-10-09, `ptp-master`, probe P17; logs `artifacts/live/2026-10-09-P17-ptp-capture.log`,
+**Note (2026-10-09, probe P17; logs `artifacts/live/2026-10-09-P17-ptp-capture.log`,
 `-ptp-shairport*.log`).** What the two slaves actually send back to our grandmaster (`PtpMaster`, the layouts above,
 unchanged and accepted by both):
 
@@ -756,7 +757,7 @@ unchanged and accepted by both):
   without a gap when the next track's packets are already queued.
 - Stop: `TEARDOWN` with `streams`, then `TEARDOWN` with an empty plist (`[ot] airplay.c:2419-2421`).
 
-**Note (2026-10-09, `buffered-stream`, live against shairport-sync 5.5.2).** Pause/seek as above work through
+**Note (2026-10-09, live against shairport-sync 5.5.2).** Pause/seek as above work through
 `BufferedStreamTransport.FlushReceiverAsync` (rate 0, then the immediate `FLUSHBUFFERED {flushUntilSeq: next,
 flushUntilTS: next}`, then rate 1 with the next packet's timestamp; the group player's FLUSH maps to it through
 `BufferedReceiverSession`). shairport-sync **drops the first block after an immediate flush**: its reader is blocked
@@ -891,7 +892,7 @@ decimal number in dB-like units: `0.0` is full scale, `-30.0` is the quietest au
   attenuator with a curve of its choosing (`[sps]` offers three profiles, `player.c:5137-5149`), so the wire
   value is a position on a 30-dB "slider", not a guaranteed acoustic gain.
 
-Per `docs/PLAN.md`, the per-device level `r_i` (0..100) therefore maps to the wire as `-30 + 30 * r_i / 100`,
+Per the group volume model (`docs/ARCHITECTURE.md`), the per-device level `r_i` (0..100) therefore maps to the wire as `-30 + 30 * r_i / 100`,
 and `r_i = 0` is sent as `-144.0` (mute). The group master level `G` never reaches the wire; only the resulting
 `r_i` do.
 
@@ -932,7 +933,7 @@ observed on real devices (Section 9, Q5). Design for both outcomes: parse every 
 `type` of `updateInfo` as a possible `initialVolume` update, log unknown types verbatim, and as a fallback poll
 `GET_PARAMETER volume` every few seconds while a session is active.
 
-**Note (2026-10-09, `session-streams`, live against the Test Speaker ABCD 192.0.2.26, no audio):** `GET_PARAMETER volume` answers
+**Note (2026-10-09, live against the Test Speaker ABCD 192.0.2.26, no audio):** `GET_PARAMETER volume` answers
 `volume: <dB, six decimals>\r\n` without a leading blank line; the event channel carried no message at all during the
 sessions (no `updateInfo`), so the poll fallback of D10 is the only receiver-side channel seen so far (P4 with button
 presses is still open).
@@ -964,7 +965,7 @@ want with the TXT `md=0,1,2` key (0 text, 1 artwork, 2 progress; `[pyatv] protoc
 
 `[ot]`'s frame bookkeeping (`airplay.c:937-979`, GPL) is described here so that its **behaviour** can be
 reimplemented from this description; the pseudo-code below is the specification, not a transcription target (do not
-copy owntone's code or identifiers, WORK-PLAN.md section 1):
+copy owntone's code or identifiers, `docs/DEVELOPMENT.md` "Code conventions"):
 
 ```
 start   = cur_pos - elapsed_frames           # cur_pos: frame at the speaker now; elapsed: position in track
@@ -1041,7 +1042,7 @@ silence has been sent for longer than a threshold (for example 5 s) treat it as 
 pacer, and re-anchor on resume. Never let the timeline stall without a flush: a receiver that stops getting
 packets drains its buffer and `[sps]` resets its anchor after 7 s without control packets (`rtp.c:1757-1766`).
 
-**Note (2026-10-09, `audio-pipeline-group-sync`, sender-side stalls):** a deliberate deviation from "flush and
+**Note (2026-10-09, sender-side stalls):** a deliberate deviation from "flush and
 re-anchor for every discontinuity" (3.4). When the pacer itself wakes more than `GroupPlayerOptions.StallThreshold`
 (default 1 s) after a deadline (GC pause, suspended VM), it neither sends the missed packets back to back (8.2: they
 would arrive after their play time and be dropped, 1.5) nor flushes: it advances the timestamp by the missed whole
@@ -1063,13 +1064,13 @@ caught up by back-to-back sends. Not yet observed on Apple-SDK receivers; counte
 
 The buffered-stream equivalents are in Section 4.5.
 
-**Note (2026-10-09, `audio-pipeline-group-sync`):** implemented as written, with three details the table leaves open.
+**Note (2026-10-09):** implemented as written, with three details the table leaves open.
 (1) A pause drops the ring and the audio already sent, so playback resumes about `L + ring` later in the track than
 where it was heard; the metadata start is shifted by the dropped frames so progress stays consistent. (2) `Seeked`
 keeps the frames written after the bridge's call (the mark is taken when `FlushAsync` is entered). (3) The SpeakerA
 answers `FLUSH` after 2-3 s (SPEC-control.md 4.8 note); the pacer stays stopped until every member has answered.
 
-**Note (2026-10-09, `bridge-service`, the `PlayerEvent` mapping, from the librespot-dotnet source; not observable live
+**Note (2026-10-09, the `PlayerEvent` mapping, from the librespot-dotnet source; not observable live
 without a Spotify login):** the table's event names differ from the port, and one assumption does not hold there.
 (1) There is no `Changed`/`Started`: a track change is `PlayRequestIdChanged` -> `Loading(id, track, pos)` (absent when
 the track was preloaded) -> `TrackChanged(AudioItem)` -> `Playing(pos)` or `Paused(pos)` (`Player.cs` `StartPlayback`,
@@ -1098,17 +1099,19 @@ web app or on a single receiver are pushed back to Spirc with `round(G * 65535 /
   per interface as planned. Timer resolution inside Linux containers is fine (`CLOCK_MONOTONIC`,
   `timerfd`/`nanosleep`).
 
-## 9. Open questions to settle against real receivers
+## 9. Receiver questions and their probes
 
-Each question names the disagreement or gap, the receiver to test and a concrete probe. "SpeakerA" is the MOTIV
-HOME (192.0.2.26); "HomePod" is the Apple receiver "Office" (192.0.2.98), which may only be used once the
-harness owner allows it; the LG TV is never used.
+Each question names the disagreement or gap, the receiver to test and a concrete probe. They are merged with the
+control plane's questions as probes P1-P21 in `SPEC.md` section 4 (column "Parts": `A-Qx` is the row here), where
+every result is recorded; `SPEC.md` 4.1 says which are settled. "SpeakerA" is the MOTIV
+HOME (192.0.2.26); "HomePod" is the Apple receiver "Office" (192.0.2.98), which may only be used once its
+owner allows it; the LG TV is never used.
 
-| # | Question | Why it is open | Probe |
+| # | Question | Why it was open | Probe |
 |---|---|---|---|
 | Q1 | Which `L` (77 175 vs 88 200 vs 66 150) gives correct, stable playback on Apple-SDK receivers, and what is the real output delay? | `[sps]` expects 77 175 and adds 11 025; `[ot]` sends 88 200 to the same class of device; `[pyatv]` sends 66 150. No receiver source enforces `latencyMin`/`latencyMax`. | Play a click track from the CLI (`play click.wav --to SpeakerA --latency 77175`) while recording the room with a microphone synchronised to the sender clock (a second click played locally); measure sender-send-to-loudspeaker delay and jitter for 77 175 and 88 200. Watch for dropouts at 66 150. |
 | Q2 | Does the SpeakerA publish `audioLatencies` anywhere (session `SETUP` response, `/info` after pairing, `RECORD` reply `Audio-Latency`)? | `/info` without pairing had none (Appendix A); `[ap2r]` shows the key exists. | Dump the full `SETUP` responses and `RECORD` headers once pairing works; grep for `Latency`. |
-| Q3 | NTP or PTP for the first implementation against the SpeakerA? | The SpeakerA advertises bit 41 (PTP) but not bit 45 (NTP); `[ot]` (current) picks PTP for it; older `[ot]` drove the same feature profile with NTP; `[sps]` refuses NTP sessions outright. | Send the session `SETUP` with `timingProtocol: "NTP"` and `timingPort`; check for a 200 with `eventPort`, then whether 0xD2 timing requests arrive at our port within ~2 s of the stream `SETUP` (`ITimingResponder.RepliesSent > 0`). This needs **no audio** and is run in wave 3 (SPEC.md P1, control part); it decides the default timing protocol before the audio pipeline is written. If none arrive, the realtime stream runs under PTP: the `ptp-master` package (Section 4.4) and the 0xD7 sync (`RealtimeStreamTransport` with an `IPtpMaster`). |
+| Q3 | NTP or PTP for the first implementation against the SpeakerA? | The SpeakerA advertises bit 41 (PTP) but not bit 45 (NTP); `[ot]` (current) picks PTP for it; older `[ot]` drove the same feature profile with NTP; `[sps]` refuses NTP sessions outright. | Send the session `SETUP` with `timingProtocol: "NTP"` and `timingPort`; check for a 200 with `eventPort`, then whether 0xD2 timing requests arrive at our port within ~2 s of the stream `SETUP` (`ITimingResponder.RepliesSent > 0`). This needs **no audio** and was run first (SPEC.md P1, control part); it decides the default timing protocol before the audio pipeline is written. If none arrive, the realtime stream runs under PTP: the `ptp-master` package (Section 4.4) and the 0xD7 sync (`RealtimeStreamTransport` with an `IPtpMaster`). |
 | Q4 | Is the `shk` value free, or must it be the pair-verify shared secret? | `[ot]` uses the shared secret, `[pyatv]` uses an unrelated derived key, `[sps]` accepts anything of 32 bytes. | Run the same session twice with `shk = sharedSecret[0:32]` and `shk = random 32 bytes`; audio must play in both cases. |
 | Q5 | Does a receiver report its own volume changes, and how? | No reference source shows a receiver-initiated volume message; the plan assumes one over the event channel. | With a session up and the event channel decrypting, press the SpeakerA's volume buttons (and change the HomePod's volume from the Home app); log every event-channel request and every `POST /feedback` response body; also poll `GET_PARAMETER volume` once per second and diff. |
 | Q6 | Retransmit reply form: wrapped 0xD6 on the control port, or raw packet on the data port? | `[pyatv]`/iOS use the wrapped form; `[ot]` uses the data port because an amplifier kept re-requesting with the wrapped form. | Drop every 50th packet deliberately (test flag), count incoming 0xD5 requests and whether the same sequence number is requested again after our reply, for both forms. |

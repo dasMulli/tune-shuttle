@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Screenshot state of the i18n-fill package (docs/web/WORK-PLAN.md, i18n-fill): the longest strings on every page.
+    Screenshot state of the i18n-fill package: the longest strings on every page.
 
 .DESCRIPTION
     Run by tools/web-screenshots.ps1 once the bridge answers, for the language sets

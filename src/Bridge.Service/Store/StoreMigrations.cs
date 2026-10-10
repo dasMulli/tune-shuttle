@@ -3,7 +3,7 @@ namespace Bridge.Service.Store;
 /// <summary>
 /// One schema upgrade from <c>user_version = Version - 1</c> to <c>Version</c>. Version 1 is <c>schema.sql</c> itself; every
 /// later change (new columns, indexes, tables) is a migration with the next version number and is never edited after
-/// it has shipped (docs/airplay2/WORK-PLAN.md, package bridge-store: "new columns only via a migration to user_version 2").
+/// it has shipped (docs/ARCHITECTURE.md, "Persistence": new columns only via a migration to user_version 2).
 /// </summary>
 /// <param name="Version">The <c>user_version</c> after this migration.</param>
 /// <param name="Description">Logged when the migration runs.</param>
@@ -19,7 +19,7 @@ public static class StoreMigrations
 
     /// <summary>
     /// Migrations after <see cref="BaseVersion"/>, ascending and contiguous. Empty today: the scaffold schema (version 1)
-    /// covers every column of WORK-PLAN.md section 8. The next package that needs a column appends
+    /// covers every column (docs/ARCHITECTURE.md, "Persistence"). The next change that needs a column appends
     /// <c>new StoreMigration(2, "...", "ALTER TABLE receivers ADD COLUMN ...;")</c> here.
     /// </summary>
     public static IReadOnlyList<StoreMigration> All { get; } = [];

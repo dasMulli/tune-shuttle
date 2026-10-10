@@ -10,7 +10,7 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Pairing;
 
 /// <summary>
-/// Live pairing tests (WORK-PLAN.md section 4). They return early unless <c>AIRPLAY_LIVE=1</c>; the default
+/// Live pairing tests (docs/DEVELOPMENT.md, "Live-device rules"). They return early unless <c>AIRPLAY_LIVE=1</c>; the default
 /// <c>dotnet test</c> therefore never touches a receiver. ShairportLive runs inside the Docker VM against the
 /// shairport-sync container (<c>SPS_HOST</c>/<c>SPS_PORT</c>); SpeakerALive targets the Test Speaker ABCD only
 /// (<c>SpeakerA_HOST</c>, default 192.0.2.26) and is for the stage that allows pairing on it (wave 3, session-streams):

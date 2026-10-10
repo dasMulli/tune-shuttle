@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace Bridge.Service.Diagnostics;
 
 /// <summary>
-/// Daily log files for the Windows Service (docs/PLAN.md "Logging to console (container) and to files (Windows)"):
+/// Daily log files for the Windows Service (docs/ARCHITECTURE.md, "Deployment": console in the container, files on Windows):
 /// <c>&lt;DataDirectory&gt;/logs/bridge-yyyyMMdd.log</c>, written by one background task from a bounded channel (a slow
 /// disk drops the oldest lines instead of blocking the caller), files older than
 /// <see cref="BridgeOptions.LogRetentionDays"/> removed at each roll. Inert on other platforms or when

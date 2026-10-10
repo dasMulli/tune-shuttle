@@ -105,7 +105,7 @@ public sealed record GroupPlayerOptions
 }
 
 /// <summary>
-/// Plays one PCM source to N receivers in sync (PLAN.md milestones Sender M1-M3). Owns the timeline, the encoder, the
+/// Plays one PCM source to N receivers in sync. Owns the timeline, the encoder, the
 /// pacer thread, the transport and one <see cref="IReceiverSession"/> per member; applies the
 /// <see cref="GroupVolumeModel"/>.
 /// </summary>
@@ -387,7 +387,7 @@ public sealed partial class GroupPlayer : IGroupPlayer
             {
                 if (_disposed || _pacerFailed || (!_started && _members.IsEmpty))
                 {
-                    // PLAN.md: audio is silently discarded while no receiver is connected. Also after a pacer failure:
+                    // docs/ARCHITECTURE.md, "Design decisions": audio is silently discarded while no receiver is connected. Also after a pacer failure:
                     // nobody would ever drain the ring, and blocking would freeze librespot's player thread.
                     _framesDiscarded += interleavedPcm.Length / 2;
                     return;

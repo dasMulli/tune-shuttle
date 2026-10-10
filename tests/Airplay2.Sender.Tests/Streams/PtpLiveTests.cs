@@ -17,7 +17,7 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Streams;
 
 /// <summary>
-/// Live PTP tests (WORK-PLAN ptp-master "Verify", section 4 rules). They return early unless <c>AIRPLAY_LIVE=1</c> and
+/// Live PTP tests (docs/DEVELOPMENT.md, "Live-device rules"). They return early unless <c>AIRPLAY_LIVE=1</c> and
 /// write the decrypted wire exchange and every PTP observation to <c>artifacts/live/&lt;date&gt;-&lt;probe&gt;.log</c>.
 /// <list type="bullet">
 /// <item><b>ShairportLive</b>: shairport-sync 5.5.2 in the Docker VM (<c>SPS_HOST</c>/<c>SPS_PORT</c>). nqptp owns UDP
@@ -115,7 +115,7 @@ public sealed class PtpLiveTests(ITestOutputHelper output)
 
     /// <summary>
     /// The same against shairport-sync through the audio pipeline's <see cref="RealtimeStreamTransport"/> constructed with
-    /// this grandmaster (WORK-PLAN ptp-master "Verify": 0xD7 syncs accepted by the realtime stream, 3 s of silence into
+    /// this grandmaster (0xD7 syncs accepted by the realtime stream, 3 s of silence into
     /// the dummy backend). The transport starts the master, owns the peer through <see cref="RealtimeStreamTransport.AddTimingPeer"/>
     /// and sends the 0x90/0x80 0xD7 syncs itself; this test only paces <see cref="RealtimeStreamTransport.Send"/>.
     /// </summary>
@@ -199,7 +199,7 @@ public sealed class PtpLiveTests(ITestOutputHelper output)
 
     /// <summary>
     /// P17 during a P1-PTP control probe on the SpeakerA (SPEC.md P17, A-Q8): which PTP messages does its slave send us, at what
-    /// rate, and does it need Delay_Resp? No audio is sent (WORK-PLAN section 4: pairing, SETUP, event channel, TEARDOWN).
+    /// rate, and does it need Delay_Resp? No audio is sent (docs/DEVELOPMENT.md, "Live-device rules": pairing, SETUP, event channel, TEARDOWN).
     /// </summary>
     [Fact]
     [Trait("Category", "SpeakerALive")]

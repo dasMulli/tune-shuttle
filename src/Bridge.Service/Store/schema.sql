@@ -1,5 +1,5 @@
--- Bridge SQLite schema (docs/PLAN.md "Persistence"). Applied by SqliteBridgeStore.InitializeAsync; versioned via
--- PRAGMA user_version so later packages can add migrations (docs/airplay2/WORK-PLAN.md, package bridge-store).
+-- Bridge SQLite schema (docs/ARCHITECTURE.md, "Persistence"). Applied by SqliteBridgeStore.InitializeAsync; versioned via
+-- PRAGMA user_version so later changes can add migrations (StoreMigrations.cs).
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 

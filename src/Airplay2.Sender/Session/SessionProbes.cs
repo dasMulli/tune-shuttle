@@ -30,7 +30,7 @@ public sealed record SessionProbeOptions
     /// <summary>Quirks; <see cref="ReceiverQuirks.ForReceiver"/> when null.</summary>
     public ReceiverQuirks? Quirks { get; init; }
 
-    /// <summary>How long P1 waits after the stream SETUP for 0xD2 timing requests (WORK-PLAN.md section 4: 2 s).</summary>
+    /// <summary>How long P1 waits after the stream SETUP for 0xD2 timing requests (2 s).</summary>
     public TimeSpan TimingWait { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>The volume the probes set (dB). No audio is sent by any probe here; -24 dB is level 20, the quiet test level.</summary>
@@ -71,7 +71,7 @@ public sealed record TimingProtocolProbeReport(
     TimingProtocol Decision) : ProbeReport("P1", Summary, Observations);
 
 /// <summary>
-/// The control-plane probes of SPEC.md section 4 owned by <c>session-streams</c> (WORK-PLAN.md), as reusable methods the
+/// The control-plane probes of SPEC.md section 4, as reusable methods the
 /// CLI's <c>probe</c> command and the live tests call: P1 (control part), P3, P4, P5, P8, P9, P10, P13, P15 (control part)
 /// and P21. None of them sends audio; every session they open is ended with the D7 TEARDOWN and closed, also on failure.
 /// </summary>
@@ -103,7 +103,7 @@ public sealed class SessionProbes
     }
 
     /// <summary>
-    /// P1, control part (SPEC.md D1 gate, WORK-PLAN.md section 4): after pairing, a session SETUP with
+    /// P1, control part (SPEC.md D1 gate): after pairing, a session SETUP with
     /// <c>timingProtocol: NTP</c> and our timing port; on 200 + <c>eventPort</c>: event channel, RECORD, stream SETUP, then
     /// count the 0xD2 timing requests our responder answers within <see cref="SessionProbeOptions.TimingWait"/>; TEARDOWN.
     /// Then, on a new connection, a session SETUP with <c>timingProtocol: PTP</c> and a minimal <c>timingPeerInfo</c>; the

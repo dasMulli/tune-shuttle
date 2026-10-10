@@ -10,7 +10,7 @@ namespace Bridge.Service.Output;
 /// <param name="ReceiverId">The single selected receiver, or null (exclusive with <paramref name="GroupId"/>).</param>
 public sealed record OutputSelection(string? GroupId, string? ReceiverId)
 {
-    /// <summary>Nothing selected: audio is discarded (PLAN.md).</summary>
+    /// <summary>Nothing selected: audio is discarded (docs/ARCHITECTURE.md, "Design decisions").</summary>
     public static OutputSelection None { get; } = new(null, null);
 
     /// <summary>True when nothing is selected.</summary>

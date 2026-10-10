@@ -15,7 +15,7 @@ using TestReceiver = Airplay2.FakeReceiver.FakeReceiver;
 namespace Airplay2.Sender.Tests.Sender;
 
 /// <summary>
-/// The <see cref="AirplaySender"/> facade against in-process fake receivers (WORK-PLAN.md sender-api-cli "Verify"):
+/// The <see cref="AirplaySender"/> facade against in-process fake receivers:
 /// a 2 s generated WAV to two fakes through the facade with decoded output equal to the input, the session factory
 /// (GET /info, pairing, quirks, address fallback), the PIN flow for the web app, and the transport choice.
 /// </summary>

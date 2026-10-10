@@ -8,7 +8,7 @@ namespace Airplay2.Sender.Cli;
 /// <param name="LogFile">Also write everything at Debug to this file (appended), or null.</param>
 public sealed record CliLogOptions(bool Verbose, string? LogFile);
 
-/// <summary>Console logging plus the optional Debug log file (WORK-PLAN.md section 4: every live run logs the complete decrypted wire exchange).</summary>
+/// <summary>Console logging plus the optional Debug log file (docs/DEVELOPMENT.md, "Live-device rules": every live run logs the complete decrypted wire exchange).</summary>
 public static class CliLogging
 {
     /// <summary>Creates the logger factory for <paramref name="options"/>.</summary>
@@ -32,7 +32,7 @@ public static class CliLogging
     }
 
     /// <summary>
-    /// The repository's <c>artifacts/live</c> directory (WORK-PLAN.md section 4), found by walking up from the current
+    /// The repository's <c>artifacts/live</c> directory (docs/DEVELOPMENT.md, "Live-device rules"), found by walking up from the current
     /// directory and then from the executable to <c>TuneShuttle.sln</c>; <c>./artifacts/live</c> when neither has it.
     /// </summary>
     public static string LiveLogDirectory()

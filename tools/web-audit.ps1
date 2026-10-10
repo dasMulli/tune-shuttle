@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Layout audit of the web app with headless Edge (docs/web/WORK-PLAN.md 2.3, docs/web/UI-SPEC.md 5.6).
+    Layout audit of the web app with headless Edge (docs/DEVELOPMENT.md, "Layout audit"; docs/web/UI-SPEC.md 5.6).
 
 .DESCRIPTION
     Starts the bridge with two in-process fake receivers (unless -NoStart), waits for /api/status, runs the optional
@@ -14,16 +14,16 @@
       - unnamed is not empty (a control without an accessible name), or
       - small (interactive elements under 44 x 44 CSS px; computed at innerWidth <= 699 or with a coarse pointer, which
         -Pointer emulates below 1024px wide by default) has an entry that is not the allow-listed .theme-btn (UI-SPEC 2.4 / 5.4),
-      - truncated is not empty (the top bar's connection word .status__text cut by an ellipsis, from 360px wide;
-        REVIEW-2 #12), or
+      - truncated is not empty (the top bar's connection word .status__text cut by an ellipsis, from 360px wide),
+        or
       - the open-pill probe fails: with the top-bar theme picker unfolded (theme-picker--open added for one
         measurement with the picker's width transitions switched off, so the settled open pill is measured; the touch
         state of a first tap), the page still has no horizontal overflow, the connection word is still whole, all
         three theme buttons are wider than 0 (else the probe did not open the pill) and a visible top-bar language
-        select keeps at least 72px (the open pill is the widest the bar gets; REVIEW-2 #5 and #12).
+        select keeps at least 72px (the open pill is the widest the bar gets).
     The small list is always printed, allow-listed entries marked "(allowed)". The exit code is 1 on any failure.
 
-    How the page is read: WORK-PLAN 2.3 names "msedge --dump-dom --window-size=390,844", but headless Edge never lays a
+    How the page is read: a plain "msedge --dump-dom --window-size=390,844" would not do: headless Edge never lays a
     page out narrower than 504 CSS px whatever --window-size says (verified: a probe page reports innerWidth 504 at
     --window-size=390,844), so a dump would audit a 504px layout. Like tools/web-screenshots.ps1, this script therefore
     drives one headless Edge over the DevTools protocol: Emulation.setDeviceMetricsOverride (exactly W x H CSS px, scale
@@ -32,7 +32,7 @@
     in headless Edge, plus (pointer: coarse) and (hover: none) through Emulation.setEmulatedMedia for browsers
     that honour them there; the CSS touch block of UI-SPEC 5.4 and audit()'s small check then run at tablet
     sizes too), Page.navigate, then it polls the text of #audit-result until it is non-empty (at most -Budget ms, one
-    reload half-way; the WORK-PLAN's "growing --virtual-time-budget" retries are this poll), parses it and checks it.
+    reload half-way; this poll replaces growing --virtual-time-budget retries), parses it and checks it.
 
     The service only ever runs with --Bridge:FakeReceivers=2, Spotify off, file logging off and a fresh temporary data
     directory, so it never contacts real receivers.
@@ -115,7 +115,7 @@ function Stop-Tree($process, [string] $commandLineMark) {
         finally { $ErrorActionPreference = $previous }
     }
     if ($commandLineMark) {
-        # Edge helper processes that left the launcher's tree (REVIEW-2 #11): everything whose command line names this
+        # Edge helper processes that left the launcher's tree (seen once, kept as a safety net): everything whose command line names this
         # run's own profile directory, and nothing else.
         Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -and $_.CommandLine.Contains($commandLineMark) } |

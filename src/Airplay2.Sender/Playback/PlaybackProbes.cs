@@ -17,10 +17,10 @@ namespace Airplay2.Sender.Playback;
 /// <summary>Options of <see cref="PlaybackProbes"/>.</summary>
 public sealed record PlaybackProbeOptions
 {
-    /// <summary>The live-test ceiling for the level (WORK-PLAN.md section 4: level &lt;= 20 until final integration).</summary>
+    /// <summary>The live-test ceiling for the level (docs/DEVELOPMENT.md, "Live-device rules": level &lt;= 20).</summary>
     public const int MaxLevel = 20;
 
-    /// <summary>The live-test ceiling for audio per run (WORK-PLAN.md section 4: a 3-second quiet tone).</summary>
+    /// <summary>The live-test ceiling for audio per run (docs/DEVELOPMENT.md, "Live-device rules": a 3-second quiet tone).</summary>
     public static readonly TimeSpan MaxAudio = TimeSpan.FromSeconds(3);
 
     /// <summary>Who we say we are in the session SETUP.</summary>
@@ -38,7 +38,7 @@ public sealed record PlaybackProbeOptions
     /// <summary>Tone frequency.</summary>
     public double ToneFrequency { get; init; } = 440.0;
 
-    /// <summary>Tone amplitude in dB full scale (WORK-PLAN.md section 4: -24 dBFS).</summary>
+    /// <summary>Tone amplitude in dB full scale (docs/DEVELOPMENT.md, "Live-device rules": -24 dBFS).</summary>
     public double ToneDbfs { get; init; } = -24.0;
 
     /// <summary>The receiver address; its first IPv4 address when null.</summary>
@@ -53,7 +53,7 @@ public sealed record PlaybackProbeOptions
 /// P14, P15 (audio part), P18 and P19, as reusable methods for the CLI's <c>probe</c> command and the live tests. Each run
 /// opens one session through the real <see cref="GroupPlayer"/> and <see cref="RealtimeStreamTransport"/>, sends at most
 /// <see cref="PlaybackProbeOptions.MaxAudio"/> of a quiet tone at a level of at most <see cref="PlaybackProbeOptions.MaxLevel"/>
-/// (enforced; the guard of WORK-PLAN.md section 4 is the caller's <c>--i-know</c>), and always ends with the D7 TEARDOWN.
+/// (enforced; the guard of docs/DEVELOPMENT.md, "Live-device rules", is the caller's <c>--i-know</c>), and always ends with the D7 TEARDOWN.
 /// </summary>
 /// <remarks>
 /// What a probe can observe without a microphone: whether the receiver keeps sending timing requests, whether it asks for

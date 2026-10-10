@@ -16,7 +16,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Librespot.Tests" />
     <!-- The AirPlay 2 sender reuses the mDNS packet codec (Mdns/DnsPacket.cs) for its receiver browser, and its tests
-         run MdnsResponder as a loopback peer (docs/airplay2/WORK-PLAN.md section 2, package mdns-browser). -->
+         run MdnsResponder as a loopback peer (docs/ARCHITECTURE.md, "Design decisions"). -->
     <InternalsVisibleTo Include="Airplay2.Sender" />
     <InternalsVisibleTo Include="Airplay2.Sender.Tests" />
   </ItemGroup>

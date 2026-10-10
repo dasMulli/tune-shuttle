@@ -63,7 +63,7 @@ public sealed record FakePtpSample(ushort Sequence, ulong T1, ulong T2, long Mea
 }
 
 /// <summary>
-/// A minimal PTP slave for the fake receiver and the grandmaster's loopback tests (WORK-PLAN ptp-master): it records every
+/// A minimal PTP slave for the fake receiver and the grandmaster's loopback tests: it records every
 /// message, pairs each Sync with its Follow_Up to estimate the offset of its clock to the master's (as nqptp does from
 /// <c>t1</c> and its Sync receive time, SPEC-audio.md 4.4), and optionally sends Delay_Req to the master's event port and
 /// uses the Delay_Resp to measure the path delay. It runs on its own (OS-chosen) ports, so tests register it with

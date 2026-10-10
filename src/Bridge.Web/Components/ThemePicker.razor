@@ -58,7 +58,7 @@
     /// <summary>
     /// The group's classes. <c>theme-picker--touch</c> marks a pointer that cannot hover: there the CSS collapses the
     /// pill without looking at <c>:hover</c>, which a tap leaves stuck on the tapped button until the next tap elsewhere
-    /// and which would keep the pill unfolded after a choice (REVIEW-2 #1). <c>theme-picker--open</c> is the touch
+    /// and which would keep the pill unfolded after a choice. <c>theme-picker--open</c> is the touch
     /// "open" state of the first tap.
     /// </summary>
     private string PickerClass => (_hoverCapable, _open) switch

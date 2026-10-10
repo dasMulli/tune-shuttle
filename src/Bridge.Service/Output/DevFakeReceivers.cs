@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 namespace Bridge.Service.Output;
 
 /// <summary>
-/// The development switch <c>--Bridge:FakeReceivers=N</c> (WORK-PLAN.md web-app "Verify"): starts N in-process fake
+/// The development switch <c>--Bridge:FakeReceivers=N</c> (docs/DEVELOPMENT.md, "Test receivers"): starts N in-process fake
 /// receivers (tests/Airplay2.FakeReceiver) on loopback with stable ids <c>02:FA:CE:00:00:0n</c> and lists them in the
 /// <see cref="StaticReceiverBrowser"/> that replaces mDNS, so the web app can be driven without a LAN. Compiled only into
 /// Debug builds made from the full repository (the fake lives under <c>tests/</c>, which the container build excludes).

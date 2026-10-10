@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Screenshot state of the settings-diagnostics package (docs/web/WORK-PLAN.md, settings-diagnostics): two fake
+    Screenshot state of the settings-diagnostics package: two fake
     receivers, one connected as the output.
 
 .DESCRIPTION

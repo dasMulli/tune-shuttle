@@ -344,7 +344,7 @@ internal sealed class ReceiverCache
         }
 
         // RAOP instances that belong to no resolved _airplay instance: ask for their TXT so the merge is ready when the
-        // _airplay record arrives. AirPlay-1-only devices are not reported (docs/PLAN.md: no AirPlay 1 fallback).
+        // _airplay record arrives. AirPlay-1-only devices are not reported (docs/ARCHITECTURE.md, "Design decisions": no AirPlay 1 fallback).
         foreach (var raop in raopInstances.Where(r => !usedRaop.Contains(r)))
         {
             if (Newest(raop, DnsType.Txt) is null)

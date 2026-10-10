@@ -19,7 +19,7 @@ using LibrespotDiscovery = Librespot.Discovery.Discovery;
 namespace Bridge.Service.Spotify;
 
 /// <summary>
-/// Hosts librespot (docs/PLAN.md "Spotify side"): Zeroconf discovery with the configured device name, the credential
+/// Hosts librespot (docs/ARCHITECTURE.md, "Spotify side"): Zeroconf discovery with the configured device name, the credential
 /// cache in SQLite, a Session + Spirc + Player with <see cref="AirplaySink"/> as the backend, the reconnect loop from
 /// Librespot.Cli, and the mapping of player events to the group player (pause/seek/skip -> flush, track change ->
 /// metadata/artwork/progress, volume -> G).

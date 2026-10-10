@@ -21,7 +21,7 @@ namespace Bridge.Service.Store;
 /// </para>
 /// <para>
 /// Microsoft.Data.Sqlite executes commands synchronously behind its async API; statements here are small and local,
-/// which is accepted (WORK-PLAN.md section 3 chose SQLite + Dapper for exactly this size of data).
+/// which is accepted (docs/ARCHITECTURE.md, "Design decisions": SQLite + Dapper for exactly this size of data).
 /// </para>
 /// </remarks>
 public sealed class SqliteBridgeStore : IBridgeStore

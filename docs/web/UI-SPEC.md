@@ -1,6 +1,6 @@
 # TuneShuttle web app: UI specification (variant C)
 
-Status: architecture, 2026-10-10, revised after review. Implementers follow this document; where it is silent, the
+The reference for the web app as built (written 2026-10-10, kept in step with the code since). Changes follow this document; where it is silent, the
 mockups in `docs/web/mockups/` decide (`variant-c-desktop-light-en.html`, `variant-c-desktop-dark-de.html`,
 `variant-c-phone-light-en.html`; ignore their `<x-dc>`/`support.js` wrapper). Where the mockups and this document
 disagree, this document wins (it fixes the mockups' contrast problems and adds what the mockups do not show).
@@ -66,7 +66,7 @@ set in an ink token; dots, borders, fills and large glyphs use the raw token.**
 ### 1.2 The exact CSS pattern
 
 `wwwroot/css/app.css` starts with exactly this structure (the Daikin pattern). **Rule: the two dark blocks are
-identical, byte for byte; a token is added to both or to neither.** `DesignTokenTests` (WORK-PLAN, design-system)
+identical, byte for byte; a token is added to both or to neither.** `DesignTokenTests` (`docs/DEVELOPMENT.md`, "Static checks")
 parses the file and fails when they differ.
 
 ```css
@@ -237,7 +237,7 @@ the compact slider and the member rows set `width: auto`, both more specific, 5.
 The old `.level` rules (label column of 5.5rem) go away; the label is a visually-hidden `<label>` unless the
 variant shows it.
 
-`LevelSlider` contract (design-system, wave 1): parameters `Variant` (`Default|Compact|Hero`), `Label` (string,
+`LevelSlider` contract: parameters `Variant` (`Default|Compact|Hero`), `Label` (string,
 required: the caller passes the catalog text), `HideLabel` (bool), `Value`, `Disabled`, `ValueText`
 (`Func<int, string>`, default `v => v.ToString(CultureInfo.CurrentCulture)`: the number alone, so the component holds
 no English), `ShowValue` (default true), `ValueChanged`/the send callback as today. `aria-valuetext` and the visible
@@ -301,8 +301,7 @@ the screenshot mechanism of the work plan (test strategy); it is harmless in pro
 
 `wwwroot/js/app.js` is an ES module loaded with `IJSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/app.js")`
 by `BrowserBridge` (a scoped-free singleton service `Bridge.Web/BrowserBridge.cs`). `index.html`, `app.js` and
-`BrowserBridge.cs` are delivered together by the `foundation` package (WORK-PLAN, wave 0) so that both wave-1
-packages can build on them. The theme and language components call it; the module owns no UI. It exports:
+`BrowserBridge.cs` belong together. The theme and language components call it; the module owns no UI. It exports:
 
 | Export | Does |
 |---|---|
@@ -336,7 +335,7 @@ system, in that order, icons sun / moon / half-disc (the SVG paths of ButtonWeb'
   focus-within unfolds it. **Touch twin:** on a pointer that cannot hover (`hoverCapable() == false`) the group
   carries `theme-picker--touch`, and the same declarations sit on `.theme-picker--touch:not(:focus-within):not(.theme-picker--open)`,
   which has no `:hover` in it: mobile Chromium and iOS Safari leave `:hover` on the last tapped element until the next
-  tap elsewhere, and a `:not(:hover)` collapse would keep the pill unfolded after a choice (REVIEW-2 #1). The desktop
+  tap elsewhere, and a `:not(:hover)` collapse would keep the pill unfolded after a choice (seen on touch screens). The desktop
   rules exclude the touch class, so exactly one of the two applies; the phone collapsed look of 5.2 uses the same two
   selectors. `DesignTokenTests.Unguarded_not_hover_selectors_never_apply_on_touch` enforces this shape (the only
   unguarded `:not(:hover)` is the desktop rule, and each such rule has its touch twin). Do not move the unfold into a
@@ -507,7 +506,7 @@ text → left out **in every language, English included** (the error-free senten
 banner.retrying are used, without a dangling colon; `BridgeEventClient` logs the detail to the browser console). The
 WASM runtime ships without its exception message resources and reports a resource key such as
 `net_webstatus_ConnectFailure` as the message, so "shown as is in English" would put an identifier on screen in the most
-common case, an unreachable bridge (REVIEW-2 #2). `ShellTests.Connection_banner_never_shows_the_clients_runtime_text`
+common case, an unreachable bridge. `ShellTests.Connection_banner_never_shows_the_clients_runtime_text`
 asserts both cases in German and English, and a second test that the constant matches the client's literal.
 
 The same rule holds for request failures (`BridgeCommands.Describe`, used by notices.failed, settings.loadFailed,
@@ -522,8 +521,8 @@ describe it per render, so a language switch re-renders the message in the new l
 
 ### 3.6 The catalog
 
-Section 10 lists every key with the German source text and the English text. `i18n-core` ships `de.json` and
-`en.json`; `i18n-fill` adds fr, es, ru, uk, pt with the same key set (parity test: every key of `de.json` exists in
+Section 10 lists every key with the German source text and the English text. `de.json` and `en.json` are the
+first catalogs; fr, es, ru, uk and pt have the same key set (parity test: every key of `de.json` exists in
 every other catalog, including the plural variants required by that language's categories; `en` must have `_one` and
 `_other` for every plural key, `ru`/`uk` `_one`, `_few`, `_many`, `_other`).
 
@@ -559,9 +558,8 @@ Page titles: every page writes `<PageTitle>@L.Format("app.pageTitle", ("page", L
 (`/settings/diagnostics`), styleguide.title, audit.title, app.notFoundTitle. There is no `BridgeTitle` helper
 component; pages do not depend on the shell for their title.
 
-The route moves (`/` → Player, `/receivers`, `/settings/diagnostics`; `/now-playing` and `/diagnostics` dropped) are
-made on the **existing** pages by the `foundation` package before any page is rewritten (WORK-PLAN, wave 0), so no
-two pages ever claim `/` and the old links never 404 during later waves.
+The redesign moved the routes (`/` → Player, `/receivers`, `/settings/diagnostics`); the old `/now-playing` and
+`/diagnostics` routes were dropped without redirects.
 
 ### 4.2 Shell (`Layout/MainLayout.razor`)
 
@@ -616,7 +614,7 @@ left, Output and Status stacked right. One column below.
      disabled, 1.5). Steps are ±5,
      clamped 0..100: `MasterVolume` holds the slider in `@ref` and calls its public `StepAsync(±5)` (1.6), which
      clamps, updates the draft, raises `DraftChanged` and sends through the same `CoalescingSender` path as a drag.
-     This is the contract between design-system and player-page; there is no second path. Target: group →
+     This is the contract between `LevelSlider` and `MasterVolume`; there is no second path. Target: group →
      `Commands.SetGroupLevelAsync(groupId, g)`; receiver → `Commands.SetReceiverLevelAsync(id, level)`; none →
      disabled, number shows `–` (U+2013, a glyph, not catalog text).
    - Row 3: member levels, `display: flex; flex-wrap: wrap; gap: .5rem 1.5rem`; each `min-width: 200px; flex: 1`:
@@ -870,7 +868,7 @@ no members → pills.empty (`.pill`); any member's receiver `PinRequired` and no
 ### 4.9 Notices → toasts (`Components/NoticeArea.razor`)
 
 A fixed `div.toasts` (`aria-live="polite"`; a plain `div`, not an `aside`: an always-present complementary landmark
-without a name is noise in a screen reader's landmark list, REVIEW-2 #10; the container keeps `aria-live` so the live
+without a name is noise in a screen reader's landmark list; the container keeps `aria-live` so the live
 region exists before its first toast): desktop/tablet `top: calc(var(--topbar-h) + var(--banner-h, 0px) + .75rem); right: 1.25rem;
 width: min(26rem, calc(100vw - 2rem))`; phone `left: .75rem; right: .75rem; bottom: calc(var(--tabbar-h) + .75rem);
 top: auto`. Each `.toast` = `.card` padding `.75rem 2.6rem .75rem 1rem`, with a
@@ -923,20 +921,20 @@ opens with the focused PIN field, and on iOS a bottom-anchored `position: fixed`
 layout viewport and ends up under the keyboard; a sheet at the top with the PIN field in its upper half stays visible
 on every platform without a `visualViewport` listener. In addition the viewport meta carries
 `interactive-widget=resizes-content` (5.2) so Chrome/Android shrink the layout viewport with the keyboard. Headless
-screenshots cannot show the keyboard; review-2 lists the real-device check (WORK-PLAN).
+screenshots cannot show the keyboard; `docs/airplay2/MANUAL-TESTS.md` section 6 lists the real-device check.
 Landscape phones and portrait phones with the keyboard open (the `(max-height: 500px)` block of 5.1) get the same top anchoring with a compacter dialog whose PIN
 field and Pair/Cancel row share one line (`.scrim { align-items: start; padding-top: max(.5rem,
 env(safe-area-inset-top)) }`; `.dialog { display: grid; grid-template-columns: minmax(7rem, 1fr) auto; align-items:
 end; gap: .6rem .75rem; width: min(32rem, 100%); padding: .8rem 1rem; max-height: calc(100dvh - 1rem) }`, every child
 `grid-column: 1 / -1` except `.field` (column 1, row 3) and `.dialog__actions` (column 2, row 3), the error line in row
 4). With a landscape keyboard the visible height is 150–200px: the PIN field and the actions must both be visible
-without scrolling, because a phone keyboard has no Escape key and the scrim does not cancel (REVIEW-2 #3; at 844×390
+without scrolling, because a phone keyboard has no Escape key and the scrim does not cancel (at 844×390
 with a 200px viewport the dialog is 8–192px, the field and the buttons end at 183px in de, ru and es and at 161px in en,
 and Enter in the field submits). The DOM, and so the Tab order, stays field → actions; only the error line, which is
 not focusable, is shown below the buttons.
 While the dialog is open the page behind it does not scroll: `:root:has(.scrim:not(.sg-frame .scrim)) { overflow:
 hidden }` (the styleguide's in-flow sample is excluded), and `.dialog` carries `overscroll-behavior: contain` against
-scroll chaining out of its own scroll (REVIEW-2 #7; the scrim is not a scroll container, so the property would be
+scroll chaining out of its own scroll (the scrim is not a scroll container, so the property would be
 inert there). iOS Safari has long ignored `overflow: hidden` on the root for touch scrolling, so `.scrim` also carries
 `touch-action: none` (a touch on the dim area never pans the page) and `.dialog` `touch-action: pan-y` (it keeps its
 own vertical scroll when it is taller than a landscape keyboard viewport). From 1024px `html { scrollbar-gutter: stable }` keeps the gutter of a classic (non-overlay) desktop
@@ -1065,7 +1063,7 @@ The phone keeps every desktop component value of 1.5–1.7 **except** the overri
 | `main` | `padding: 1rem .875rem calc(1rem + var(--tabbar-h))` |
 | `.cards` (Receivers), Diagnostics grid | one column (`grid-template-columns: 1fr`) |
 | `.level--compact` in Output rows | `display: none` |
-| `.row--member` (group editor members, 4.5) | `flex-wrap: wrap`; its `.row__main` gets `flex: 1 1 100%` (name and pill on the first line) and its `.level--compact` `flex: 1 1 auto; width: auto`: the slider and the 44px remove button share the second line, the slider spanning the card up to the button (about 240px of track at 390px instead of the 70px a 120px box left, REVIEW-2 #6). No `order`: the visual order is the DOM order name → slider → remove at every width, so Tab and a screen reader follow what is seen (WCAG 1.3.2 / 2.4.3; `DesignTokenTests` rejects any `order` declaration, `GroupsPairingTests` asserts the DOM order) |
+| `.row--member` (group editor members, 4.5) | `flex-wrap: wrap`; its `.row__main` gets `flex: 1 1 100%` (name and pill on the first line) and its `.level--compact` `flex: 1 1 auto; width: auto`: the slider and the 44px remove button share the second line, the slider spanning the card up to the button (about 240px of track at 390px instead of the 70px a 120px box left). No `order`: the visual order is the DOM order name → slider → remove at every width, so Tab and a screen reader follow what is seen (WCAG 1.3.2 / 2.4.3; `DesignTokenTests` rejects any `order` declaration, `GroupsPairingTests` asserts the DOM order) |
 | `.facts` (Receivers details, Diagnostics) | one column, the label (`dt`, `.78rem`) over its value (`dd`, `margin-bottom: .5rem`), so long values (addresses, dates, "live (1 connection, 63 events)") get the card's full width |
 | `.btn--back` | `margin-inline-start: -.75rem` (1.5) |
 | `.toasts`, `.scrim`/`.dialog`, `.banner` | the phone positions of 4.9, 4.11, 4.10/5.2 |
@@ -1083,7 +1081,7 @@ Order on `/`: hero card, Output card, Status card (single column).
   the height and the margin is inert, the button is simply centred). Card-head
   links (`.card__head a:not(.btn)`, `.card__actions a:not(.btn)`), the top-bar tabs (on touch tablets and landscape
   phones), the brand link (`margin-block: -6px`, so the bar keeps its height) and `summary` (`padding-block: 13px`) are
-  44px tall too. `.theme-btn` is 34px (`.ico` 18px) in this block, on phones and every coarse pointer (REVIEW-2 #5).
+  44px tall too. `.theme-btn` is 34px (`.ico` 18px) in this block, on phones and every coarse pointer.
   The top-bar `.lang-select` (hidden below 760px, 5.5) gets `min-height: 44px; padding-block: .5rem` on coarse-pointer
   tablets (its width is unchanged). **Not grown** to 44px: `.theme-btn` (34px, 2.4, allow-listed in 5.6).
 - Compact sliders: `.level--compact { width: 220px }` (1.6), so touch tablets get a usable track in the Output and
@@ -1095,7 +1093,8 @@ Order on `/`: hero card, Output card, Status card (single column).
 - Row buttons sit at least 12px apart (`gap`).
 - Headless Edge never matches `(pointer: coarse)` (5.6), so the width half of the query is what screenshots and the
   audit exercise at 390px; the `(pointer: coarse)` half only adds the same rules for coarse-pointer tablets and
-  desktops wider than 699px and is covered by no automated check (review-2 runs an emulated-touch pass, WORK-PLAN).
+  desktops wider than 699px and is covered by no automated check (an emulated-touch pass over the DevTools protocol checked it once; see
+  `docs/airplay2/MANUAL-TESTS.md` section 6).
 
 ### 5.5 Tablet (700–1023px)
 
@@ -1115,7 +1114,7 @@ and the brand name at about 40px (measured: 6–9px). Settings has the full 44px
 select is never the only path. Measured with the open pill, a coarse pointer and each language's "connecting…" word (the longest status) at 760 and
 768px: no overflow, the select keeps 87–120px (87px in ru, the worst case) and the brand name 30–64px; with the live
 word the select keeps 114–142px at 760px. The audit's `truncated` check and its open-pill probe (5.6, which also fails on a select
-narrower than 72px) guard it (REVIEW-2 #12).
+narrower than 72px) guard it.
 
 ### 5.6 Layout audit page (`/_audit`, used by `tools/web-audit.ps1`)
 
@@ -1130,7 +1129,7 @@ a larger `--virtual-time-budget`, 2 s steps up to 30 s) until the `<pre>` is non
 
 - `overflow`: `document.documentElement.scrollWidth - window.innerWidth` (must be 0);
 - `truncated`: texts that must never be cut by an ellipsis but are (`scrollWidth > clientWidth`), checked from
-  `innerWidth >= 360`; today that is the top bar's connection word `.status__text` (5.5, REVIEW-2 #12). Must be empty;
+  `innerWidth >= 360`; today that is the top bar's connection word `.status__text` (5.5). Must be empty;
 - `small`: selectors of interactive elements (`a[href]`, `button`, `input`, `select`, `textarea`, `[role=radio]`,
   `[role=button]`, `summary`) whose `getBoundingClientRect()` is < 44 × 44 CSS px, computed **unconditionally when
   `innerWidth <= 699`** or when `(pointer: coarse)` matches (headless Edge reports `(pointer: coarse)` = false and
@@ -1159,7 +1158,7 @@ touch), folds the pill back and lays it out before it removes the style, and fai
 connection word is cut, any of the three `.theme-btn` widths is 0 (the probe did not really open the pill), or a
 visible top-bar `.lang-select` is narrower than 72px (its 4.5rem floor, 5.5). The log line shows the measured widths,
 for example `open pill 34/34/34 = 112px, lang 87px`. Touch behaviour itself (the first-tap-opens picker, the 44px slider
-band) cannot be seen here; it is covered by bUnit with `hoverCapable` mocked to `false` and by review-2's emulated
+band) cannot be seen here; it is covered by bUnit with `hoverCapable` mocked to `false` and was checked once by an emulated-touch
 run. The not-found content (4.1) is outside the audit's reach (`Audit.razor` resolves the page from the route table, and
 an unknown address has none); `ShellTests.Unknown_address_shows_the_not_found_text_in_the_shell` asserts its link is a
 `.btn` (44px on phones). Development data comes from the fake receivers.
@@ -1204,7 +1203,7 @@ an unknown address has none); `ShellTests.Unknown_address_shows_the_not_found_te
   the row's radio; Diagnostics: Retry → `h2#diagnostics-network tabindex="-1"` (another failure: the new Retry). Each
   is asserted through the mocked `Blazor._internal.domWrapper.focus` call.
 - Every control shows the focus ring of 1.3; no `outline: none` without an alternative. Focus is invisible in
-  headless screenshots; review-2 checks the CSS rules and the styleguide's focus-state sample (a `.btn` rendered
+  headless screenshots; check the CSS rules and the styleguide's focus-state sample (a `.btn` rendered
   with a `.is-focus-sample` class that applies the ring statically).
 
 ### 6.3 Contrast (WCAG 2.1 AA, text ≥ 4.5:1, UI components ≥ 3:1), computed for the tokens of 1.1
@@ -1304,7 +1303,7 @@ problem details from the client's own wording.
 | Theme picker 44px touch target | — | not built: 34px, allow-listed (2.4) |
 | Bottom-sheet pairing dialog on phones | 4.11 of the first draft | replaced by a top-anchored sheet (4.11) |
 | Spotify volume `<meter>` | today's NowPlaying page | dropped (4.3); `PlaybackDto.SpotifyVolume` is unused by the web app |
-| `/now-playing`, `/diagnostics` routes | today's pages | dropped in wave 0 (4.1), no redirects |
+| `/now-playing`, `/diagnostics` routes | today's pages | dropped in the redesign (4.1), no redirects |
 | Static index.html texts ("Loading the TuneShuttle app…", "An unhandled error has occurred.", "Reload", "x" with aria-label "Dismiss") | `wwwroot/index.html` | not catalog keys: they render before the runtime and the catalog exist (app.loading/app.error do not exist). English stays in the markup as the no-script fallback; the language bootstrap sets `<html lang>` at once and an inline seven-language map at the end of `<body>` swaps the four texts for the resolved language (wording as in common.reload / common.dismiss) |
 | `Format.Seconds`, units.* keys | first draft | removed, no consumer (3.4) |
 
@@ -1325,19 +1324,18 @@ Changed in a contained way:
   first (groups-and-pairing deletes the file once `Groups.razor`, its last user, is rewritten), `StatusPill` (7)
   the second (shell deletes it).
 
-Existing tests keep passing where the behaviour is unchanged. The `foundation` package (wave 0) splits
-`WebComponentTests.cs` into the per-page test files of section 9 without changing a test, so that every later
-package owns the tests of its own pages. Selectors and texts that the restyle changes are then updated by the
-package that changes the markup: `.badge` → `.pill`, `article.receiver h2`, `.level output`, `form.offset` inside
-`details`; `.notice-error`/`.notice .dismiss` → `.toast--err`/`.toast__close` (shell, in `ShellTests`); and the
+Tests that predate the redesign kept passing where the behaviour did not change; they were split from
+`WebComponentTests.cs` into the per-page test files of section 9. Selectors and texts that the restyle changed were
+updated with the markup: `.badge` → `.pill`, `article.receiver h2`, `.level output`, `form.offset` inside
+`details`; `.notice-error`/`.notice .dismiss` → `.toast--err`/`.toast__close` (in `ShellTests`); and the
 texts: `"Connected"` → `"connected"` (pills.connected), `"PIN pairing needed"` → `"PIN needed"` (pills.pinNeeded),
-`"Available"` → `"online"` (pills.online), all in `ReceiversTests` by receivers-page. `"Start again"`
+`"Available"` → `"online"` (pills.online), all in `ReceiversTests`. `"Start again"`
 (pairing.startAgain) and `"Nothing selected"` (the start of player.noOutput) match the catalog unchanged. The
 catalog values are not bent to the old tests.
 
 ---
 
-## 9. File map (after all packages)
+## 9. File map
 
 ```
 src/Bridge.Web/
@@ -1361,11 +1359,11 @@ tests/Bridge.Tests/Web/
   ComponentTestBase.cs (the fixture of the old WebComponentTests: BunitContext, BridgeState, UseApi)
   DesignTokenTests.cs, I18nTests.cs, FormattingTests.cs, CatalogUsageTests.cs
   ShellTests.cs, PlayerTests.cs, ReceiversTests.cs, SettingsDiagnosticsTests.cs, GroupsPairingTests.cs
-  (deleted: WebComponentTests.cs, split by foundation in wave 0)
+  (deleted: WebComponentTests.cs, split into the files above)
 tools/
-  web-screenshots.ps1, web-audit.ps1, screenshot-setups/<package>.ps1   (one setup script per package)
+  web-screenshots.ps1, web-audit.ps1, screenshot-setups/*.ps1   (states for screenshots and audits)
 docs/web/
-  UI-SPEC.md (this), WORK-PLAN.md, mockups/, REVIEW-1.md, REVIEW-2.md (written by the review packages)
+  UI-SPEC.md (this), mockups/   (development notes: docs/DEVELOPMENT.md "Web app development")
 artifacts/screenshots/<package>/<route>-<w>x<h>-<theme>-<lang>.png   (git-ignored output)
 ```
 
@@ -1380,7 +1378,7 @@ Keys are the i18next paths of `Resources/i18n/de.json` / `en.json`. Placeholders
 their `_one`/`_other` forms (ru/uk add `_few`/`_many` in i18n-fill). Ellipses are U+2026, the minus is U+2212, the
 middle dot is U+00B7.
 
-**Every key has exactly one or more named consumers in sections 4–7**; `CatalogUsageTests` (WORK-PLAN 2.4) fails on
+**Every key has exactly one or more named consumers in sections 4–7**; `CatalogUsageTests` (`docs/DEVELOPMENT.md`, "Static checks") fails on
 a key that no source file uses, and its allow-list is empty. Keys whose place is not obvious from their section:
 app.name → `.brand__name` and the brand link's `aria-label` (4.2); nav.groups / nav.diagnostics → page titles (4.1);
 common.none → the Diagnostics output fact (4.7); common.levelText → every `LevelSlider` caller (1.6);

@@ -9,13 +9,13 @@ namespace Bridge.Service.Output;
 /// <summary>
 /// The librespot <see cref="ISink"/> that feeds the AirPlay group player (SPEC-audio.md 8). <see cref="Write"/> converts
 /// the f64 samples to S16 and blocks while the player's ring is above its high-water mark; without a connected
-/// output the audio is discarded (PLAN.md). <see cref="Start"/>/<see cref="Stop"/> map to resume/pause on the player.
+/// output the audio is discarded (docs/ARCHITECTURE.md, "Design decisions"). <see cref="Start"/>/<see cref="Stop"/> map to resume/pause on the player.
 /// The bridge swaps the target player when the user selects another output.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Threads (SPEC-audio.md 8.5): librespot calls every member on its player thread. <see cref="Write"/> blocking there is
-/// the deliberate backpressure of SPEC-audio.md 8.1/8.2 (WORK-PLAN.md section 1, the documented exception).
+/// the deliberate backpressure of SPEC-audio.md 8.1/8.2 (docs/DEVELOPMENT.md, "Code conventions", the documented exception).
 /// <see cref="Stop"/> must not block: on the SpeakerA a <c>FLUSH</c> takes 2-3 s (SPEC-control.md 4.8 note), so the pause is
 /// queued to a single consumer task that runs <see cref="IGroupPlayer.PauseAsync"/>. <see cref="Start"/> queues the
 /// resume behind it and waits (bounded by <see cref="StartWait"/>) until it ran, so a quick pause/play cannot let the

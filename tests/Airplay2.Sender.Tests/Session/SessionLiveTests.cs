@@ -12,7 +12,7 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Session;
 
 /// <summary>
-/// Live session tests and probes (WORK-PLAN.md section 4, wave 3): pairing, session SETUP, event channel, RECORD,
+/// Live session tests and probes (docs/DEVELOPMENT.md, "Live-device rules"): pairing, session SETUP, event channel, RECORD,
 /// stream SETUP, volume, feedback and TEARDOWN on the Test Speaker ABCD (<c>SpeakerA_HOST</c>, default 192.0.2.26),
 /// <b>never audio</b>; and the PTP session path on shairport-sync inside the Docker VM (<c>SPS_HOST</c>/<c>SPS_PORT</c>).
 /// They return early unless <c>AIRPLAY_LIVE=1</c>. Every run writes the decrypted wire exchange (Debug) to

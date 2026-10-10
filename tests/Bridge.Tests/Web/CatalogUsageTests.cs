@@ -5,11 +5,11 @@ using Xunit;
 namespace Bridge.Tests.Web;
 
 /// <summary>
-/// Static checks between the sources of <c>src/Bridge.Web</c> and the source catalog <c>de.json</c> (WORK-PLAN 2.4,
+/// Static checks between the sources of <c>src/Bridge.Web</c> and the source catalog <c>de.json</c> (docs/DEVELOPMENT.md, "Static checks";
 /// UI-SPEC 10): every key-shaped literal used as an <see cref="I18n"/> argument (<c>L["…"]</c>, <c>L.Format("…"</c>,
 /// <c>L.Plural("…"</c>, the same on <c>_l</c>/<c>l</c>/<c>i18n</c>) or as a validation <c>ErrorMessage</c> exists in
 /// <c>de.json</c>, and every <c>de.json</c> key appears as a literal somewhere in those sources (plural keys through
-/// their base key). Keys are literal strings by rule (WORK-PLAN 1); an interpolated key is a failure of its own.
+/// their base key). Keys are literal strings by rule (docs/DEVELOPMENT.md, "Translations"); an interpolated key is a failure of its own.
 /// </summary>
 public sealed partial class CatalogUsageTests
 {
@@ -36,7 +36,7 @@ public sealed partial class CatalogUsageTests
     [GeneratedRegex(@"\bErrorMessage\s*=\s*""(?<key>[^""\r\n]*)""")]
     private static partial Regex ErrorMessage();
 
-    /// <summary>A key built at runtime: <c>L[$"pills.{kind}"]</c>, <c>L.Format($"…"</c> (forbidden, WORK-PLAN 1).</summary>
+    /// <summary>A key built at runtime: <c>L[$"pills.{kind}"]</c>, <c>L.Format($"…"</c> (forbidden, docs/DEVELOPMENT.md, "Translations").</summary>
     [GeneratedRegex(@"(?<![\w.])(?:L|l|_l|i18n|_i18n)\s*(?:\[|\.(?:Format|Plural)\s*\()\s*(?:\$|@\$|\$@)""")]
     private static partial Regex InterpolatedKey();
 

@@ -9,7 +9,7 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Discovery;
 
 /// <summary>
-/// Live discovery of the Test Speaker ABCD (WORK-PLAN.md section 4: mDNS browsing is allowed at any time). Only mDNS
+/// Live discovery of the Test Speaker ABCD (docs/DEVELOPMENT.md, "Live-device rules": mDNS browsing is allowed at any time). Only mDNS
 /// traffic is sent; no receiver is contacted. Runs only with <c>AIRPLAY_LIVE=1</c>:
 /// <c>$env:AIRPLAY_LIVE=1; dotnet test --filter Category=SpeakerALive</c>.
 /// </summary>
@@ -94,7 +94,7 @@ public class ReceiverBrowserLiveTests(ITestOutputHelper output)
 
     private static void WriteArtifact(string text)
     {
-        // WORK-PLAN.md section 4: live tests log to artifacts/live/<date>-<probe>.log at the repository root.
+        // docs/DEVELOPMENT.md, "Live-device rules": live tests log to artifacts/live/<date>-<probe>.log at the repository root.
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
             if (File.Exists(Path.Combine(dir.FullName, "TuneShuttle.sln")))

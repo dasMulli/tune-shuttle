@@ -53,7 +53,7 @@ public sealed record PairingPrompt(string ReceiverId, string Token, string Messa
 public sealed record Notice(long Id, NoticeKind Kind, string Text, DateTimeOffset At);
 
 /// <summary>
-/// The web app's single source of truth (WORK-PLAN.md web-app: "a <c>BridgeState</c> container"): receivers, groups, the
+/// The web app's single source of truth: receivers, groups, the
 /// selected output, playback, status, the live log, the open PIN prompt, banner notices and the event connection state.
 /// It is fed by <see cref="BridgeEventClient"/> (every <see cref="BridgeEvent"/>), by REST answers the pages apply right
 /// away (so an action shows before its event arrives), and by a REST <see cref="BridgeSnapshot"/> at start-up. Pages
@@ -282,7 +282,7 @@ public sealed class BridgeState
                     break;
                 case BridgeEvent.OutputChanged e:
                     SetOutput(e.Output);
-                    EndResync(); // the snapshot sends receivers and groups before the output (WORK-PLAN.md section 7)
+                    EndResync(); // the snapshot sends receivers and groups before the output (docs/ARCHITECTURE.md, "Bridge API")
                     break;
                 case BridgeEvent.PlaybackChanged e:
                     SetPlayback(e.Playback);

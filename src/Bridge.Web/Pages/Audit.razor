@@ -9,7 +9,7 @@
    trigger: State.Loaded is true, the page rendered once more after that, then a settle time of 500 ms (the pages fill
    from REST and then the WebSocket; an earlier audit would measure an empty page). Until then the <pre> is empty; a
    route without a page writes {"error": …} at once. The <pre> is `hidden`, so the JSON never widens the layout it
-   describes. English is allowed on this page (WORK-PLAN 1); only the title comes from the catalog. *@
+   describes. English is allowed on this page (a developer page); only the title comes from the catalog. *@
 
 <PageTitle>@L.Format("app.pageTitle", ("page", L["audit.title"]))</PageTitle>
 

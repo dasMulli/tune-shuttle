@@ -11,7 +11,7 @@ using Xunit;
 namespace Bridge.Tests.Service;
 
 /// <summary>
-/// <see cref="AirplaySink"/> driven like librespot drives it (WORK-PLAN.md bridge-service "Verify": synthetic
+/// <see cref="AirplaySink"/> driven like librespot drives it (synthetic
 /// <c>AudioPacket.Samples</c> decoded by the fakes): f64 samples in, the same S16 the converter produces out of two fake
 /// receivers' ALAC decoders; Stop flushes, Start re-anchors; without a player the audio is discarded.
 /// </summary>

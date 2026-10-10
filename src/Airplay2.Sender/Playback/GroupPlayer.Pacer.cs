@@ -7,7 +7,7 @@ namespace Airplay2.Sender.Playback;
 /// The pacer (SPEC-audio.md 8.2, 8.3, 8.5): a dedicated highest-priority thread that sleeps until each packet's deadline
 /// on <see cref="Streams.IStreamTransport.Clock"/>, takes 352 frames from the ring (silence when it runs dry), encodes
 /// them once and hands them to the transport with the deadline as the sync time. This is one of the two documented
-/// blocking exceptions of WORK-PLAN.md section 1 (the other is <see cref="Write"/>).
+/// blocking exceptions of docs/DEVELOPMENT.md, "Code conventions" (the other is <see cref="Write"/>).
 /// </content>
 public sealed partial class GroupPlayer
 {

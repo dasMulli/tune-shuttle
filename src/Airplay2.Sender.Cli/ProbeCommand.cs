@@ -97,7 +97,7 @@ public sealed partial class ProbeCommand(CliServices services)
         var kind = KindOf(probe);
         if (kind == ProbeKind.Audio && !iKnow)
         {
-            // Before any file, store or socket (WORK-PLAN.md section 4).
+            // Before any file, store or socket (docs/DEVELOPMENT.md, "Live-device rules").
             await Services.Error.WriteLineAsync($"Refusing {probe} without --i-know: it sends audio (live rule: only the Test Speaker ABCD, at most 3 s of a quiet tone, level <= 20, user's go-ahead). Nothing was sent.").ConfigureAwait(false);
             return ExitCodes.AudioRefused;
         }
@@ -112,7 +112,7 @@ public sealed partial class ProbeCommand(CliServices services)
 
         if (parameters.Level is { } level && level is < 0 or > PlaybackProbeOptions.MaxLevel)
         {
-            await Services.Error.WriteLineAsync($"--level must be 0..{PlaybackProbeOptions.MaxLevel} for probes (WORK-PLAN.md section 4).").ConfigureAwait(false);
+            await Services.Error.WriteLineAsync($"--level must be 0..{PlaybackProbeOptions.MaxLevel} for probes (docs/DEVELOPMENT.md, \"Live-device rules\").").ConfigureAwait(false);
             return ExitCodes.Failure;
         }
 

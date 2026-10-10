@@ -1,4 +1,4 @@
-// One console app with a sub-command per upstream example (decision documented in docs/PORT-PLAN.md, package `examples`):
+// One console app with a sub-command per upstream example (a deliberate deviation, docs/PORTING-NOTES.md, "Known deviations"):
 //
 //   examples/get_creds.rs          -> get-creds        (Examples/GetCreds.cs)
 //   examples/get_token.rs          -> get-token        (Examples/GetToken.cs)

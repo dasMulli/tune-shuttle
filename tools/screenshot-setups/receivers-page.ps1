@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Screenshot state of the receivers-page package (docs/web/WORK-PLAN.md, receivers-page): two fake receivers, one
+    Screenshot state of the receivers-page package: two fake receivers, one
     connected.
 
 .DESCRIPTION

@@ -18,7 +18,7 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Streams;
 
 /// <summary>
-/// Live tests of the buffered stream (WORK-PLAN.md buffered-stream "Verify", section 4 rules). They return early unless
+/// Live tests of the buffered stream (docs/DEVELOPMENT.md, "Live-device rules"). They return early unless
 /// <c>AIRPLAY_LIVE=1</c> and write the decrypted wire exchange to <c>artifacts/live/&lt;date&gt;-&lt;probe&gt;.log</c>.
 /// <list type="bullet">
 /// <item><b>ShairportLive</b>: shairport-sync 5.5.2 in the Docker VM, run by
@@ -167,7 +167,7 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
     public Task SpeakerA_P16_alac_48000_s24_0x15000000() => SpeakerAP16Async("P16-buffered-alac48-24", BufferedAudioFormat.Alac48000S24);
 
     /// <summary>
-    /// P16 prerequisite on the SpeakerA, <b>no audio</b> (control plane only, WORK-PLAN.md section 4 wave 3 allowances): which
+    /// P16 prerequisite on the SpeakerA, <b>no audio</b> (control plane only, docs/DEVELOPMENT.md, "Live-device rules"): which
     /// SETRATEANCHORTIME body does it accept? Variants on one buffered session: the session package's body (a fraction above
     /// 2^63 becomes a 16-byte bplist integer), the fraction and timeline id as signed 8-byte integers (what airplay2-receiver's
     /// <c>&amp; 0xffffffffffffffff</c> masks suggest senders send), with <c>networkTimeFlags: 0</c>, and rate 0 alone.
@@ -276,7 +276,7 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
 
         if (Environment.GetEnvironmentVariable("AIRPLAY_AUDIO_I_KNOW") != "1")
         {
-            output.WriteLine("AIRPLAY_AUDIO_I_KNOW not set: audio probes need the explicit acknowledgement (WORK-PLAN.md section 4)");
+            output.WriteLine("AIRPLAY_AUDIO_I_KNOW not set: audio probes need the explicit acknowledgement (docs/DEVELOPMENT.md, \"Live-device rules\")");
             return;
         }
 

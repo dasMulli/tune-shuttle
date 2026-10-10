@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 namespace Bridge.Tests.Service;
 
 /// <summary>
-/// The bridge against the Test Speaker ABCD (WORK-PLAN.md section 4: from wave 3 pairing, SETUP, event channel, volume and
+/// The bridge against the Test Speaker ABCD (docs/DEVELOPMENT.md, "Live-device rules": pairing, SETUP, event channel, volume and
 /// TEARDOWN are allowed; audio only as the CLI's quiet tone, which is not the bridge's). The bridge finds the speaker by
 /// mDNS, connects it as the single output (transient pairing, session and stream SETUP, volume at level 15), changes the
 /// level and disconnects it (TEARDOWN) without ever starting the pacer, so no audio packet is sent. Returns early unless
@@ -16,7 +16,7 @@ namespace Bridge.Tests.Service;
 /// </summary>
 public sealed class BridgeLiveTests(ITestOutputHelper output)
 {
-    /// <summary>The only receiver the live tests may contact (WORK-PLAN.md section 4).</summary>
+    /// <summary>The only receiver the live tests may contact (docs/DEVELOPMENT.md, "Live-device rules").</summary>
     public const string SpeakerAName = "Test Speaker ABCD";
 
     [Fact]

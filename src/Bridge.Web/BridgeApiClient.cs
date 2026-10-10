@@ -7,7 +7,7 @@ using Bridge.Contracts;
 namespace Bridge.Web;
 
 /// <summary>
-/// Typed client for the bridge REST API (docs/airplay2/WORK-PLAN.md section 7: routes from <see cref="ApiRoutes"/>, DTOs
+/// Typed client for the bridge REST API (docs/ARCHITECTURE.md, "Bridge API": routes from <see cref="ApiRoutes"/>, DTOs
 /// from Bridge.Contracts). Every call takes a <see cref="CancellationToken"/>; a non-success response becomes a
 /// <see cref="BridgeApiException"/> carrying the RFC 9457 problem details the service returns (404 unknown id, 409 state
 /// conflict, 422 validation, 502 receiver error with the RTSP status in <c>detail</c>).

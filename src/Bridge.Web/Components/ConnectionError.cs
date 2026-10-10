@@ -9,7 +9,7 @@ namespace Bridge.Web.Components;
 /// text originates in the client, not in the service, so it is not shown as sent: the known sentence comes from the
 /// catalog (banner.closedByBridge), and any other text is left out in every language, English included. The WASM
 /// runtime ships without its exception message resources and reports a resource key such as
-/// <c>net_webstatus_ConnectFailure</c> as the message (REVIEW-2 #2), so the banner and the title use their error-free
+/// <c>net_webstatus_ConnectFailure</c> as the message, so the banner and the title use their error-free
 /// sentences instead (the client logs the detail to the browser console).
 /// </summary>
 internal static class ConnectionError

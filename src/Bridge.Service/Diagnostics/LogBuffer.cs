@@ -3,7 +3,7 @@ using Bridge.Contracts;
 namespace Bridge.Service.Diagnostics;
 
 /// <summary>
-/// Logger provider for the diagnostics page (WORK-PLAN.md bridge-service "diagnostics (log ring buffer ...)"): keeps the
+/// Logger provider for the diagnostics page: keeps the
 /// most recent lines in memory and hands every line to a listener (the <see cref="Api.EventHub"/>, which streams them to
 /// web clients that subscribed to the log). Has no dependencies, so it can be created before the logger factory.
 /// </summary>

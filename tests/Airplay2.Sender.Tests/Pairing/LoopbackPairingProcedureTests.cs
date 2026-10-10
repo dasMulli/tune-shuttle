@@ -13,7 +13,7 @@ namespace Airplay2.Sender.Tests.Pairing;
 /// <summary>
 /// The same pairing procedures over a real loopback TCP connection: the client is the library's
 /// <see cref="RtspConnection"/>, the accessory a minimal socket server built on <see cref="RtspMessageCodec"/> and
-/// <see cref="HapAccessoryPairing"/> (WORK-PLAN.md "pairing" verify list, wave-end integration with rtsp-transport).
+/// <see cref="HapAccessoryPairing"/>.
 /// </summary>
 public sealed class LoopbackPairingProcedureTests : PairingProcedureTests
 {

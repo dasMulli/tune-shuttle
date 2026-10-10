@@ -9,7 +9,7 @@ namespace Bridge.Web;
 
 /// <summary>
 /// Blazor WebAssembly entry point. The app talks to the bridge at its own origin: REST under <c>/api</c> and the event
-/// WebSocket at <c>/ws/events</c> (WORK-PLAN.md section 7).
+/// WebSocket at <c>/ws/events</c> (docs/ARCHITECTURE.md, "Bridge API").
 /// </summary>
 public static class Program
 {

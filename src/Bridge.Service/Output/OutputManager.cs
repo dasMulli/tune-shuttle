@@ -16,14 +16,14 @@ using Microsoft.Extensions.Options;
 namespace Bridge.Service.Output;
 
 /// <summary>
-/// Owns the active <see cref="IGroupPlayer"/> (WORK-PLAN.md bridge-service "OutputManager"): applies the selected output
+/// Owns the active <see cref="IGroupPlayer"/>: applies the selected output
 /// (a group or one receiver) from the settings, connects its receivers and reconnects lost ones with back-off, attaches
-/// the player to the <see cref="AirplaySink"/>, keeps the volume model and the store in step (PLAN.md "Volume model"),
+/// the player to the <see cref="AirplaySink"/>, keeps the volume model and the store in step (docs/ARCHITECTURE.md, "Group volume model"),
 /// and turns the player's events into API events, persisted levels and Spotify commands.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Volume (PLAN.md, SPEC-audio.md 6.3): for a group the store holds G (<c>groups.master_level</c>) and each r_i
+/// Volume (docs/ARCHITECTURE.md, "Group volume model"; SPEC-audio.md 6.3): for a group the store holds G (<c>groups.master_level</c>) and each r_i
 /// (<c>group_members.level</c>); moving G scales every r_i by G'/G with <see cref="GroupVolumeModel"/>, clamping at 100.
 /// While G is 0 the member levels keep their last values and the G they belong to is remembered
 /// (<see cref="BridgeSettingKeys.GroupReferenceLevelPrefix"/>), so raising G again restores the relative levels. For a

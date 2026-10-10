@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Screenshot and audit state of the mobile-polish package (docs/web/WORK-PLAN.md, mobile-polish).
+    Screenshot and audit state of the mobile-polish package.
 
 .DESCRIPTION
     As a setup script (tools/web-screenshots.ps1 -Setup / tools/web-audit.ps1 -Setup) it waits for the two fake

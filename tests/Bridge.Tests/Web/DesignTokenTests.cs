@@ -10,7 +10,7 @@ using Xunit.Abstractions;
 namespace Bridge.Tests.Web;
 
 /// <summary>
-/// Static checks of <c>src/Bridge.Web/wwwroot/css/app.css</c> (WORK-PLAN 2.4, UI-SPEC 1.1, 1.2, 5.1, 6.3): the theme
+/// Static checks of <c>src/Bridge.Web/wwwroot/css/app.css</c> (docs/DEVELOPMENT.md, "Static checks"; UI-SPEC 1.1, 1.2, 5.1, 6.3): the theme
 /// pattern, the token set, the media-query list, the hover guard, no raw status colours as text, and the WCAG contrast
 /// table recomputed from the tokens with minimum semantics.
 /// </summary>
@@ -256,7 +256,7 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
     public void Unguarded_not_hover_selectors_never_apply_on_touch()
     {
         // The one exemption of the hover guard above is the theme picker's desktop collapse rule, ":not(:hover)": it
-        // must never match on a touch screen, where a tap leaves :hover stuck (REVIEW-2 #1). Every selector that uses
+        // must never match on a touch screen, where a tap leaves :hover stuck. Every selector that uses
         // it therefore excludes the touch class, and each one has a touch twin without :hover in the same rule.
         var rules = Css.Rules.Where(r => r.Selector.Contains(":not(:hover)", StringComparison.Ordinal)).ToList();
         Assert.NotEmpty(rules);

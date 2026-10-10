@@ -14,7 +14,7 @@ using Microsoft.Extensions.Options;
 namespace Bridge.Service.Api;
 
 /// <summary>
-/// Application logic behind the routes (WORK-PLAN.md section 7); one instance per process (singleton), async and
+/// Application logic behind the routes (docs/ARCHITECTURE.md, "Bridge API"); one instance per process (singleton), async and
 /// thread-safe. Errors are RFC 9457 problem details: 404 unknown id, 409 state conflicts, 422 validation, 502 receiver
 /// errors with the RTSP status in <c>detail</c>.
 /// </summary>

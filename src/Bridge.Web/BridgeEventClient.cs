@@ -33,8 +33,8 @@ public sealed record BridgeEventClientOptions
 }
 
 /// <summary>
-/// The web app's side of <c>/ws/events</c> (WORK-PLAN.md section 7, web-app "a <c>BridgeEventClient</c> (WebSocket with
-/// reconnect)"): connects, feeds every <see cref="BridgeEvent"/> into <see cref="BridgeState"/>, keeps the connection
+/// The web app's side of <c>/ws/events</c> (docs/ARCHITECTURE.md,
+/// "Bridge API"): connects, feeds every <see cref="BridgeEvent"/> into <see cref="BridgeState"/>, keeps the connection
 /// alive with <c>ping</c>, re-sends the log subscription after a reconnect, and reconnects with exponential back-off
 /// (<see cref="BridgeEventClientOptions.InitialRetryDelay"/> doubling up to <see cref="BridgeEventClientOptions.MaxRetryDelay"/>)
 /// until disposed. On every new connection the service sends its snapshot first, which <see cref="BridgeState.BeginResync"/>

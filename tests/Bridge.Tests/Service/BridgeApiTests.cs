@@ -9,8 +9,8 @@ using Xunit;
 namespace Bridge.Tests.Service;
 
 /// <summary>
-/// Every route of WORK-PLAN.md section 7 against the bridge in-process with a temp database and in-process fake
-/// receivers (WORK-PLAN.md bridge-service "Verify"): connect a fake, set volumes, create a group, select the output, the
+/// Every route of the bridge API (docs/ARCHITECTURE.md, "Bridge API") against the bridge in-process with a temp database and in-process fake
+/// receivers: connect a fake, set volumes, create a group, select the output, the
 /// PIN flow, and the WebSocket events.
 /// </summary>
 public sealed class BridgeApiTests
@@ -121,7 +121,7 @@ public sealed class BridgeApiTests
         Assert.True(dto.Capabilities.AirPlay2);
         Assert.Equal(50, dto.Level);
 
-        // The inventory stores what it discovers (PLAN.md receivers table).
+        // The inventory stores what it discovers (the receivers table).
         await WaitUntilAsync(async () => await factory.Get<IBridgeStore>().GetReceiverAsync(a.Id, CancellationToken.None) is not null);
 
         using var missing = await client.GetAsync(ReceiverUrl("00:00:00:00:00:00"));
@@ -223,7 +223,7 @@ public sealed class BridgeApiTests
         group = await client.SendJsonAsync<GroupDto>(HttpMethod.Post, Http.Group(ApiRoutes.GroupMembers, group.Id), new GroupMemberRequest(b.Id, 80));
         Assert.Equal([(a.Id, 40), (b.Id, 80)], group.Members.Select(m => (m.ReceiverId, m.Level)).ToArray());
 
-        // G 50 -> 25 halves every r_i (PLAN.md volume model); inactive groups are scaled in the store.
+        // G 50 -> 25 halves every r_i (docs/ARCHITECTURE.md, "Group volume model"); inactive groups are scaled in the store.
         group = await client.SendJsonAsync<GroupDto>(HttpMethod.Put, Http.Group(ApiRoutes.GroupVolume, group.Id), new VolumeRequest(25));
         Assert.Equal(25, group.MasterLevel);
         Assert.Equal([20, 40], group.Members.Select(m => m.Level).ToArray());

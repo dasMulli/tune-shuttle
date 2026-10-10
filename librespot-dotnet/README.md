@@ -25,33 +25,32 @@ has a C# counterpart or a documented platform skip, and no `TODO(port: ...)` mar
 | `Librespot.Cli` | The `librespot` binary with all 53 upstream options (same names, order, defaults and help texts), `--version`, `--backend ?`, `--device ?`. |
 | `examples/` | The upstream examples as 10 sub-commands: `get-creds`, `get-token`, `play`, `play-connect`, `playlist-tracks`, `discovery`, `discovery-group`, `device-auth`, `oauth-async`, `oauth-sync`. |
 
-Not ported, by design:
-
-* the Linux/native-only audio backends `alsa`, `pulseaudio`, `jackaudio`, `gstreamer`, `portaudio`, `sdl`, the
-  `rodiojack` variant and the `alsamixer` mixer (they stay unknown names, as in an upstream build without those features);
-* the `avahi` and `dns-sd` discovery backends (their registry entries stay known-but-unavailable);
-* FLAC decoding, which upstream only uses for local files;
-* `util.rs`' `keep_flushing`, which is not needed with `ClientWebSocket`.
-
 Verified end to end on 2026-10-09: the CLI in discovery mode was picked from the Spotify app, logged in via the
 Zeroconf credential handoff, and played through WASAPI, with pause, volume, seek, skip, shuffle, repeat and transfer
-all handled.
+all handled. TuneShuttle's bridge (`../src/Bridge.Service`) uses `Librespot.Core`, `Librespot.Connect`, `Librespot.Metadata`,
+`Librespot.Playback` and `Librespot.Discovery` with its own sink.
 
-Known issue:
+## Deviations from upstream
 
-* `VorbisDecoder` asks NVorbis for `TotalSamples` on every seek and on load. NVorbis answers that by reading every
-  remaining Ogg page of the stream (verified with a counting stream), which upstream's symphonia avoids by reading only
-  the last page. On a streamed track in random-access mode this turns into one 64 KiB CDN request per page run, so a
-  burst of rapid track changes can exhaust the local 300-requests-per-30-s rate limiter for `scdn.co`; the fetch task
-  then dies and the load times out ("wait timeout exceeded"), and the player skips to the next track. Fix: find the
-  final granule position by reading the last Ogg page (the parser in `Decoder/Ogg.cs` can do this) instead of calling
-  `TotalSamples`, and only touch NVorbis' page index lazily.
+Not ported, by design: the Linux/native-only audio backends (`alsa`, `pulseaudio`, `jackaudio`, `gstreamer`,
+`portaudio`, `sdl`, the `rodiojack` variant, the `alsamixer` mixer), the `avahi` and `dns-sd` discovery backends, FLAC
+decoding (upstream uses it only for local files), and `util.rs`' `keep_flushing`. The decoders are NVorbis and NLayer
+instead of symphonia (no MP3 gapless trimming), the dealer uses `ClientWebSocket`'s keep-alive for its ping, and the
+mDNS responder replaces libmdns with per-interface answers. The full list, with the reasons, is in
+[docs/PORTING-NOTES.md](docs/PORTING-NOTES.md#known-deviations).
 
-Tests: `dotnet test Librespot.sln` runs 819 tests, 809 pass and 10 are skipped (tests that need the network or an
-audio device). Set `LIBRESPOT_LIVE_TESTS=1` (plus `LIBRESPOT_ACCESS_TOKEN` for the Spotify ones) to run the live tests.
+Known issue: `VorbisDecoder` asks NVorbis for `TotalSamples` on load and on every seek, which reads every remaining
+Ogg page of a streamed track. A burst of rapid track changes can then exhaust the local rate limiter for `scdn.co`,
+the load times out and the player skips the track. The fix is described in the porting notes.
+
+## Tests
+
+`dotnet test Librespot.sln` runs the unit tests. Tests that need the network or an audio device are skipped by default;
+set `LIBRESPOT_LIVE_TESTS=1` (plus `LIBRESPOT_ACCESS_TOKEN` for the ones that talk to Spotify) to run the live tests.
 The build treats warnings as errors.
 
-The complete work breakdown, conventions and per-package contracts are in [docs/PORT-PLAN.md](docs/PORT-PLAN.md).
+The conventions every ported file follows, the Rust-to-C# idiom mapping, the NuGet choices per crate and the protobuf
+namespaces are in [docs/PORTING-NOTES.md](docs/PORTING-NOTES.md).
 
 ## Layout
 
@@ -70,7 +69,7 @@ src/Librespot.Discovery       librespot-discovery
 src/Librespot.Cli             the `librespot` binary (src/main.rs)
 examples/Librespot.Examples   upstream examples/ as sub-commands of one console app
 tests/Librespot.Tests         xunit
-docs/PORT-PLAN.md             the port plan
+docs/PORTING-NOTES.md         conventions, idiom mapping, deviations
 ```
 
 Project references mirror the crate dependency graph (`protocol <- core`, `oauth <- core` (oauth has no protocol dependency), `core <- audio/metadata <- playback <- connect`, `core <- discovery`).

@@ -9,7 +9,7 @@ using Bridge.Service.Store;
 namespace Bridge.Service.Output;
 
 /// <summary>
-/// The web app's PIN pairing flow with tokens (WORK-PLAN.md section 7, SPEC-control.md 3.6): <see cref="StartAsync"/>
+/// The web app's PIN pairing flow with tokens (docs/ARCHITECTURE.md, "Bridge API"; SPEC-control.md 3.6): <see cref="StartAsync"/>
 /// opens the pairing connection and makes the receiver show its PIN (M1/M2), and hands out an opaque token;
 /// <see cref="FinishAsync"/> takes the token and the PIN, runs M3-M6 plus pair-verify, stores the keys and asks the
 /// output manager to connect the receiver again. One pending pairing per receiver (a new start replaces the old one); the
@@ -61,7 +61,7 @@ public sealed class PairingCoordinator(
 
     /// <summary>
     /// Starts a PIN pairing for a connect that needed one and announces it with <c>pairingRequired</c> so the web app opens
-    /// its PIN dialog (WORK-PLAN.md section 7, <c>/connect</c>). Failures are logged, not thrown: the connect already
+    /// its PIN dialog (docs/ARCHITECTURE.md, "Bridge API", <c>/connect</c>). Failures are logged, not thrown: the connect already
     /// reports the receiver's state.
     /// </summary>
     public async Task AnnounceRequiredAsync(string receiverId, CancellationToken cancellationToken)
