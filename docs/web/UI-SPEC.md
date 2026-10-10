@@ -623,9 +623,9 @@ left, Output and Status stacked right. One column below.
      the clamp hint (groups.clampHint) appears as `.meta` under the row when `GroupVolumePreview.Clamps`. For a single
      receiver output this row is omitted (one member = the master).
    Phone (≤ 699px, `.only-phone`): row 3 is replaced by one `.chip.chip--members` line (1.5), e.g.
-   "Downstairs · Test Speaker ABCD 40 · Hallway 24": player.membersChip with `{{output}}` = the group name and
+   "Downstairs · Bookshelf speaker 40 · Bedroom 24": player.membersChip with `{{output}}` = the group name and
    `{{members}}` = the members as "name level" (name, a space, the level) joined with " · ". Names are used as they
-   come from the receivers (the phone mockup's shortened "SpeakerA" is illustrative; nothing truncates), and the chip
+   come from the receivers (the phone mockup's shortened "Bookshelf" is illustrative; nothing truncates), and the chip
    wraps onto several lines inside the card (`white-space: normal; max-width: 100%`). The chip is omitted for a
    single-receiver output and when nothing is selected. Row 3 (desktop) carries `.only-wide`.
 
@@ -669,7 +669,7 @@ left, Output and Status stacked right. One column below.
     player.editGroup "{{name}}"; wide screens only: on phones the head's player.editGroups link leads to the editor,
     5.3). Radio disabled when the group has no members or no member is online.
     Meta is two spans: `.meta.only-wide` player.groupMeta "Group · {{members}}" (names joined by ", "; player.groupEmpty
-    when none) and `.meta.only-phone` with the member names joined by ", " alone (the phone mockup's "SpeakerA, Hallway";
+    when none) and `.meta.only-phone` with the member names joined by ", " alone (the phone mockup's "Bookshelf, Bedroom";
     player.groupEmptyShort when none).
   - Receiver: `<strong>` name, meta, pill (4.8), then either `LevelSlider Variant="Compact"` (150px, `Label` =
     receivers.volumeOf "{{name}}" hidden, `ValueText` common.levelText, sends `Commands.SetReceiverLevelAsync`; value
@@ -677,7 +677,7 @@ left, Output and Status stacked right. One column below.
     (`Commands.StartPairingAsync`). Radio disabled when offline or `Pairing == Disabled`. Meta is two spans:
     `.meta.only-wide` player.receiverMeta "{{model}} · {{address}}" (player.unknownModel when no model; address
     without port) and `.meta.only-phone` with the model alone (player.unknownModel when none; the phone mockup's
-    "Apple receiver"). An offline receiver with a known `LastSeen` shows when it was last seen instead of its stale
+    "AirPlay speaker"). An offline receiver with a known `LastSeen` shows when it was last seen instead of its stale
     address: `.meta.only-wide[data-last-seen]` player.receiverMetaOffline "{{model}} · {{lastSeen}}" and
     `.meta.only-phone` the last-seen phrase alone (`Format.LastSeen`, 4.4). Receiver rows that are not the current output carry `is-quiet` so their compact slider's fill
     is grey (`--muted`, 1.6); the output's row keeps the accent fill. Group rows have no slider.

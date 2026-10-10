@@ -13,7 +13,7 @@ namespace Airplay2.Sender.Streams;
 /// Type 96 over UDP (SPEC-audio.md 1-3). Timing is pluggable (SPEC.md D1): with <see cref="Ptp"/> null the session is
 /// NTP-timed (0xD4 syncs, the timing responder answers 0xD2); with an <see cref="IPtpMaster"/> the session is PTP-timed
 /// and the syncs are the 28-byte 0xD7 <see cref="PtpSyncPacket"/> carrying the PTP time of the sync instant and the
-/// master's clock id (SPEC-audio.md 4.4). Probe P1 (wave 3) settled NTP for the Test Speaker ABCD; the choice is this
+/// master's clock id (SPEC-audio.md 4.4). Probe P1 (wave 3) settled NTP for the srcvers-366 speaker; the choice is this
 /// constructor argument, not a code path.
 /// </summary>
 /// <remarks>

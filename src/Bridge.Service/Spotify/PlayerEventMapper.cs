@@ -36,7 +36,7 @@ namespace Bridge.Service.Spotify;
 /// </list>
 /// <para>
 /// Events are handled one at a time in order (a flush finishes before the now-playing that follows it); the now-playing
-/// and the volume run in the background so a slow receiver (the SpeakerA answers DMAP with 500 after about 10 s,
+/// and the volume run in the background so a slow receiver (the srcvers-366 speaker answers DMAP with 500 after about 10 s,
 /// SPEC-control.md 5.2) never delays the next event.
 /// </para>
 /// </remarks>

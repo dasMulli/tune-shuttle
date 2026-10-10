@@ -37,7 +37,7 @@ public sealed record BufferedStreamOptions
     /// </summary>
     public double WindowFraction { get; init; } = 0.75;
 
-    /// <summary>Timeout of one TCP connect to the receiver's data port (the SpeakerA needed more than 5 s once, SPEC-audio.md appendix A).</summary>
+    /// <summary>Timeout of one TCP connect to the receiver's data port (the srcvers-366 speaker needed more than 5 s once, SPEC-audio.md appendix A).</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>Connect attempts before the data connection counts as failed (shairport-sync listens before it answers the SETUP, <c>[sps] rtsp.c:2935-2961</c>).</summary>
@@ -48,7 +48,7 @@ public sealed record BufferedStreamOptions
 
     /// <summary>
     /// Upper bound of one SETRATEANCHORTIME or FLUSHBUFFERED round trip; a request that takes longer fails with
-    /// <see cref="TimeoutException"/>. The SpeakerA answered FLUSH after 2-17 s (SPEC-control.md 4.8 note), so the default is
+    /// <see cref="TimeoutException"/>. The srcvers-366 speaker answered FLUSH after 2-17 s (SPEC-control.md 4.8 note), so the default is
     /// generous.
     /// </summary>
     public TimeSpan ControlTimeout { get; init; } = TimeSpan.FromSeconds(30);
@@ -64,7 +64,7 @@ public sealed record BufferedStreamOptions
     /// <summary>
     /// Send a receiver's <c>SETRATEANCHORTIME rate 1</c> only once audio has been written to its data connection since the
     /// anchor was set (or <see cref="AnchorAudioWait"/> has passed), so the anchor never names audio the receiver cannot
-    /// have yet. The Test Speaker ABCD answers rate 1 with <c>400 Bad Request</c> while its data connection is open and
+    /// have yet. The srcvers-366 speaker answers rate 1 with <c>400 Bad Request</c> while its data connection is open and
     /// empty (it answers 200 while no data connection exists); with ALAC audio already written it still answered 400, so
     /// this order is necessary there but not sufficient (live, 2026-10-09, SPEC-audio.md 4.3 note, probe P16).
     /// shairport-sync accepts either order. The anchor's network time is absolute, so sending it later does not move the
@@ -135,7 +135,7 @@ public sealed record BufferedReceiverStatus(string ReceiverId, bool DataConnecte
 /// so a group can mix receivers that joined at different times. <see cref="AnchorAsync"/> sets an explicit anchor instead
 /// (run-ahead producers). The requests go over each receiver's <see cref="IReceiverSession"/> (attached with
 /// <see cref="AttachSession"/> or <see cref="WrapSessionFactory"/>), in order, from one control loop per receiver, and a
-/// rate-1 anchor waits until audio has been written to that receiver's data connection (the Test Speaker ABCD rejects it
+/// rate-1 anchor waits until audio has been written to that receiver's data connection (the srcvers-366 speaker rejects it
 /// with 400 while the connection is still empty, <see cref="BufferedStreamOptions.AnchorAfterAudio"/>).
 /// </para>
 /// <para>

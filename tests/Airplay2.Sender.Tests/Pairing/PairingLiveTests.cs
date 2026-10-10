@@ -12,7 +12,7 @@ namespace Airplay2.Sender.Tests.Pairing;
 /// <summary>
 /// Live pairing tests (docs/DEVELOPMENT.md, "Live-device rules"). They return early unless <c>AIRPLAY_LIVE=1</c>; the default
 /// <c>dotnet test</c> therefore never touches a receiver. ShairportLive runs inside the Docker VM against the
-/// shairport-sync container (<c>SPS_HOST</c>/<c>SPS_PORT</c>); SpeakerALive targets the Test Speaker ABCD only
+/// shairport-sync container (<c>SPS_HOST</c>/<c>SPS_PORT</c>); ReceiverLive targets the live receiver (AIRPLAY_LIVE_RECEIVER) only
 /// (<c>AIRPLAY_LIVE_RECEIVER_HOST</c>, no default: <see cref="LiveTarget"/>) and is for the stage that allows pairing on it (wave 3, session-streams):
 /// probes P2 (transient pairing with flags bit 10), P6 (M1 method byte) and P11 (<c>X-Apple-HKP</c> required?).
 /// Every live test logs the wire exchange to <c>artifacts/live/&lt;date&gt;-&lt;probe&gt;.log</c>.
@@ -111,10 +111,10 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
         }
     }
 
-    /// <summary>P2 + P11 (header present): transient M1-M4 against the SpeakerA, then an encrypted <c>GET /info</c>.</summary>
+    /// <summary>P2 + P11 (header present): transient M1-M4 against the live receiver, then an encrypted <c>GET /info</c>.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task SpeakerA_P2_transient_pairing_then_encrypted_get_info()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Live_P2_transient_pairing_then_encrypted_get_info()
     {
         if (!LiveEnabled)
         {
@@ -149,8 +149,8 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
 
     /// <summary>P11: transient M1 without <c>X-Apple-HKP</c> on its own connection; records whether M2 still arrives.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task SpeakerA_P11_transient_M1_without_hkp_header()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Live_P11_transient_M1_without_hkp_header()
     {
         if (!LiveEnabled)
         {
@@ -174,8 +174,8 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
 
     /// <summary>P6: M1 with method 0 and with method 1 on two connections (no PIN entry follows); compares the two M2.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task SpeakerA_P6_m1_method_byte()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Live_P6_m1_method_byte()
     {
         if (!LiveEnabled)
         {
@@ -214,7 +214,7 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
 
     private static async Task<RtspConnection> ConnectSpeakerAAsync(IPAddress host, LiveLog log)
     {
-        // Only the allowed Test Speaker ABCD may be contacted (live-device rules); never a TV or a HomePod.
+        // Only the allowed live receiver (AIRPLAY_LIVE_RECEIVER) may be contacted (live-device rules); never a TV or another receiver.
         return await RtspConnection.ConnectAsync(new IPEndPoint(host, LiveTarget.Port), new RtspConnectionOptions(), log.CreateLogger("rtsp"), CancellationToken.None);
     }
 

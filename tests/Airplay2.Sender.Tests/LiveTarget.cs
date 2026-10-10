@@ -5,7 +5,7 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests;
 
 /// <summary>
-/// The receiver the SpeakerALive tests target (docs/DEVELOPMENT.md, "Live tests"). Nothing is hard-coded: the tests return early
+/// The receiver the ReceiverLive tests target (docs/DEVELOPMENT.md, "Live tests"). Nothing is hard-coded: the tests return early
 /// unless the variable they need is set. <c>AIRPLAY_LIVE_RECEIVER</c> is the receiver's mDNS name or device id (what the CLI's
 /// <c>--to</c> takes; the discovery-based tests use it); <c>AIRPLAY_LIVE_RECEIVER_HOST</c> its IP address (the tests that connect
 /// without discovery) and <c>AIRPLAY_LIVE_RECEIVER_PORT</c> its RTSP port (default 7000).

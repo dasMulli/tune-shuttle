@@ -9,10 +9,10 @@ namespace Bridge.Tests;
 
 public class MappingTests
 {
-    // The SpeakerA's records as browsed on 2026-10-09 (SPEC-control.md 1.7).
+    // Receiver A's records (a third-party AirPlay 2 speaker, srcvers 366.0) as browsed on 2026-10-09 (SPEC-control.md 1.7).
     private static readonly string[] SpeakerATxt =
     [
-        "deviceid=02:1A:2B:3C:4D:5E", "features=0x445F8A00,0x1C340", "flags=0x404", "model=model", "manufacturer=SpeakerA",
+        "deviceid=02:1A:2B:3C:4D:5E", "features=0x445F8A00,0x1C340", "flags=0x404", "model=Speaker A", "manufacturer=Example Audio Maker",
         "pi=02:1A:2B:3C:4D:5E", "gid=02:1A:2B:3C:4D:5E", "srcvers=366.0", "acl=0", "pk=" + new string('a', 64),
     ];
 
@@ -63,8 +63,8 @@ public class MappingTests
         var row = SpeakerA().ToReceiverRow(existing: null, hasStoredPairing: false);
         Assert.Equal("02:1A:2B:3C:4D:5E", row.Id);
         Assert.Equal("Test Speaker ABCD", row.Name);
-        Assert.Equal("model", row.Model);
-        Assert.Equal("SpeakerA", row.Manufacturer);
+        Assert.Equal("Speaker A", row.Model);
+        Assert.Equal("Example Audio Maker", row.Manufacturer);
         Assert.Equal("192.0.2.26", row.LastAddress); // IPv4 preferred over the link-local IPv6 listed first
         Assert.Equal(7000, row.LastPort);
         Assert.Equal(0x0001C340445F8A00L, row.Features);

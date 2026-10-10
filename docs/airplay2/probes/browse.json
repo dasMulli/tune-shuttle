@@ -15,9 +15,9 @@
       "fv=p20.33.31.68",
       "at=0x1",
       "flags=0x644",
-      "model=TVMODEL0000.DEUQDJP",
-      "integrator=LG Electronics",
-      "manufacturer=LG",
+      "model=TV-65.EXAMPLE",
+      "integrator=Example Integrator",
+      "manufacturer=Example TV Maker",
       "serialNumber=000ABCD00000_02:4c:47:00:00:02",
       "protovers=1.1",
       "srcvers=377.40.00",
@@ -37,7 +37,7 @@
     "from": "203.0.113.1",
     "srv": {
       "port": 7000,
-      "target": "speakera-021a2b3c4d5d.local"
+      "target": "speaker-021a2b3c4d5d.local"
     },
     "txt": [
       "acl=0",
@@ -47,7 +47,7 @@
       "fv=p20.1.1.36.0x8b4c480",
       "flags=0x404",
       "model=Test Speaker ABCD",
-      "manufacturer=Lautsprecher SpeakerA GmbH",
+      "manufacturer=Example Audio Maker GmbH",
       "serialNumber=00000000-0000-4000-8000-000000000026",
       "protovers=1.1",
       "srcvers=366.0",
@@ -70,7 +70,7 @@
     "from": "203.0.113.1",
     "srv": {
       "port": 7000,
-      "target": "speakera-021a2b3c4d5d.local"
+      "target": "speaker-021a2b3c4d5d.local"
     },
     "txt": [
       "cn=0,1",

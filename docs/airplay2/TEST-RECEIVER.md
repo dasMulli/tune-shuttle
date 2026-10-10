@@ -3,7 +3,8 @@
 Evaluated 2026-10-09. Question: can shairport-sync (AirPlay 2) run locally as a test receiver on this Windows host, and
 what would it test? Short answer: it runs in Docker Desktop and is reachable **from inside the Docker VM**, not from
 Windows; it refuses the NTP-timed realtime stream that v1 uses; so it is a secondary target for the pairing/RTSP/event
-paths and for the PTP/buffered path, while the in-process fake receiver plus the SpeakerA speaker remain the primary
+paths and for the PTP/buffered path, while the in-process fake receiver plus receiver A (a third-party AirPlay 2 speaker,
+srcvers 366.0, features 0x445F8A00,0x1C340) remain the primary
 targets (SPEC.md D16).
 
 ## What was tried
@@ -12,7 +13,7 @@ targets (SPEC.md D16).
 |---|---|
 | `docker pull mikebrady/shairport-sync:latest` | 5.5.2 AirPlay 2 build with nqptp, OpenSSL, Avahi, ALSA/PulseAudio/PipeWire and the `dummy`, `stdout`, `pipe` backends (`shairport-sync -V`). |
 | `docker run -d --name sps-eval --net host --cap-add SYS_NICE mikebrady/shairport-sync:latest -a SPS-Eval -o dummy` | Starts dbus, avahi, nqptp and shairport-sync; no `/dev/snd` needed with `-o dummy`. |
-| From the Windows host: `GET /info` to `127.0.0.1:7000`; mDNS browse on the LAN | **Connection refused**; the service is not advertised on the LAN (`mdns_browse.py` sees only the SpeakerA). Docker Desktop's host networking shares the Linux VM's namespace, which is NATed; its optional "host networking" bridge to Windows is not enabled on this machine and would still not carry mDNS multicast or inbound UDP to the VM. |
+| From the Windows host: `GET /info` to `127.0.0.1:7000`; mDNS browse on the LAN | **Connection refused**; the service is not advertised on the LAN (`mdns_browse.py` sees only receiver A). Docker Desktop's host networking shares the Linux VM's namespace, which is NATed; its optional "host networking" bridge to Windows is not enabled on this machine and would still not carry mDNS multicast or inbound UDP to the VM. |
 | From a second host-networked container in the VM (`alpine`, `ss -ltnup`; `nc 127.0.0.1 7000`) | TCP 7000 open, UDP 319/320 (nqptp) and 5353 (avahi) bound; `GET /info RTSP/1.0` answers `200 OK`, `Server: AirTunes/366.0`, a 1235-byte bplist (shairport's full `/info` with `initialVolume`, `supportedFormats`, `pk`). |
 | From `mcr.microsoft.com/dotnet/sdk:10.0` with `--net host` | `dotnet 10.0.401` runs and reaches `127.0.0.1:7000`: the sender's test suite can run inside the VM against the receiver, with TCP, UDP and multicast all in one namespace. |
 | WSL2 Ubuntu (26.04.1) | Running, NAT mode (`eth0` 172.27.x.x), no gcc/g++ installed, no shairport-sync. Switching to mirrored networking (`.wslconfig` `networkingMode=mirrored`) would expose a WSL-hosted receiver to the Windows host and the LAN, but it is a global setting that also changes Docker Desktop's networking, requires `wsl --shutdown`, and a native build of shairport-sync AirPlay 2 needs ~15 build dependencies plus nqptp with exclusive UDP 319/320. Not done without the user's decision. |
@@ -27,11 +28,11 @@ targets (SPEC.md D16).
 | Realtime stream under PTP (0xD7 syncs), buffered stream, PTP grandmaster | yes (inside the VM) | nqptp runs in the same namespace; UDP 319/320 reachable. |
 | mDNS discovery from the Windows host | no | VM multicast does not reach the host or the LAN. |
 | Retransmit requests, timing requests to the sender | yes inside the VM, no from Windows | UDP back to the sender only works in the shared namespace. |
-| Audible output / latency measurement | no | `dummy` backend; use the SpeakerA with a microphone (P7). |
+| Audible output / latency measurement | no | `dummy` backend; use receiver A with a microphone (P7). |
 
 Conclusion: worth keeping as a **secondary** target for the control plane and for the PTP and buffered
 stream paths, run through the VM script below; not a substitute for the fake receiver (which tests the NTP
-path and every quirk switch deterministically) or the SpeakerA (the real Apple-SDK behaviour, SPEC.md section 4).
+path and every quirk switch deterministically) or receiver A (the real Apple-SDK behaviour, SPEC.md section 4).
 
 ## How to start it
 
@@ -63,11 +64,11 @@ and are skipped in the normal `dotnet test` run. A password-protected variant fo
 `command: -a SPS-Pin -o dummy --password 1234` in a second compose service (`shairport-sync-pin`, profile `pin`; see
 the corrections below).
 
-## The Test Speaker ABCD and the fake receiver
+## The srcvers-366 speaker and the fake receiver
 
-- SpeakerA (192.0.2.26:7000, `srcvers 366.0`, features `0x1C340445F8A00`, flags `0x404`): the live target with the
+- Receiver A (192.0.2.26:7000, `srcvers 366.0`, features `0x1C340445F8A00`, flags `0x404`): the live target with the
   live-device rules of `docs/DEVELOPMENT.md` (discovery, `GET /info`, pairing and SETUP/TEARDOWN; audio only as a
-  3-second quiet tone; the LG TV never).
+  3-second quiet tone; receiver B, the PIN TV, never).
 - `tests/Airplay2.FakeReceiver`: the in-process receiver every test project uses;
   it implements both NTP and the 501 refusal, both TEARDOWN forms, optional `streamID`, `updateInfo` timing, packet
   loss and retransmit requests, so the branches of every receiver question can be exercised deterministically.
@@ -89,9 +90,9 @@ integration ran all of them again. The table gives the complete list. Logs:
 | Buffered stream (type 103): run-ahead push, flush and re-anchor; through the group player with pause/resume | `BufferedLiveTests.Shairport_plays_a_run_ahead_buffered_stream_with_flush_and_reanchor`, `.Shairport_plays_the_buffered_stream_through_the_group_player` | `run-ptp-live-tests-in-vm.ps1 -Filter "FullyQualifiedName~BufferedLiveTests&Category=ShairportLive"` | Pass. shairport-sync drops one block after each immediate flush (SPEC-audio.md 4.5 note). |
 | **The bridge from its container image**: mDNS discovery of shairport-sync, then through the REST API: connect (transient pairing, PTP session with our grandmaster, event channel, RECORD, stream SETUP), receiver volume 20 → 35, disconnect (`TEARDOWN` 200 with `Connection: close`) | Manual, `docker run tune-shuttle:dev` on the default bridge network with `BRIDGE_Bridge__EnableSpotify=false`, then `curl` against `/api/receivers/{id}/connect`, `/volume`, `/disconnect` | Default bridge network | All steps 200; state *Connected*, then *Available*. Both the image's own mDNS browser and shairport-sync's Avahi are on the bridge network, so discovery works there. |
 
-**Not exercised by shairport-sync:** the realtime stream under NTP (shairport-sync refuses it; the SpeakerA and the
+**Not exercised by shairport-sync:** the realtime stream under NTP (shairport-sync refuses it; receiver A and the
 fake receiver cover it); audible output and latency (dummy backend); and retransmit-request handling, which these runs
-did not check (the fake receiver and the SpeakerA, probe P14, cover it).
+did not check (the fake receiver and receiver A, probe P14, cover it).
 
 **Running the tests: corrections to the sections above.**
 

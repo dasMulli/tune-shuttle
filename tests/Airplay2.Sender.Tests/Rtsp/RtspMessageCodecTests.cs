@@ -138,7 +138,7 @@ public class RtspMessageCodecTests
     }
 
     [Fact]
-    public void Parses_the_captured_SpeakerA_response()
+    public void Parses_the_captured_speaker_A_response()
     {
         var raw = SpeakerAResponse();
         Assert.True(RtspMessageCodec.TryParseResponse(raw, out var response, out var consumed));

@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 namespace Bridge.Tests.Service;
 
 /// <summary>
-/// The bridge against the Test Speaker ABCD (docs/DEVELOPMENT.md, "Live-device rules": pairing, SETUP, event channel, volume and
+/// The bridge against the live receiver (AIRPLAY_LIVE_RECEIVER; docs/DEVELOPMENT.md, "Live-device rules": pairing, SETUP, event channel, volume and
 /// TEARDOWN are allowed; audio only as the CLI's quiet tone, which is not the bridge's). The bridge finds the speaker by
 /// mDNS, connects it as the single output (transient pairing, session and stream SETUP, volume at level 15), changes the
 /// level and disconnects it (TEARDOWN) without ever starting the pacer, so no audio packet is sent. Returns early unless
@@ -21,8 +21,8 @@ public sealed class BridgeLiveTests(ITestOutputHelper output)
     public const string ReceiverVariable = "AIRPLAY_LIVE_RECEIVER";
 
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task Bridge_connects_levels_and_disconnects_the_SpeakerA_without_audio()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Bridge_connects_levels_and_disconnects_the_live_receiver_without_audio()
     {
         if (Environment.GetEnvironmentVariable("AIRPLAY_LIVE") != "1")
         {
@@ -41,41 +41,41 @@ public sealed class BridgeLiveTests(ITestOutputHelper output)
         var client = factory.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(100);
 
-        ReceiverDto? SpeakerA = null;
+        ReceiverDto? liveReceiver = null;
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (SpeakerA is null && DateTime.UtcNow < deadline)
+        while (liveReceiver is null && DateTime.UtcNow < deadline)
         {
             var receivers = await client.GetJsonAsync<List<ReceiverDto>>(ApiRoutes.Receivers);
-            SpeakerA = receivers.FirstOrDefault(r => (string.Equals(r.Name, target, StringComparison.OrdinalIgnoreCase) || string.Equals(r.Id, target, StringComparison.OrdinalIgnoreCase)) && r.Online);
-            if (SpeakerA is null)
+            liveReceiver = receivers.FirstOrDefault(r => (string.Equals(r.Name, target, StringComparison.OrdinalIgnoreCase) || string.Equals(r.Id, target, StringComparison.OrdinalIgnoreCase)) && r.Online);
+            if (liveReceiver is null)
             {
                 await Task.Delay(500);
             }
         }
 
-        if (SpeakerA is null)
+        if (liveReceiver is null)
         {
-            log.Write("The SpeakerA is not on the network; live steps skipped.");
+            log.Write("The live receiver (AIRPLAY_LIVE_RECEIVER) is not on the network; live steps skipped.");
             return;
         }
 
-        log.Write($"found {SpeakerA.Name} {SpeakerA.Id} at {SpeakerA.Address}:{SpeakerA.Port}, pairing {SpeakerA.Pairing}, features {SpeakerA.Capabilities.Features}");
+        log.Write($"found {liveReceiver.Name} {liveReceiver.Id} at {liveReceiver.Address}:{liveReceiver.Port}, pairing {liveReceiver.Pairing}, features {liveReceiver.Capabilities.Features}");
 
         // The level is set before connecting, so the first SET_PARAMETER volume already is the quiet one.
-        await client.SendJsonAsync<ReceiverDto>(HttpMethod.Put, Http.Receiver(ApiRoutes.ReceiverVolume, SpeakerA.Id), new VolumeRequest(15));
+        await client.SendJsonAsync<ReceiverDto>(HttpMethod.Put, Http.Receiver(ApiRoutes.ReceiverVolume, liveReceiver.Id), new VolumeRequest(15));
         try
         {
-            var connected = await client.SendJsonAsync<ReceiverDto>(HttpMethod.Post, Http.Receiver(ApiRoutes.ReceiverConnect, SpeakerA.Id));
+            var connected = await client.SendJsonAsync<ReceiverDto>(HttpMethod.Post, Http.Receiver(ApiRoutes.ReceiverConnect, liveReceiver.Id));
             log.Write($"connect: state {connected.State}, error {connected.Error ?? "none"}");
             Assert.Equal(ReceiverConnectionState.Connected, connected.State);
             var outputDto = await client.GetJsonAsync<OutputDto>(ApiRoutes.Output);
-            Assert.Equal(SpeakerA.Id, outputDto.ReceiverId);
+            Assert.Equal(liveReceiver.Id, outputDto.ReceiverId);
 
             await Task.Delay(TimeSpan.FromSeconds(5)); // feedback and the volume poll run meanwhile; no audio (Spotify is off)
-            var quieter = await client.SendJsonAsync<ReceiverDto>(HttpMethod.Put, Http.Receiver(ApiRoutes.ReceiverVolume, SpeakerA.Id), new VolumeRequest(12));
+            var quieter = await client.SendJsonAsync<ReceiverDto>(HttpMethod.Put, Http.Receiver(ApiRoutes.ReceiverVolume, liveReceiver.Id), new VolumeRequest(12));
             Assert.Equal(12, quieter.Level);
             await Task.Delay(TimeSpan.FromSeconds(2));
-            var still = await client.GetJsonAsync<ReceiverDto>(Http.Receiver(ApiRoutes.Receivers + "/{id}", SpeakerA.Id));
+            var still = await client.GetJsonAsync<ReceiverDto>(Http.Receiver(ApiRoutes.Receivers + "/{id}", liveReceiver.Id));
             log.Write($"after 7 s: state {still.State}, level {still.Level}");
             Assert.Equal(ReceiverConnectionState.Connected, still.State);
 
@@ -86,7 +86,7 @@ public sealed class BridgeLiveTests(ITestOutputHelper output)
         finally
         {
             // Always TEARDOWN what was set up (section 4).
-            using var response = await client.PostAsync(Http.Receiver(ApiRoutes.ReceiverDisconnect, SpeakerA.Id), null);
+            using var response = await client.PostAsync(Http.Receiver(ApiRoutes.ReceiverDisconnect, liveReceiver.Id), null);
             log.Write($"disconnect: {(int)response.StatusCode} {(await response.Content.ReadFromJsonAsync<ReceiverDto>(Http.Json))?.State}");
         }
     }

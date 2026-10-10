@@ -158,7 +158,7 @@ public sealed partial class FakeReceiver
 
         /// <summary>
         /// <c>GET /info</c> (SPEC-control.md 1.8, 4.1): the stage-1 request (bplist body with <c>qualifier: [txtAirPlay]</c>)
-        /// gets <c>txtAirPlay</c> added, as the SpeakerA does; a bare request (no body) the plain dictionary. A body that is
+        /// gets <c>txtAirPlay</c> added, as receiver A (the srcvers-366 speaker) does; a bare request (no body) the plain dictionary. A body that is
         /// not a bplist or lacks <c>qualifier.txtAirPlay</c> is answered 400, as shairport's stage-1 <c>user_fail</c>
         /// [sps:rtsp.c:1225-1273] (airplay2-receiver answers 404 [ap2r:ap2-receiver.py:1139-1179]; SPEC-control.md 2.4).
         /// </summary>

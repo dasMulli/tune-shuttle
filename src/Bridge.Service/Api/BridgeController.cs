@@ -41,7 +41,7 @@ public sealed class BridgeController(
     [
         "P4: volume changes made on the receiver's own buttons (event channel or poll)",
         "P7: measured output delay per L with a microphone",
-        "P20: mixed group (SpeakerA + Apple receiver) offsets",
+        "P20: mixed group (receiver A + an Apple receiver) offsets",
     ];
 
     private static readonly string[] PlaybackCommands = ["play", "pause", "next", "prev"];

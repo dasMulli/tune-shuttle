@@ -203,8 +203,8 @@ macvlan interface gives the pod its own address on the LAN without host networki
 |---|---|---|
 | Receivers per output | Single receivers **and** groups | Groups are the point of the project. |
 | Clock | The bridge is the one clock master for every receiver of a group: one timeline, one timing responder and control port per process, per-receiver keys and offsets | What OwnTone does to synchronize AirPlay 2 receivers; it keeps the rooms in step without receiver-to-receiver coordination. |
-| Stream type | The realtime stream (type 96: RTP, ALAC 44.1 kHz/16-bit, NTP timing) first; the buffered stream (type 103, PTP) is a second, pluggable transport, used only when preferred and supported | Needs no AAC encoder and no PTP daemon. The SpeakerA does not play the buffered stream with ALAC (probe P16). |
-| Timing protocol | NTP by default, PTP per receiver from `KnownReceiverQuirks` (shairport-sync refuses NTP); a group with one PTP member runs entirely under PTP | The SpeakerA accepts NTP (probe P1). |
+| Stream type | The realtime stream (type 96: RTP, ALAC 44.1 kHz/16-bit, NTP timing) first; the buffered stream (type 103, PTP) is a second, pluggable transport, used only when preferred and supported | Needs no AAC encoder and no PTP daemon. A third-party AirPlay 2 speaker (srcvers 366.0, features 0x445F8A00,0x1C340) does not play the buffered stream with ALAC (probe P16). |
+| Timing protocol | NTP by default, PTP per receiver from `KnownReceiverQuirks` (shairport-sync refuses NTP); a group with one PTP member runs entirely under PTP | The srcvers-366 speaker accepts NTP (probe P1). |
 | Pairing | Transient pairing where the receiver allows it, the PIN flow through the web app otherwise; pair-verify with stored keys on every reconnect; one controller identity per installation | The PIN must be entered by a person, and the web app is where people are. |
 | No receiver connected | Accept playback and discard the audio | Spotify should never fail to play; local playback is not a goal. |
 | User interaction | Only through the web app; the service never prompts | It runs headless as a service or in a pod. |

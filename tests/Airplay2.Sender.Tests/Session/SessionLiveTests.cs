@@ -13,7 +13,7 @@ namespace Airplay2.Sender.Tests.Session;
 
 /// <summary>
 /// Live session tests and probes (docs/DEVELOPMENT.md, "Live-device rules"): pairing, session SETUP, event channel, RECORD,
-/// stream SETUP, volume, feedback and TEARDOWN on the Test Speaker ABCD (<c>AIRPLAY_LIVE_RECEIVER_HOST</c>, no default: <see cref="LiveTarget"/>),
+/// stream SETUP, volume, feedback and TEARDOWN on the live receiver (<c>AIRPLAY_LIVE_RECEIVER_HOST</c>, no default: <see cref="LiveTarget"/>),
 /// <b>never audio</b>; and the PTP session path on shairport-sync inside the Docker VM (<c>SPS_HOST</c>/<c>SPS_PORT</c>).
 /// They return early unless <c>AIRPLAY_LIVE=1</c>. Every run writes the decrypted wire exchange (Debug) to
 /// <c>artifacts/live/&lt;date&gt;-&lt;probe&gt;.log</c>.
@@ -23,7 +23,7 @@ public sealed class SessionLiveTests(ITestOutputHelper output)
     private static readonly string[] SpeakerAAirplay =
     [
         "acl=0", "deviceid=02:1A:2B:3C:4D:5E", "features=0x445F8A00,0x1C340", "rsf=0x0", "fv=p20.1.1.36.0x8b4c480", "flags=0x404",
-        "model=Test Speaker ABCD", "manufacturer=Lautsprecher SpeakerA GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
+        "model=Test Speaker ABCD", "manufacturer=Example Audio Maker GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
         "protovers=1.1", "srcvers=366.0", "pi=02:1A:2B:3C:4D:5E", "gid=02:1A:2B:3C:4D:5E", "gcgl=0",
         "pk=d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
     ];
@@ -38,8 +38,8 @@ public sealed class SessionLiveTests(ITestOutputHelper output)
 
     /// <summary>The session start-up of D5 without audio: pairing, session SETUP (NTP), event channel, RECORD, stream SETUP, volume, GET_PARAMETER, feedback, TEARDOWN.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task SpeakerA_session_startup_without_audio()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Live_session_startup_without_audio()
     {
         if (!Live() || !LiveTarget.TryHost(output, out var host))
         {
@@ -94,53 +94,53 @@ public sealed class SessionLiveTests(ITestOutputHelper output)
 
     /// <summary>P1, control part: the D1 gate.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P1_timing_protocol() => RunProbeAsync("P1-timing-protocol", async p => await p.TimingProtocolAsync(CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P1_timing_protocol() => RunProbeAsync("P1-timing-protocol", async p => await p.TimingProtocolAsync(CancellationToken.None));
 
     /// <summary>P3: both start-up orders.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P3_startup_order() => RunProbeAsync("P3-startup-order", p => p.StartupOrderAsync(TimingProtocol.Ntp, CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P3_startup_order() => RunProbeAsync("P3-startup-order", p => p.StartupOrderAsync(TimingProtocol.Ntp, CancellationToken.None));
 
     /// <summary>P4: device-side volume (press the buttons during the run; <c>P4_SECONDS</c>, default 10).</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P4_device_volume() => RunProbeAsync("P4-device-volume", p => p.DeviceVolumeAsync(TimeSpan.FromSeconds(Seconds("P4_SECONDS", 10)), CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P4_device_volume() => RunProbeAsync("P4-device-volume", p => p.DeviceVolumeAsync(TimeSpan.FromSeconds(Seconds("P4_SECONDS", 10)), CancellationToken.None));
 
     /// <summary>P5: streamID and both TEARDOWN forms.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P5_stream_id_and_teardown() => RunProbeAsync("P5-teardown", p => p.StreamIdAndTeardownAsync(CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P5_stream_id_and_teardown() => RunProbeAsync("P5-teardown", p => p.StreamIdAndTeardownAsync(CancellationToken.None));
 
     /// <summary>P8: feedback bodies; idle drop timing with <c>P8_IDLE_SECONDS</c> (default 0).</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P8_feedback() => RunProbeAsync("P8-feedback", p => p.FeedbackAsync(TimeSpan.FromSeconds(Seconds("P8_IDLE_SECONDS", 0)), CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P8_feedback() => RunProbeAsync("P8-feedback", p => p.FeedbackAsync(TimeSpan.FromSeconds(Seconds("P8_IDLE_SECONDS", 0)), CancellationToken.None));
 
-    /// <summary>P9: metadata and artwork (check the SpeakerA app).</summary>
+    /// <summary>P9: metadata and artwork (check the receiver's app).</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P9_metadata() => RunProbeAsync("P9-metadata", p => p.MetadataAsync(new TrackMetadata("airplay2-streamer probe", "Probe Artist", "Probe Album", TimeSpan.FromMinutes(3)), SessionProbes.SampleJpeg(), CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P9_metadata() => RunProbeAsync("P9-metadata", p => p.MetadataAsync(new TrackMetadata("airplay2-streamer probe", "Probe Artist", "Probe Album", TimeSpan.FromMinutes(3)), SessionProbes.SampleJpeg(), CancellationToken.None));
 
     /// <summary>P10: initialVolume once paired, GET_PARAMETER volume.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P10_initial_volume() => RunProbeAsync("P10-initial-volume", p => p.InitialVolumeAsync(CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P10_initial_volume() => RunProbeAsync("P10-initial-volume", p => p.InitialVolumeAsync(CancellationToken.None));
 
     /// <summary>P13: event timing; answer delay from <c>P13_DELAY_SECONDS</c> (default 5).</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P13_event_timing() => RunProbeAsync("P13-event-timing", p => p.EventTimingAsync(TimeSpan.FromSeconds(Seconds("P13_DELAY_SECONDS", 5)), CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P13_event_timing() => RunProbeAsync("P13-event-timing", p => p.EventTimingAsync(TimeSpan.FromSeconds(Seconds("P13_DELAY_SECONDS", 5)), CancellationToken.None));
 
     /// <summary>P15, control part: both stream keys accepted.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P15_stream_key() => RunProbeAsync("P15-stream-key", p => p.StreamKeyAsync(CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P15_stream_key() => RunProbeAsync("P15-stream-key", p => p.StreamKeyAsync(CancellationToken.None));
 
     /// <summary>P21: one 2048-byte frame; received frame sizes.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P21_large_frame() => RunProbeAsync("P21-large-frame", p => p.LargeFrameAsync(2048, CancellationToken.None));
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P21_large_frame() => RunProbeAsync("P21-large-frame", p => p.LargeFrameAsync(2048, CancellationToken.None));
 
     /// <summary>
     /// shairport-sync in the Docker VM: transient pairing, PTP session SETUP (5.5.2 refuses NTP with 200 and an empty body), event channel with

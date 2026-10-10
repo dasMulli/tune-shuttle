@@ -16,7 +16,7 @@ namespace Bridge.Service.Output;
 /// <para>
 /// Threads (SPEC-audio.md 8.5): librespot calls every member on its player thread. <see cref="Write"/> blocking there is
 /// the deliberate backpressure of SPEC-audio.md 8.1/8.2 (docs/DEVELOPMENT.md, "Code conventions", the documented exception).
-/// <see cref="Stop"/> must not block: on the SpeakerA a <c>FLUSH</c> takes 2-3 s (SPEC-control.md 4.8 note), so the pause is
+/// <see cref="Stop"/> must not block: on the srcvers-366 speaker a <c>FLUSH</c> takes 2-3 s (SPEC-control.md 4.8 note), so the pause is
 /// queued to a single consumer task that runs <see cref="IGroupPlayer.PauseAsync"/>. <see cref="Start"/> queues the
 /// resume behind it and waits (bounded by <see cref="StartWait"/>) until it ran, so a quick pause/play cannot let the
 /// pending pause drop the first samples of the resumed playback.

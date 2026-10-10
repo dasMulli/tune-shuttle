@@ -25,7 +25,7 @@ public delegate ValueTask<RtspServerResponse> RtspRequestHandler(RtspServerConne
 
 /// <summary>
 /// A response written by <see cref="RtspServerConnection"/>: status line with the request's protocol token echoed (the
-/// SpeakerA echoes it, SPEC-control.md 1.8), <c>Content-Length</c> (always), <c>Content-Type</c> when set,
+/// srcvers-366 speaker echoes it, SPEC-control.md 1.8), <c>Content-Length</c> (always), <c>Content-Type</c> when set,
 /// <c>Server</c>, <c>CSeq</c> echoed when the request had one [sps:rtsp.c:4210-4217], then <see cref="Headers"/>.
 /// </summary>
 /// <param name="StatusCode">The status code.</param>
@@ -102,7 +102,7 @@ public sealed record RtspServerResponse(int StatusCode, string? ReasonPhrase = n
 /// <summary>Options of an <see cref="RtspServerConnection"/>.</summary>
 public sealed record RtspServerConnectionOptions
 {
-    /// <summary>The <c>Server</c> header written on every response (the SpeakerA's value by default).</summary>
+    /// <summary>The <c>Server</c> header written on every response (the srcvers-366 speaker's value by default).</summary>
     public string ServerHeader { get; init; } = "AirTunes/366.0";
 
     /// <summary>

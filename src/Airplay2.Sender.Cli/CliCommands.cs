@@ -51,7 +51,7 @@ public sealed class CliCommands(CliServices services)
         if (!iKnow)
         {
             // The guard comes first: no file, no store, no socket (docs/DEVELOPMENT.md, "Live-device rules").
-            await Error.WriteLineAsync("Refusing to send audio without --i-know. Live rule (docs/DEVELOPMENT.md, \"Live-device rules\"): only the Test Speaker ABCD, a 3-second quiet tone (tone:3), --level 15, with the user's go-ahead. Nothing was sent.").ConfigureAwait(false);
+            await Error.WriteLineAsync("Refusing to send audio without --i-know. Live rule (docs/DEVELOPMENT.md, \"Live-device rules\"): only the live receiver (AIRPLAY_LIVE_RECEIVER), a 3-second quiet tone (tone:3), --level 15, with the user's go-ahead. Nothing was sent.").ConfigureAwait(false);
             return ExitCodes.AudioRefused;
         }
 
@@ -255,7 +255,7 @@ public sealed class CliCommands(CliServices services)
     }
 
     /// <summary>
-    /// <c>volume</c>: opens a session without audio (D5 up to the stream SETUP, because the SpeakerA applies volume only after
+    /// <c>volume</c>: opens a session without audio (D5 up to the stream SETUP, because the srcvers-366 speaker applies volume only after
     /// it, probe P3; for a PTP-timed receiver with the sender's grandmaster and SETPEERS), reads <c>GET_PARAMETER volume</c>,
     /// sets <paramref name="level"/> when given and reads it back, then tears down (D7), also on Ctrl+C
     /// (<see cref="ExitCodes.Interrupted"/>). The receiver keeps the level for the next session (probe P10).
@@ -421,13 +421,13 @@ public sealed class CliCommands(CliServices services)
 
     /// <summary>
     /// The diagnosis for a failed NTP start-up during which not one timing request reached our responder. Observed live
-    /// (2026-10-09, SPEC.md section 4, CLI note): the SpeakerA sends its 0xD2 requests while it holds the stream SETUP answer
+    /// (2026-10-09, SPEC.md section 4, CLI note): the srcvers-366 speaker sends its 0xD2 requests while it holds the stream SETUP answer
     /// and, when none is answered, answers the stream SETUP with 400 after ~32 s; the cause was an inbound Windows Firewall
     /// block rule for <c>airplay2.exe</c>. Null when timing requests did arrive.
     /// </summary>
     internal static string? TimingHint(AirplaySender sender) =>
         sender.Timing.Port != 0 && sender.Timing.RepliesSent == 0
-            ? $"No NTP timing request reached our timing port UDP {sender.Timing.Port}. Receivers such as the Test Speaker ABCD hold the stream SETUP until timing works and then refuse it (400). Check that inbound UDP to {Environment.ProcessPath ?? "this program"} is allowed (Windows Firewall: an inbound rule for the executable, or the UDP ports)."
+            ? $"No NTP timing request reached our timing port UDP {sender.Timing.Port}. Some receivers (srcvers 366.0, SPEC.md section 4) hold the stream SETUP until timing works and then refuse it (400). Check that inbound UDP to {Environment.ProcessPath ?? "this program"} is allowed (Windows Firewall: an inbound rule for the executable, or the UDP ports)."
             : null;
 
     /// <summary>TEARDOWN (D7) bounded by 10 s; failures are logged, never thrown.</summary>
@@ -534,7 +534,7 @@ public sealed class CliCommands(CliServices services)
     {
         // No silence auto-pause: the source ends once, DrainAsync waits for the last frames, and disposing the player tears
         // the members down. With the default 5 s timeout, waiting past the drain turned the end into a pause (FLUSH), whose
-        // answer the SpeakerA delays by 2-30 s (SPEC.md P19), before the TEARDOWN.
+        // answer the srcvers-366 speaker delays by 2-30 s (SPEC.md P19), before the TEARDOWN.
         var options = sender.Options.Player with { LatencyFrames = latency, SilenceTimeout = TimeSpan.Zero };
         IGroupPlayer player;
         try
@@ -587,7 +587,7 @@ public sealed class CliCommands(CliServices services)
             if (sendMetadata)
             {
                 // SPEC-audio.md 7: the track starts with the next frame written; announce it, then queue it. Best effort and
-                // concurrent: the SpeakerA answers DMAP with 500 after up to 10 s (SPEC.md P9).
+                // concurrent: the srcvers-366 speaker answers DMAP with 500 after up to 10 s (SPEC.md P9).
                 var metadata = new TrackMetadata(source.Title, "airplay2 CLI", null, source.TotalFrames < 0 ? null : TimeSpan.FromSeconds(source.TotalFrames / (double)RealtimeStreamConstants.SampleRate));
                 nowPlaying = player.SetNowPlayingAsync(metadata, null, null, TimeSpan.Zero, ct);
             }
@@ -598,7 +598,7 @@ public sealed class CliCommands(CliServices services)
             await DrainAsync(player, latency, ct).ConfigureAwait(false);
 
             // The now-playing task (DMAP, artwork, progress) is awaited in finally, after the player is disposed: the
-            // SpeakerA answers DMAP with 500 only after seconds (SPEC.md P9), and the end of playback does not wait for it.
+            // The srcvers-366 speaker answers DMAP with 500 only after seconds (SPEC.md P9), and the end of playback does not wait for it.
             var states = player.Members;
             var lost = joined.Where(r => !states.TryGetValue(r.Id, out var s) || s == GroupMemberState.Lost).Select(r => r.Name).ToList();
             await Out.WriteLineAsync(Statistics(player, watch.Elapsed)).ConfigureAwait(false);

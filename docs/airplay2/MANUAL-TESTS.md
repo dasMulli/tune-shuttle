@@ -9,8 +9,9 @@ here with the date, and record protocol findings in [`SPEC.md`](SPEC.md) section
 line, as the probes so far have been. Live logs go to `artifacts/live/` (git-ignored).
 
 The live-device rules apply ([`docs/DEVELOPMENT.md`, "Live-device rules"](../DEVELOPMENT.md#live-device-rules)).
-AirPlay wakes receivers, and they play at their current volume. Contacting the LG TV is the owner's decision, because
-it turns on. The Apple receiver "Hallway" may be used only with its owner's permission. Start every listening test at a
+AirPlay wakes receivers, and they play at their current volume. Contacting receiver B (a TV receiver that requires PIN pairing,
+srcvers 377.40.00) is the owner's decision, because it turns on. Receiver C (an Apple receiver) may be used only with
+its owner's permission. Receiver A is a third-party AirPlay 2 speaker (srcvers 366.0, features 0x445F8A00,0x1C340). Start every listening test at a
 low level (15-20) and raise it from the web app.
 
 Section and item numbers are stable: `SPEC.md` section 4.1 refers to them (for example "2.6").
@@ -20,13 +21,13 @@ Section and item numbers are stable: `SPEC.md` section 4.1 refers to them (for e
 - [ ] `./build.ps1 -SkipContainer` passes (Release build, offline tests, publish to `artifacts/bridge` and
       `artifacts/airplay2`).
 - [ ] Firewall: install the service (step 1) or add an inbound allow rule for `artifacts\airplay2\airplay2.exe`
-      (README, "Firewall and network"). Without the rule, the SpeakerA answers the stream SETUP with `400` after about
+      (README, "Firewall and network"). Without the rule, receiver A answers the stream SETUP with `400` after about
       30 s, because its NTP timing requests are blocked.
-- [ ] Note the SpeakerA's current volume, so you can put it back afterwards.
+- [ ] Note receiver A's current volume, so you can put it back afterwards.
 
 ## 1. Spotify through the bridge
 
-Last known result (2026-10-09): the control part passed against the SpeakerA without audio (`BridgeLiveTests`: mDNS,
+Last known result (2026-10-09): the control part passed against receiver A without audio (`BridgeLiveTests`: mDNS,
 level 15, connect as the single output, level change read back, disconnect with `TEARDOWN {}` answered 200; log
 `artifacts/live/2026-10-09-bridge-connect.log`). Steps 3-10 (a real Spotify handoff and audio through the bridge) have
 not been run yet. The librespot port on its own was verified end to end with the Spotify app on 2026-10-09
@@ -34,18 +35,18 @@ not been run yet. The librespot port on its own was verified end to end with the
 
 1. [ ] Start the bridge: `dotnet run --project src/Bridge.Service -c Release`, or install it as a service with
        `install/windows/install-service.ps1` (elevated) and open `http://localhost:8080`.
-2. [ ] In the web app, under **Receivers**, set the SpeakerA's level to 15, then press *Connect*. Expect state
-       *connected* within about 10 s. On a bad Wi-Fi day the SpeakerA answers RTSP slowly; up to 60 s
+2. [ ] In the web app, under **Receivers**, set receiver A's level to 15, then press *Connect*. Expect state
+       *connected* within about 10 s. On a bad Wi-Fi day receiver A answers RTSP slowly; up to 60 s
        (`Bridge:ConnectTimeout`) is still fine.
 3. [ ] In the Spotify app (phone, same LAN), open the device picker and choose "TuneShuttle". **Check**: the device
        appears and the handoff logs in (Settings shows "Connected as ...", and `GET /api/status` shows
        `spotifyConnected: true`).
-4. [ ] Play a track. **Check**: it is audible on the SpeakerA after about 2 s (L = 1.75 s plus the receiver's buffer).
+4. [ ] Play a track. **Check**: it is audible on receiver A after about 2 s (L = 1.75 s plus the receiver's buffer).
        The **Player** page shows the title and the artwork.
-5. [ ] Move the Spotify volume slider. **Check**: the SpeakerA's level follows, and the web app's master level moves.
+5. [ ] Move the Spotify volume slider. **Check**: receiver A's level follows, and the web app's master level moves.
 6. [ ] Pause, resume, seek within the track, and skip to the next track. **Check**: no stale audio from before the
        seek or skip, and no audio from the old track after a skip (probe P19's open half). Note how long a seek takes:
-       FLUSH answers from the SpeakerA took 2-30 s in the probes. If seeks feel slow, record the time from the tap to the
+       FLUSH answers from receiver A took 2-30 s in the probes. If seeks feel slow, record the time from the tap to the
        new audio.
 7. [ ] Restart the bridge (or the service). **Check**: the Spotify device comes back without a new handoff (cached
        credentials), and the selected output is reconnected.
@@ -56,33 +57,33 @@ not been run yet. The librespot port on its own was verified end to end with the
 10. [ ] Disconnect the receiver in the web app. **Check**: Spotify keeps playing (the audio is discarded) and nothing
         is heard.
 
-## 2. Listening tests on the SpeakerA
+## 2. Listening tests on receiver A
 
 | # | Run | Listen for | Last known result |
 |---|---|---|---|
-| 2.1 | `airplay2 play tone:3 --to "Test Speaker ABCD" --level 15 --i-know` | A clean 440 Hz tone for 3 s with soft start and end. No clicks, no gaps. | 2026-10-09: passed on the wire twice (659 packets, retransmits answered, exit 0; in the final run the `TEARDOWN` was not answered within 10 s and the connection was closed). Not yet checked by a listener. |
-| 2.2 | `airplay2 play <a music WAV, 16-bit 44.1 kHz stereo> --to "Test Speaker ABCD" --level 20 --i-know` (any length; the CLI warns above 3 s, which is expected with you present) | Correct pitch and speed. No crackle, which would point to an ALAC or byte-order problem. Stereo channels on the correct sides. | Not run. |
-| 2.3 | `airplay2 probe P15 "Test Speaker ABCD" --i-know` (plays 2 s with a random `shk`) | The tone plays. If it is silent, the SpeakerA needs `shk` = the shared secret, so keep D4 as it is. | 2026-10-09: the random key is accepted on the wire and the session runs normally; audibility not checked. |
-| 2.4 | `airplay2 probe P19 "Test Speaker ABCD" --i-know` (tone, 2 s pause, resume, seek-style flush) | No old audio after the resume or after the flush. | 2026-10-09: resume without a new RECORD works on the wire; FLUSH answers took from 2 s to more than 30 s; stale audio not checked by ear. |
-| 2.5 | `airplay2 probe P18 "Test Speaker ABCD" --i-know` | Whether the 2 s gap without sync packets is audible. The 3/6/10 s gaps the probe was designed for are **not possible with the CLI**: probes are capped at 3 s of audio (`PlaybackProbeOptions.MaxAudio`). Lifting the cap for a session with you present is a small change to that constant, not yet made. | 2026-10-09: a 2 s gap had no effect on the wire; audibility and longer gaps not checked. |
-| 2.6 | `airplay2 probe P4 "Test Speaker ABCD" --seconds 60` (no audio). During the 60 s, press the SpeakerA's volume buttons and change the volume in the SpeakerA app. | The probe logs every event-channel message, feedback body and `GET_PARAMETER` change. If only the poll sees the change, the 3 s poll (D10) stays the mechanism. | 2026-10-09: inconclusive; a 10 s run without button presses saw no event-channel message and no change. |
-| 2.7 | During step 1.4, open the SpeakerA's companion app | Does it show title, artist or artwork? DMAP text is answered with `500`, but artwork and progress get `200`. | Not checked. |
+| 2.1 | `airplay2 play tone:3 --to "<receiver>" --level 15 --i-know` | A clean 440 Hz tone for 3 s with soft start and end. No clicks, no gaps. | 2026-10-09: passed on the wire twice (659 packets, retransmits answered, exit 0; in the final run the `TEARDOWN` was not answered within 10 s and the connection was closed). Not yet checked by a listener. |
+| 2.2 | `airplay2 play <a music WAV, 16-bit 44.1 kHz stereo> --to "<receiver>" --level 20 --i-know` (any length; the CLI warns above 3 s, which is expected with you present) | Correct pitch and speed. No crackle, which would point to an ALAC or byte-order problem. Stereo channels on the correct sides. | Not run. |
+| 2.3 | `airplay2 probe P15 "<receiver>" --i-know` (plays 2 s with a random `shk`) | The tone plays. If it is silent, receiver A needs `shk` = the shared secret, so keep D4 as it is. | 2026-10-09: the random key is accepted on the wire and the session runs normally; audibility not checked. |
+| 2.4 | `airplay2 probe P19 "<receiver>" --i-know` (tone, 2 s pause, resume, seek-style flush) | No old audio after the resume or after the flush. | 2026-10-09: resume without a new RECORD works on the wire; FLUSH answers took from 2 s to more than 30 s; stale audio not checked by ear. |
+| 2.5 | `airplay2 probe P18 "<receiver>" --i-know` | Whether the 2 s gap without sync packets is audible. The 3/6/10 s gaps the probe was designed for are **not possible with the CLI**: probes are capped at 3 s of audio (`PlaybackProbeOptions.MaxAudio`). Lifting the cap for a session with you present is a small change to that constant, not yet made. | 2026-10-09: a 2 s gap had no effect on the wire; audibility and longer gaps not checked. |
+| 2.6 | `airplay2 probe P4 "<receiver>" --seconds 60` (no audio). During the 60 s, press receiver A's volume buttons and change the volume in its companion app. | The probe logs every event-channel message, feedback body and `GET_PARAMETER` change. If only the poll sees the change, the 3 s poll (D10) stays the mechanism. | 2026-10-09: inconclusive; a 10 s run without button presses saw no event-channel message and no change. |
+| 2.7 | During step 1.4, open receiver A's companion app | Does it show title, artist or artwork? DMAP text is answered with `500`, but artwork and progress get `200`. | Not checked. |
 
 ## 3. Latency measurement with a microphone (P7, P20)
 
 Needed for `offset_frames` and to confirm the default `L`.
 
-Last known result: not run. The SpeakerA publishes no latency (`Audio-Latency` absent, no `audioLatencies`), so only a
+Last known result: not run. Receiver A publishes no latency (`Audio-Latency` absent, no `audioLatencies`), so only a
 measurement can tell.
 
 1. [ ] Make a click track: a 44.1 kHz/16-bit stereo WAV with a short click every second for 10 s.
-2. [ ] Play it locally (the sender's own speaker) and on the SpeakerA, with one microphone recording both. For example,
-       run `airplay2 play click.wav --to "Test Speaker ABCD" --level 20 --latency 77175 --i-know` and start local
-       playback at the moment of the first sync. Or record only the SpeakerA and compare against the log timestamp of
+2. [ ] Play it locally (the sender's own speaker) and on receiver A, with one microphone recording both. For example,
+       run `airplay2 play click.wav --to "<receiver>" --level 20 --latency 77175 --i-know` and start local
+       playback at the moment of the first sync. Or record only receiver A and compare against the log timestamp of
        the first packet (`Timeline anchored ... due now`) plus L.
 3. [ ] Repeat with `--latency 88200` and `--latency 66150`. P7 also asks about sync flags 4 vs 7; `play` has no switch
        for that, but `airplay2 probe P7 <name> --latency N --sync-flags 4 --i-know` does (3 s cap).
-4. [ ] Record the measured output delay per `L` and whether every `L` played without dropouts. If the SpeakerA lags
+4. [ ] Record the measured output delay per `L` and whether every `L` played without dropouts. If receiver A lags
        or leads a reference by a constant amount, store it as the receiver's offset in the web app (Receivers,
        *Details*, offset; in frames, 44.1 per ms).
 
@@ -92,16 +93,16 @@ The code path is tested with two fake receivers (identical packets, per-receiver
 mid-stream, flush/resume). What a real second receiver adds is audible sync between rooms and the mDNS `gid`
 behaviour.
 
-Last known result: not run with two real receivers. A single SpeakerA kept its own `gid` (`gcgl=0`) during a session
+Last known result: not run with two real receivers. A single receiver A kept its own `gid` (`gcgl=0`) during a session
 with our `groupUUID` (2026-10-09).
 
-1. [ ] Choose the second receiver. Options: another AirPlay 2 speaker you own; the Apple receiver "Hallway" **only with
-       its owner's permission**; the LG TV (it turns on; the owner's call). Check what `airplay2 discover` says about
+1. [ ] Choose the second receiver. Options: another AirPlay 2 speaker you own; receiver C **only with its owner's
+       permission**; receiver B (it turns on; the owner's call). Check what `airplay2 discover` says about
        its pairing mode and timing.
    - A receiver that refuses NTP sessions (answers the NTP session SETUP with 501, or with 200 and no body as
-     shairport-sync does) makes the whole group run under PTP (`AirplaySender.ChooseTransport`). The SpeakerA accepts
+     shairport-sync does) makes the whole group run under PTP (`AirplaySender.ChooseTransport`). Receiver A accepts
      PTP sessions as well (P1 control part, P17), but it has not yet played audio under PTP.
-2. [ ] Web app, **Groups**: create a group with the SpeakerA and the second receiver, set each member's level, then
+2. [ ] Web app, **Groups**: create a group with receiver A and the second receiver, set each member's level, then
        *Activate*. Play music from Spotify.
 3. [ ] **Check**: both play. The rooms are in sync (stand between them: no echo; a click track makes it measurable).
        Moving the master slider scales both levels and keeps their difference. Changing one receiver's level on the
@@ -109,16 +110,16 @@ with our `groupUUID` (2026-10-09).
 4. [ ] Remove a member and add it back while playing. **Check**: it rejoins in sync, with no catch-up burst (D3).
 5. [ ] Run `airplay2 discover` during the session. **Check P12**: does either receiver publish our `groupUUID` as its
        `gid`, and is `gcgl` 0?
-6. [ ] P20, only if the Apple receiver is allowed: microphone measurement (section 3) with both, and store the HomePod's
+6. [ ] P20, only if receiver C is allowed: microphone measurement (section 3) with both, and store receiver C's
        `offset_frames` if the two differ.
 
 ## 5. PIN pairing on a receiver that requires it (P6 for the TV)
 
 The PIN flow is tested against the fake receiver and against shairport-sync with `--password`. Not tested yet: an
-Apple-SDK receiver that shows a PIN on its screen. The LG TV is the one receiver on the LAN that requires a PIN
+Apple-SDK receiver that shows a PIN on its screen. Receiver B is the one receiver on the LAN that requires a PIN
 (flag bit 9). It wakes when contacted, so this step is the owner's decision.
 
-Last known result: not run on a real PIN receiver. P6 on the SpeakerA (2026-10-09): M1 with method 0 and with method 1
+Last known result: not run on a real PIN receiver. P6 on receiver A (2026-10-09): M1 with method 0 and with method 1
 are both accepted.
 
 1. [ ] Web app, **Receivers**: the receiver shows "PIN needed". Press *Pair with PIN* (or *Connect*, which raises a
@@ -169,11 +170,12 @@ Windows Service reboot test and the macvlan deployment have not been recorded.
       Spotify sees the device, and the output reconnects. Then `-Uninstall` removes the service and its firewall
       rules.
 - [ ] Container on the Kubernetes cluster with a macvlan interface (README, "In a container"). **Check**: the bridge
-      discovers the receivers, the SpeakerA connects, and Spotify Zeroconf works through the macvlan interface.
+      discovers the receivers, receiver A connects, and Spotify Zeroconf works through the macvlan interface.
 
 ## 8. After the checks
 
-- [ ] Put the SpeakerA's volume back.
+- [ ] Put receiver A's volume back.
 - [ ] Update the results above and `SPEC.md` section 4. If a result changes a default (for example, an offset for a
-      model, or PTP for a second model), add it to `src/Airplay2.Sender/Session/KnownReceiverQuirks.cs`, and update
+      receiver, or PTP for a second receiver), add a rule keyed on its TXT `srcvers` (and `features` if needed) to
+      `src/Airplay2.Sender/Session/KnownReceiverQuirks.cs`, and update
       the "Resulting defaults" table in `SPEC.md` section 4.2 and `QuirkDefaultsTests` along with it.

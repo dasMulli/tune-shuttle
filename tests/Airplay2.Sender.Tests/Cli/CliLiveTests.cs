@@ -6,17 +6,17 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Cli;
 
 /// <summary>
-/// One receiver through the CLI against the Test Speaker ABCD named by <c>AIRPLAY_LIVE_RECEIVER</c> (<see cref="LiveTarget"/>;
+/// One receiver through the CLI against the live receiver named by <c>AIRPLAY_LIVE_RECEIVER</c> (<see cref="LiveTarget"/>;
 /// no default): <c>airplay2 play tone:3 --to "&lt;name&gt;" --level 15 --i-know</c> with real mDNS discovery, transient pairing and the D5 start-up (docs/DEVELOPMENT.md, "Live-device rules": a
 /// 3-second quiet tone at -24 dBFS, level 15). Returns early unless <c>AIRPLAY_LIVE=1</c> and <c>AIRPLAY_AUDIO_I_KNOW=1</c>;
 /// the complete Debug log goes to <c>artifacts/live/&lt;date&gt;-sender-M1-play.log</c>. Run alone:
-/// <c>$env:AIRPLAY_LIVE=1; $env:AIRPLAY_AUDIO_I_KNOW=1; dotnet test --filter "FullyQualifiedName~SpeakerA_sender_M1"</c>.
+/// <c>$env:AIRPLAY_LIVE=1; $env:AIRPLAY_AUDIO_I_KNOW=1; dotnet test --filter "FullyQualifiedName~Live_sender_M1"</c>.
 /// </summary>
 public sealed class CliLiveTests(ITestOutputHelper output)
 {
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task SpeakerA_sender_M1_play_tone_3s()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Live_sender_M1_play_tone_3s()
     {
         if (Environment.GetEnvironmentVariable("AIRPLAY_LIVE") != "1")
         {
@@ -45,7 +45,7 @@ public sealed class CliLiveTests(ITestOutputHelper output)
             CreatePairingStore = _ => new InMemoryPairingStore(),
         };
 
-        // Only the Test Speaker ABCD (live-device rules); a 3-second tone at level 15.
+        // Only the live receiver (AIRPLAY_LIVE_RECEIVER, live-device rules); a 3-second tone at level 15.
         var exit = await Program.RunAsync(["play", "tone:3", "--to", target, "--level", "15", "--i-know", "--log-file", logFile], services, CancellationToken.None);
         output.WriteLine(stdout.ToString());
         output.WriteLine(stderr.ToString());

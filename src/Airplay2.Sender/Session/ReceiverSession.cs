@@ -422,7 +422,7 @@ public sealed class ReceiverSession : IReceiverSession
     /// <inheritdoc />
     /// <remarks>
     /// Metadata is best effort (SPEC-control.md 5: a receiver that does not want an item drops it): a non-2xx answer is
-    /// logged at Warning and not thrown. The Test Speaker ABCD answers DMAP with 500, with and without audio and sometimes
+    /// logged at Warning and not thrown. The srcvers-366 speaker answers DMAP with 500, with and without audio and sometimes
     /// only after ~10 s (probe P9, 2026-10-09; SPEC.md 4.2). Since the control connection carries one request at a time, a
     /// volume change or FLUSH queued behind such a request waits that long, so after the first non-2xx answer to DMAP this
     /// session sends no more DMAP text (logged once; <see cref="DmapRefused"/>). Artwork and progress continue. Transport
@@ -447,7 +447,7 @@ public sealed class ReceiverSession : IReceiverSession
 
     /// <summary>
     /// True after the receiver answered DMAP text with a non-2xx status on this session; <see cref="SetMetadataAsync"/>
-    /// then sends nothing (SPEC.md 4.2, the SpeakerA's DMAP 500).
+    /// then sends nothing (SPEC.md 4.2, the srcvers-366 speaker's DMAP 500).
     /// </summary>
     public bool DmapRefused => Volatile.Read(ref _dmapRefused) != 0;
 

@@ -37,10 +37,10 @@ public sealed record FakeReceiverOptions
     /// </summary>
     public string? DeviceId { get; init; }
 
-    /// <summary>The 64-bit features word (<c>/info</c> <c>features</c>, TXT <c>features</c>/<c>ft</c>). Default: the SpeakerA's <c>0x1C340445F8A00</c> (bit 48 transient pairing set).</summary>
+    /// <summary>The 64-bit features word (<c>/info</c> <c>features</c>, TXT <c>features</c>/<c>ft</c>). Default: receiver A's <c>0x1C340445F8A00</c> (a third-party AirPlay 2 speaker, srcvers 366.0) (bit 48 transient pairing set).</summary>
     public ulong Features { get; init; } = 0x1C340445F8A00UL;
 
-    /// <summary>The status flags (<c>/info</c> <c>statusFlags</c>, TXT <c>flags</c>/<c>sf</c>). Default: the SpeakerA's <c>0x404</c> (no PIN flag).</summary>
+    /// <summary>The status flags (<c>/info</c> <c>statusFlags</c>, TXT <c>flags</c>/<c>sf</c>). Default: receiver A's <c>0x404</c> (no PIN flag).</summary>
     public uint StatusFlags { get; init; } = 0x404;
 
     /// <summary>Accept transient pair-setup (feature bit 48). When false, transient M1 is answered with 470.</summary>
@@ -90,7 +90,7 @@ public sealed record FakeReceiverOptions
     /// <summary>Write <c>CSeq</c> on event-channel requests (Apple TV: <c>CSeq: 0</c>; shairport-sync: none, SPEC-control.md 4.3).</summary>
     public bool EventRequestsCarryCSeq { get; init; }
 
-    /// <summary>Include <c>initialVolume</c> in GET /info (null: omit it, as the SpeakerA does unauthenticated). Also the starting volume.</summary>
+    /// <summary>Include <c>initialVolume</c> in GET /info (null: omit it, as receiver A does unauthenticated). Also the starting volume.</summary>
     public double? InitialVolume { get; init; } = -20.0;
 
     /// <summary>The shape of the <c>GET_PARAMETER volume</c> answer.</summary>
@@ -122,7 +122,7 @@ public sealed record FakeReceiverOptions
     public bool SendTimingRequests { get; init; } = true;
 
     /// <summary>
-    /// The status of the answer to <c>SET_PARAMETER</c> with DMAP text (200 by default; the Test Speaker ABCD answers 500,
+    /// The status of the answer to <c>SET_PARAMETER</c> with DMAP text (200 by default; the srcvers-366 speaker answers 500,
     /// SPEC.md P9). The item is still recorded as a <see cref="FakeReceiverEvent.Metadata"/> event.
     /// </summary>
     public int DmapStatus { get; init; } = 200;
@@ -130,10 +130,10 @@ public sealed record FakeReceiverOptions
     /// <summary>Close the event channel when a request is not answered within this time.</summary>
     public TimeSpan EventAnswerTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
-    /// <summary>The <c>Server</c> header on every response (the SpeakerA's value by default).</summary>
+    /// <summary>The <c>Server</c> header on every response (receiver A's value by default).</summary>
     public string ServerHeader { get; init; } = "AirTunes/366.0";
 
-    /// <summary>The /info plist to serve; defaults to the recorded SpeakerA response with the name replaced.</summary>
+    /// <summary>The /info plist to serve; defaults to the recorded receiver A response with the name replaced.</summary>
     public PlistDictionary? InfoPlist { get; init; }
 
     /// <summary>Logger.</summary>
@@ -244,7 +244,7 @@ public abstract record FakeReceiverEvent
 /// </remarks>
 public sealed partial class FakeReceiver : IAsyncDisposable
 {
-    private const string SpeakerAInfoResource = "Airplay2.FakeReceiver.SpeakerA-info-response.bplist";
+    private const string SpeakerAInfoResource = "Airplay2.FakeReceiver.info-response.bplist";
 
     private static readonly Lazy<byte[]> SpeakerAInfo = new(LoadSpeakerAInfo);
 
@@ -397,7 +397,7 @@ public sealed partial class FakeReceiver : IAsyncDisposable
         var fv = "p20." + (info.GetString("firmwareRevision") ?? "1.0");
         var pk = Convert.ToHexStringLower(PublicKey);
 
-        // The SpeakerA's records (docs/airplay2/probes/browse.json, SPEC-control.md 1.7) with this receiver's identity.
+        // Receiver A's records (docs/airplay2/probes/browse.json, SPEC-control.md 1.7) with this receiver's identity.
         IReadOnlyList<string> airplay =
         [
             "acl=0",
@@ -537,7 +537,7 @@ public sealed partial class FakeReceiver : IAsyncDisposable
     internal ILogger Logger => _logger;
 
     /// <summary>
-    /// The <c>/info</c> dictionary: the recorded SpeakerA plist (SPEC-control.md 1.8) with <c>name</c>, <c>deviceID</c>,
+    /// The <c>/info</c> dictionary: the recorded receiver A plist (SPEC-control.md 1.8) with <c>name</c>, <c>deviceID</c>,
     /// <c>pi</c>, <c>features</c> and <c>statusFlags</c> replaced, or <see cref="FakeReceiverOptions.InfoPlist"/> as given;
     /// plus <c>initialVolume</c> (shairport adds the current volume [sps:rtsp.c:1137]) and, for the stage-1 request and
     /// the event channel, <c>txtAirPlay</c> (Pascal strings of the TXT record [sps:rtsp.c:962-993, 999-1104]).

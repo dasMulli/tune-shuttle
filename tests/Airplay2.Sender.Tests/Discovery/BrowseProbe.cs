@@ -16,7 +16,7 @@ internal static class BrowseProbe
 
     public const string SpeakerAAirplay = "Test Speaker ABCD._airplay._tcp.local";
     public const string SpeakerARaop = "021A2B3C4D5E@Test Speaker ABCD._raop._tcp.local";
-    public const string SpeakerAHost = "speakera-021a2b3c4d5d.local";
+    public const string SpeakerAHost = "speaker-021a2b3c4d5d.local";
     public const string SpeakerAId = "02:1A:2B:3C:4D:5E";
     public const string LgId = "02:4C:47:00:00:01";
 

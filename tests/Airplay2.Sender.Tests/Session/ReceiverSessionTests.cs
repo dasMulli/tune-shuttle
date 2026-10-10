@@ -495,7 +495,7 @@ public sealed class ReceiverSessionTests
     [Fact]
     public async Task A_receiver_that_refuses_dmap_gets_it_once_per_session()
     {
-        // The SpeakerA's DMAP 500 (SPEC.md P9, 4.2): one refusal, then only artwork and progress on this session.
+        // The srcvers-366 speaker's DMAP 500 (SPEC.md P9, 4.2): one refusal, then only artwork and progress on this session.
         await using var fake = await StartAsync(Quiet(new FakeReceiverOptions { DmapStatus = 500 }));
         await using var session = await ConnectAndPairAsync(fake);
         await session.SetupSessionAsync(NtpSession(), None);
@@ -524,16 +524,17 @@ public sealed class ReceiverSessionTests
     }
 
     [Fact]
-    public async Task Known_quirks_are_looked_up_by_model()
+    public async Task Known_quirks_are_looked_up_by_srcvers()
     {
         await using var fake = await StartAsync(Quiet(new FakeReceiverOptions { Name = "other" }));
         var receiver = Describe(fake);
-        Assert.Equal("Test Speaker ABCD", receiver.Airplay.Model);
-        Assert.Same(KnownReceiverQuirks.For("Test Speaker ABCD"), ReceiverQuirks.ForReceiver(receiver));
+        Assert.Equal("366.0", receiver.Airplay.SourceVersion);
+        Assert.Same(KnownReceiverQuirks.SpeakerSrcvers366, ReceiverQuirks.ForReceiver(receiver));
         Assert.Equal(TimingProtocol.Ntp, ReceiverQuirks.ForReceiver(receiver).TimingProtocol);
-        Assert.Equal(TimingProtocol.Ptp, KnownReceiverQuirks.For("ShairportSync").TimingProtocol);
-        Assert.Same(ReceiverQuirks.Default, KnownReceiverQuirks.For("Unknown speaker"));
-        Assert.Same(ReceiverQuirks.Default, KnownReceiverQuirks.For(null));
+        Assert.Same(KnownReceiverQuirks.SpeakerSrcvers366, KnownReceiverQuirks.For("Any model", "366.0"));
+        Assert.Equal(TimingProtocol.Ptp, KnownReceiverQuirks.For("ShairportSync", "366.0").TimingProtocol);
+        Assert.Same(ReceiverQuirks.Default, KnownReceiverQuirks.For("Unknown speaker", "377.40.00"));
+        Assert.Same(ReceiverQuirks.Default, KnownReceiverQuirks.For(null, null));
     }
 
     private static async Task<ReceiverEventMessage> NextMessageAsync(EventChannel channel)

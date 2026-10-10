@@ -21,5 +21,5 @@ git -C reference/librespot checkout e023adbbf017ae1fc10d01531dbe50c409786f2d
 | owntone-server | https://github.com/owntone/owntone-server.git | 4fa5dcc (2026-09-24) | GPL-2.0 | Read for understanding multi-receiver sync only. Do not transcribe code from it. |
 | alac | https://github.com/macosforge/alac.git | c38887c (2016-05-11) | Apache-2.0 | ALAC encoder to port |
 
-Test receivers on the LAN (2026-10-09): "Test Speaker ABCD" (AirPlay 2, srcvers 366.0, features 0x445F8A00,0x1C340)
-and an LG TV TV "Living room TV" (AirPlay 2, srcvers 377.40.00). Agents must not target the TV: AirPlay wakes it.
+Test receivers on the LAN (2026-10-09): a third-party AirPlay 2 speaker (srcvers 366.0, features 0x445F8A00,0x1C340)
+and a TV receiver that requires PIN pairing (srcvers 377.40.00). Agents must not target the TV: AirPlay wakes it.

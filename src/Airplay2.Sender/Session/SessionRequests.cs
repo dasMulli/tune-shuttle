@@ -35,7 +35,7 @@ internal static class SessionRequests
     /// <summary>
     /// <c>POST /auth-setup</c> (SPEC-control.md 3.10): <c>application/octet-stream</c>, 33 bytes = <c>0x01</c> followed by
     /// a 32-byte X25519 public key. Sent with the D6 protocol token <c>RTSP/1.0</c> (pyatv uses <c>HTTP/1.1</c> here
-    /// [pyatv:pyatv/support/rtsp.py:117-123]; the SpeakerA echoes either token).
+    /// [pyatv:pyatv/support/rtsp.py:117-123]; the srcvers-366 speaker echoes either token).
     /// </summary>
     public static RtspRequest AuthSetup(ReadOnlySpan<byte> publicKey)
     {

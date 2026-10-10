@@ -478,7 +478,7 @@ public static class PtpMessages
     /// Delay_Resp (SPEC-audio.md 4.4): flags 0x0608, the requester's sequence id, <c>receiveTimestamp</c> = when its
     /// Delay_Req arrived, <c>requestingPortIdentity</c> = its <c>sourcePortIdentity</c>. Domain and correction field are 0
     /// as libairptp writes them (<c>ptp_msg_handle.c:236-244, 424-436</c>) rather than the request's (IEEE 1588-2008 11.3.2
-    /// would echo its correction field): the subset nqptp and Apple receivers demonstrably accept; the SpeakerA sends 0 for
+    /// would echo its correction field): the subset nqptp and Apple receivers demonstrably accept; the srcvers-366 speaker sends 0 for
     /// both anyway. Returns <see cref="DelayRespSize"/>.
     /// </summary>
     public static int WriteDelayResp(Span<byte> destination, ulong clockId, in PtpHeader request, PtpTimestamp receiveTimestamp, sbyte logInterval = DelayRespLogInterval)

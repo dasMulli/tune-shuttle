@@ -52,7 +52,7 @@ shairport-sync receiver.
 
 ```powershell
 dotnet build TuneShuttle.sln
-dotnet test TuneShuttle.sln --filter "Category!=SpeakerALive&Category!=ShairportLive"
+dotnet test TuneShuttle.sln --filter "Category!=ReceiverLive&Category!=ShairportLive"
 dotnet test tests/Bridge.Tests --filter FullyQualifiedName~Bridge.Tests.Web     # only the web app tests
 ```
 
@@ -65,7 +65,7 @@ Test categories:
 |---|---|---|
 | (none) | everything offline: unit tests, the in-process fake receiver, loopback sockets, `WebApplicationFactory`, bUnit | always |
 | `Timing` | the 30 s pacer accuracy run | always; excluded with `-ExcludeTimingTests` |
-| `SpeakerALive` | against a Test Speaker ABCD on the LAN | `AIRPLAY_LIVE=1` plus the target (`AIRPLAY_LIVE_RECEIVER` or `AIRPLAY_LIVE_RECEIVER_HOST`, see "Live tests"); audio additionally `AIRPLAY_AUDIO_I_KNOW=1` |
+| `ReceiverLive` | against the live receiver (`AIRPLAY_LIVE_RECEIVER`) on the LAN | `AIRPLAY_LIVE=1` plus the target (`AIRPLAY_LIVE_RECEIVER` or `AIRPLAY_LIVE_RECEIVER_HOST`, see "Live tests"); audio additionally `AIRPLAY_AUDIO_I_KNOW=1` |
 | `ShairportLive` | against shairport-sync in Docker | `AIRPLAY_LIVE=1`; set by the VM scripts |
 
 A live test returns early unless its gate is set, so a plain `dotnet test` never contacts a receiver even without the
@@ -120,7 +120,7 @@ credentials from `.local/spotify-dev-app.json`, when those files exist.
 
 Rules for new material: addresses in docs and tests come from 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 and
 2001:db8::/32 (loopback where the test is about loopback); device ids are locally administered (`02:...`); keys are
-test keys; receiver names are neutral ("Living room TV", "Kitchen", "Hallway"). Anonymize a new capture before
+test keys; receiver names are neutral ("Living room TV", "Kitchen", "Bedroom"), and real product or model names stay out: describe a receiver by its TXT facts (`srcvers`, `features`). Anonymize a new capture before
 committing it, in binary files with same-length replacements so offsets stay valid (SPEC-control.md 1.7).
 
 ### Running the bridge from the repository
@@ -139,16 +139,16 @@ serves it too.
 
 ```powershell
 $env:AIRPLAY_LIVE=1
-$env:AIRPLAY_LIVE_RECEIVER="Test Speaker ABCD"   # the receiver's mDNS name or device id, as `airplay2 discover` shows it
+$env:AIRPLAY_LIVE_RECEIVER="<receiver name>"      # the receiver's mDNS name or device id, as `airplay2 discover` shows it
 $env:AIRPLAY_LIVE_RECEIVER_HOST="192.0.2.26"     # its IP address (example value: use your receiver's)
-dotnet test --filter Category=SpeakerALive                                            # control-plane tests, no audio
-$env:AIRPLAY_AUDIO_I_KNOW=1; dotnet test --filter "FullyQualifiedName~SpeakerA_sender_M1"
+dotnet test --filter Category=ReceiverLive                                            # control-plane tests, no audio
+$env:AIRPLAY_AUDIO_I_KNOW=1; dotnet test --filter "FullyQualifiedName~Live_sender_M1"
 ./docker/shairport-sync/run-live-tests-in-vm.ps1 -Filter "Category=ShairportLive&FullyQualifiedName!~PtpLiveTests&FullyQualifiedName!~BufferedLiveTests"
 ./docker/shairport-sync/run-ptp-live-tests-in-vm.ps1                                # PtpLiveTests
 ./docker/shairport-sync/run-ptp-live-tests-in-vm.ps1 -Filter "FullyQualifiedName~BufferedLiveTests&Category=ShairportLive"
 ```
 
-The SpeakerALive tests have no built-in target: nothing in the repository names or addresses a particular receiver.
+The ReceiverLive tests have no built-in target: nothing in the repository names or addresses a particular receiver.
 They read it from the environment and return early (reported as passed, with the reason in the output) when the variable
 they need is unset (`tests/Airplay2.Sender.Tests/LiveTarget.cs`):
 
@@ -158,23 +158,24 @@ they need is unset (`tests/Airplay2.Sender.Tests/LiveTarget.cs`):
 | `AIRPLAY_LIVE_RECEIVER_HOST` | the tests that connect directly (RTSP, pairing, session, playback, PTP, buffered) | its IPv4 or IPv6 address |
 | `AIRPLAY_LIVE_RECEIVER_PORT` | the same | its RTSP port; default 7000 |
 
-The receiver must be a Test Speaker ABCD (the direct-connect tests use its TXT record and quirks, and `RtspLiveTests`
+The live receiver (`AIRPLAY_LIVE_RECEIVER`) must be a third-party AirPlay 2 speaker (srcvers 366.0, features
+0x445F8A00,0x1C340) like the one the vectors were captured from (the direct-connect tests use its TXT record and quirks, and `RtspLiveTests`
 compares its `GET /info` with the stored vectors). Each run writes its decrypted wire log to `artifacts/live/`. The CLI's `probe` command runs the protocol probes of
-`SPEC.md` section 4 one at a time (`airplay2 probe P3 "Test Speaker ABCD"`) and appends its log there too.
+`SPEC.md` section 4 one at a time (`airplay2 probe P3 "<receiver name>"`) and appends its log there too.
 
 ### Live-device rules
 
 AirPlay wakes receivers, and they play at their current volume. These rules hold for every live run, by a person or
 an agent:
 
-- **Allowed:** the Test Speaker ABCD and the shairport-sync container. mDNS browsing and unauthenticated `GET /info`
+- **Allowed:** the live receiver (`AIRPLAY_LIVE_RECEIVER`, the srcvers-366 speaker) and the shairport-sync container. mDNS browsing and unauthenticated `GET /info`
   are fine at any time; pairing, session `SETUP`/`TEARDOWN` and control-plane probes without audio are fine too.
-- **Never:** the LG TV "Living room TV" (AirPlay turns it on), any receiver not listed here, and the Apple receiver
-  "Hallway" without its owner's go-ahead. No PIN pairing attempts on devices that show a PIN.
+- **Never:** a TV receiver (AirPlay turns it on), any receiver not listed here, and an Apple receiver without its
+  owner's go-ahead. No PIN pairing attempts on devices that show a PIN.
 - **Audio** only as a 3-second quiet test tone (440 Hz, -24 dBFS) at a level of at most 20 (15 is the default), and
   only with the explicit acknowledgement: `--i-know` for the CLI (without it `play` and the audio probes exit with
   code 2 before opening a socket), `AIRPLAY_AUDIO_I_KNOW=1` for the tests. The probes enforce the 3 s and level 20
-  caps (`PlaybackProbeOptions`); `play` warns above them. Music and long sessions only with Martin present.
+  caps (`PlaybackProbeOptions`); `play` warns above them. Music and long sessions only with the maintainer present.
 - Every live run logs the complete wire exchange to `artifacts/live/`. Record outcomes in `SPEC.md` section 4.
 
 The checks that need a person in the room are in [`airplay2/MANUAL-TESTS.md`](airplay2/MANUAL-TESTS.md).
@@ -195,7 +196,7 @@ The checks that need a person in the room are in [`airplay2/MANUAL-TESTS.md`](ai
   silently; transport failures surface as `Closed` tasks on connections and `Lost` states on group members.
 - **Threading**: one owner per socket; state machines guard their state with a `SemaphoreSlim` or a single consumer
   loop; hand-offs between threads go through channels.
-- **Frame size**: encrypted HAP frames we send carry at most 1024 bytes of plaintext (a `const`, the SpeakerA closes the
+- **Frame size**: encrypted HAP frames we send carry at most 1024 bytes of plaintext (a `const`, the srcvers-366 speaker closes the
   connection otherwise); every reader accepts frames up to 65 535 bytes.
 - **Tests**: xunit 2.9.3, NSubstitute for interface doubles, bUnit 2.11.3 for components. Vectors come from
   `docs/airplay2/test-vectors` (linked into the test output as `TestVectors/`); loopback sockets on `127.0.0.1` with
@@ -213,7 +214,7 @@ The checks that need a person in the room are in [`airplay2/MANUAL-TESTS.md`](ai
 **The fake receiver** ([`tests/Airplay2.FakeReceiver`](../tests/Airplay2.FakeReceiver)) is an in-process AirPlay 2
 receiver: pairing (through the same `HapAccessoryPairing` code the tests use), the encrypted control channel, every
 RTSP request the sender makes, the event channel, RTP decryption and ALAC decoding, timing requests, retransmit
-requests and a minimal PTP slave. It serves the SpeakerA's recorded `/info` and has switches for the receiver
+requests and a minimal PTP slave. It serves the srcvers-366 speaker's recorded `/info` and has switches for the receiver
 behaviours seen live (NTP refused, no `streamID`, DMAP refused, both `GET_PARAMETER` shapes, large event frames). It
 is the primary target of the unit and end-to-end tests.
 

@@ -27,7 +27,7 @@ namespace Airplay2.Sender.Tests.Streams;
 /// -e SPS_HOST=172.17.0.1 -w /repo mcr.microsoft.com/dotnet/sdk:10.0 dotnet test tests/Airplay2.Sender.Tests --filter
 /// "FullyQualifiedName~PtpLiveTests&amp;Category=ShairportLive"</c> (default bridge network; 172.17.0.1 is the VM side of
 /// the bridge where shairport-sync listens). With <c>--net host</c> set <c>PTP_EVENT_PORT=0 PTP_GENERAL_PORT=0</c>.</item>
-/// <item><b>SpeakerALive</b>: probe P17 during a P1-PTP control probe on the Test Speaker ABCD (pairing, PTP session SETUP,
+/// <item><b>ReceiverLive</b>: probe P17 during a P1-PTP control probe on the live receiver (AIRPLAY_LIVE_RECEIVER_HOST; pairing, PTP session SETUP,
 /// event channel, RECORD, SETPEERS, stream SETUP, <b>no audio</b>, TEARDOWN), with our grandmaster on 319/320.</item>
 /// </list>
 /// </summary>
@@ -36,7 +36,7 @@ public sealed class PtpLiveTests(ITestOutputHelper output)
     private static readonly string[] SpeakerAAirplay =
     [
         "acl=0", "deviceid=02:1A:2B:3C:4D:5E", "features=0x445F8A00,0x1C340", "rsf=0x0", "fv=p20.1.1.36.0x8b4c480", "flags=0x404",
-        "model=Test Speaker ABCD", "manufacturer=Lautsprecher SpeakerA GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
+        "model=Test Speaker ABCD", "manufacturer=Example Audio Maker GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
         "protovers=1.1", "srcvers=366.0", "pi=02:1A:2B:3C:4D:5E", "gid=02:1A:2B:3C:4D:5E", "gcgl=0",
         "pk=d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
     ];
@@ -198,12 +198,12 @@ public sealed class PtpLiveTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// P17 during a P1-PTP control probe on the SpeakerA (SPEC.md P17, A-Q8): which PTP messages does its slave send us, at what
+    /// P17 during a P1-PTP control probe on the live receiver (SPEC.md P17, A-Q8): which PTP messages does its slave send us, at what
     /// rate, and does it need Delay_Resp? No audio is sent (docs/DEVELOPMENT.md, "Live-device rules": pairing, SETUP, event channel, TEARDOWN).
     /// </summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task SpeakerA_P17_ptp_capture_during_ptp_control_probe()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Live_P17_ptp_capture_during_ptp_control_probe()
     {
         if (!Live())
         {

@@ -53,7 +53,7 @@ public interface IRtspConnection : IAsyncDisposable
 /// <summary>Connection options.</summary>
 public sealed record RtspConnectionOptions
 {
-    /// <summary>TCP connect timeout. The SpeakerA needed up to 25 s on Wi-Fi once (SPEC-audio.md appendix A).</summary>
+    /// <summary>TCP connect timeout. The srcvers-366 speaker needed up to 25 s on Wi-Fi once (SPEC-audio.md appendix A).</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(25);
 
     /// <summary>

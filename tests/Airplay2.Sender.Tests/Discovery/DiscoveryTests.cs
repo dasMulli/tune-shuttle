@@ -12,7 +12,7 @@ public class DiscoveryTests
     private static readonly string[] SpeakerAAirplay =
     [
         "acl=0", "deviceid=02:1A:2B:3C:4D:5E", "features=0x445F8A00,0x1C340", "rsf=0x0", "fv=p20.1.1.36.0x8b4c480", "flags=0x404",
-        "model=Test Speaker ABCD", "manufacturer=Lautsprecher SpeakerA GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
+        "model=Test Speaker ABCD", "manufacturer=Example Audio Maker GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
         "protovers=1.1", "srcvers=366.0", "pi=02:1A:2B:3C:4D:5E", "gid=02:1A:2B:3C:4D:5E", "gcgl=0",
         "pk=d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
     ];
@@ -27,7 +27,7 @@ public class DiscoveryTests
     [
         "features=0x7F8AD0,0x38BCF46", "flags=0x644", "srcvers=377.40.00", "rsf=0x3", "fex=0Ip/AEbPiwNACA", "at=0x1",
         "pi=02:4C:47:00:00:01", "psi=00000000-0000-0000-0000-024c47000001", "gid=00000000-0000-0000-0000-024c47000001",
-        "model=TVMODEL0000.DEUQDJP", "pk=3d4017c300000000000000000000000000000000000000000000000000000f33e",
+        "model=TV-65.EXAMPLE", "pk=3d4017c300000000000000000000000000000000000000000000000000000f33e",
     ];
 
     [Fact]

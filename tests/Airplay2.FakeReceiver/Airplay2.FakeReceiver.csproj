@@ -16,8 +16,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The SpeakerA's recorded GET /info body (SPEC-control.md 1.8), served with the fake's name and identity substituted. -->
-    <EmbeddedResource Include="..\..\docs\airplay2\test-vectors\SpeakerA-info-response.bplist" LogicalName="Airplay2.FakeReceiver.SpeakerA-info-response.bplist" />
+    <!-- The recorded GET /info body of receiver A (a third-party AirPlay 2 speaker, srcvers 366.0) (SPEC-control.md 1.8), served with the fake's name and identity substituted. -->
+    <EmbeddedResource Include="..\..\docs\airplay2\test-vectors\info-response.bplist" LogicalName="Airplay2.FakeReceiver.info-response.bplist" />
   </ItemGroup>
 
 </Project>

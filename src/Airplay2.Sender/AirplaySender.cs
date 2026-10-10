@@ -41,13 +41,13 @@ public sealed record AirplaySenderOptions
     public IReadOnlyDictionary<string, ReceiverQuirks> Quirks { get; init; } = new Dictionary<string, ReceiverQuirks>();
 
     /// <summary>
-    /// The timing protocol for receivers whose quirks do not name one (SPEC.md D1: NTP; the SpeakerA is NTP and
+    /// The timing protocol for receivers whose quirks do not name one (SPEC.md D1: NTP; the srcvers-366 speaker is NTP and
     /// shairport-sync PTP by <see cref="ReceiverQuirks.ForReceiver"/>, probe P1).
     /// </summary>
     public TimingProtocol DefaultTimingProtocol { get; init; } = TimingProtocol.Ntp;
 
     /// <summary>
-    /// Control-connection options: 25 s connect, and 30 s per request instead of D6's 10 s, because the Test Speaker ABCD
+    /// Control-connection options: 25 s connect, and 30 s per request instead of D6's 10 s, because the srcvers-366 speaker
     /// on Wi-Fi answered pair-setup and RECORD after up to ~10 s (SPEC-control.md 2.1 note, SPEC.md section 4 "Timeouts").
     /// </summary>
     public RtspConnectionOptions Connection { get; init; } = new() { RequestTimeout = TimeSpan.FromSeconds(30) };

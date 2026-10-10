@@ -86,18 +86,18 @@ internal sealed class LoopbackPair : IAsyncDisposable
     }
 }
 
-/// <summary>Test data: the captured SpeakerA exchange.</summary>
+/// <summary>Test data: the captured exchange with receiver A (a third-party AirPlay 2 speaker, srcvers 366.0).</summary>
 internal static class SpeakerACapture
 {
     public static string Vector(string name) => Path.Combine(AppContext.BaseDirectory, "TestVectors", name);
 
     /// <summary>The raw 525-byte GET /info body.</summary>
-    public static byte[] InfoBody => File.ReadAllBytes(Vector("SpeakerA-info-response.bplist"));
+    public static byte[] InfoBody => File.ReadAllBytes(Vector("info-response.bplist"));
 
     /// <summary>The raw 909-byte stage-1 GET /info body.</summary>
-    public static byte[] Stage1InfoBody => File.ReadAllBytes(Vector("SpeakerA-info-response-stage1.bplist"));
+    public static byte[] Stage1InfoBody => File.ReadAllBytes(Vector("info-response-stage1.bplist"));
 
-    /// <summary>The identity the probe used (DACP-ID / Active-Remote in probes/get_info_SpeakerA.txt).</summary>
+    /// <summary>The identity the probe used (DACP-ID / Active-Remote in probes/get_info_speaker.txt).</summary>
     public static RtspClientIdentity ProbeIdentity => new("F27C859F90C330F8", 3046643544, RtspClientIdentity.DefaultUserAgent);
 
     /// <summary>
@@ -122,7 +122,7 @@ internal static class SpeakerACapture
     }
 
     /// <summary>The repository root (for artifacts/live logs).</summary>
-    public static string RepositoryRoot => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(ProbeFile("get_info_SpeakerA.txt"))!, "..", "..", ".."));
+    public static string RepositoryRoot => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(ProbeFile("get_info_speaker.txt"))!, "..", "..", ".."));
 
     /// <summary>
     /// Extracts a section of the probe capture: the lines after <c>--- request ---</c> or <c>--- response head ---</c> of
@@ -132,7 +132,7 @@ internal static class SpeakerACapture
     {
         // The capture printed the raw CRLF heads with Python's text-mode stdout on Windows, so the file has CR CR LF
         // (or CR LF / LF after a checkout with other settings): split on LF and drop every trailing CR.
-        var lines = File.ReadAllText(ProbeFile("get_info_SpeakerA.txt")).Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+        var lines = File.ReadAllText(ProbeFile("get_info_speaker.txt")).Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
         var start = Array.FindIndex(lines, l => l.StartsWith($"Variant {variant}:", StringComparison.Ordinal));
         Assert.True(start >= 0, $"variant {variant} not in the capture");
         var marker = Array.FindIndex(lines, start, l => l == $"--- {section} ---");

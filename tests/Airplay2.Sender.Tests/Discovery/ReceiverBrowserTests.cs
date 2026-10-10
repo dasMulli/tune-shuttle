@@ -50,23 +50,23 @@ public class ReceiverBrowserTests
         Assert.Equal(2, receivers.Count);
         Assert.DoesNotContain(receivers.SelectMany(r => r.Addresses), a => a.Equals(BrowseProbe.Reflector.Address));
 
-        var SpeakerA = receivers.Single(r => r.Id == BrowseProbe.SpeakerAId);
-        Assert.Equal("Test Speaker ABCD", SpeakerA.Name);
-        Assert.Equal(7000, SpeakerA.Port);
-        Assert.Equal(IPAddress.Parse("192.0.2.26"), SpeakerA.Addresses[0]);
-        Assert.Equal(IPAddress.Parse("192.0.2.26"), SpeakerA.AddressOf(AddressFamily.InterNetwork));
-        Assert.Equal(3, SpeakerA.Addresses.Count);
-        Assert.Equal(IPAddress.Parse("2001:db8:0:30:1a:2bff:fe3c:4d5e"), SpeakerA.Addresses[1]);
-        Assert.True(SpeakerA.Addresses[2].IsIPv6LinkLocal);
-        Assert.Equal(InterfaceIndex, SpeakerA.Addresses[2].ScopeId); // link-local scoped to the arrival interface
+        var speakerA = receivers.Single(r => r.Id == BrowseProbe.SpeakerAId);
+        Assert.Equal("Test Speaker ABCD", speakerA.Name);
+        Assert.Equal(7000, speakerA.Port);
+        Assert.Equal(IPAddress.Parse("192.0.2.26"), speakerA.Addresses[0]);
+        Assert.Equal(IPAddress.Parse("192.0.2.26"), speakerA.AddressOf(AddressFamily.InterNetwork));
+        Assert.Equal(3, speakerA.Addresses.Count);
+        Assert.Equal(IPAddress.Parse("2001:db8:0:30:1a:2bff:fe3c:4d5e"), speakerA.Addresses[1]);
+        Assert.True(speakerA.Addresses[2].IsIPv6LinkLocal);
+        Assert.Equal(InterfaceIndex, speakerA.Addresses[2].ScopeId); // link-local scoped to the arrival interface
 
         // merged with the _raop record by deviceid
-        Assert.NotNull(SpeakerA.Raop);
-        Assert.Equal(new[] { 0, 4 }, SpeakerA.Raop!.EncryptionTypes);
-        Assert.Equal("UDP", SpeakerA.Raop.Transport);
+        Assert.NotNull(speakerA.Raop);
+        Assert.Equal(new[] { 0, 4 }, speakerA.Raop!.EncryptionTypes);
+        Assert.Equal("UDP", speakerA.Raop.Transport);
 
-        // SPEC-control.md 1.7 conclusions for the SpeakerA
-        var caps = SpeakerA.Capabilities;
+        // SPEC-control.md 1.7 conclusions for receiver A (the srcvers-366 speaker)
+        var caps = speakerA.Capabilities;
         Assert.True(caps.IsAirPlay2);
         Assert.Equal(PairingRequirement.Transient, caps.Pairing);
         Assert.True(caps.SupportsRealtimeStream);
@@ -120,13 +120,13 @@ public class ReceiverBrowserTests
     {
         var (browser, _) = Create(new ReceiverBrowserOptions { EnableIPv6 = false });
         await using var _ = browser;
-        var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        Feed(browser, BrowseProbe.Response(SpeakerA));
+        var speakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
+        Feed(browser, BrowseProbe.Response(speakerA));
         Assert.Equal(new[] { IPAddress.Parse("192.0.2.26") }, Assert.Single(browser.Snapshot()).Addresses);
 
         var (browser2, _) = Create(new ReceiverBrowserOptions { EnableIPv6 = false });
         await using var __ = browser2;
-        var v6Only = SpeakerA with { Addresses = [.. SpeakerA.Addresses.Where(a => a.AddressFamily == AddressFamily.InterNetworkV6)] };
+        var v6Only = speakerA with { Addresses = [.. speakerA.Addresses.Where(a => a.AddressFamily == AddressFamily.InterNetworkV6)] };
         var questions = Feed(browser2, BrowseProbe.Response(v6Only));
         Assert.Empty(browser2.Snapshot());
         var q = Assert.Single(questions);
@@ -139,8 +139,8 @@ public class ReceiverBrowserTests
     {
         var (browser, _) = Create();
         await using var _ = browser;
-        var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        var v6Only = SpeakerA with { Addresses = [IPAddress.Parse("2001:db8:0:30:1a:2bff:fe3c:4d5e")] };
+        var speakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
+        var v6Only = speakerA with { Addresses = [IPAddress.Parse("2001:db8:0:30:1a:2bff:fe3c:4d5e")] };
         Feed(browser, BrowseProbe.Response(v6Only));
         var receiver = Assert.Single(browser.Snapshot());
         Assert.Equal(AddressFamily.InterNetworkV6, Assert.Single(receiver.Addresses).AddressFamily);
@@ -201,12 +201,12 @@ public class ReceiverBrowserTests
     {
         var (browser, clock) = Create(new ReceiverBrowserOptions { ExpiryGrace = TimeSpan.FromSeconds(10) });
         await using var _ = browser;
-        var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        Feed(browser, BrowseProbe.Response(SpeakerA));
+        var speakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
+        Feed(browser, BrowseProbe.Response(speakerA));
         Drain(browser);
 
         clock.Advance(TimeSpan.FromSeconds(5));
-        var goodbye = BrowseProbe.Records(SpeakerA, includeAddresses: false).Select(r => r with { Ttl = 0 }).ToArray();
+        var goodbye = BrowseProbe.Records(speakerA, includeAddresses: false).Select(r => r with { Ttl = 0 }).ToArray();
         Feed(browser, BrowseProbe.Encode(goodbye));
         Assert.Single(browser.Snapshot()); // RFC 6762 10.1: expires in one second
         Assert.Empty(Drain(browser));
@@ -223,9 +223,9 @@ public class ReceiverBrowserTests
         // A responder with several interfaces/families: goodbye on one, a stale answer on another, then the other goodbye.
         var (browser, clock) = Create();
         await using var _ = browser;
-        var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        var answer = BrowseProbe.Response(SpeakerA);
-        var goodbye = BrowseProbe.Encode(BrowseProbe.Records(SpeakerA, includeAddresses: false).Select(r => r with { Ttl = 0 }).ToArray());
+        var speakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
+        var answer = BrowseProbe.Response(speakerA);
+        var goodbye = BrowseProbe.Encode(BrowseProbe.Records(speakerA, includeAddresses: false).Select(r => r with { Ttl = 0 }).ToArray());
         Feed(browser, answer);
         Drain(browser);
 
@@ -249,15 +249,15 @@ public class ReceiverBrowserTests
     {
         var (browser, clock) = Create();
         await using var _ = browser;
-        var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        Feed(browser, BrowseProbe.Response(SpeakerA));
+        var speakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
+        Feed(browser, BrowseProbe.Response(speakerA));
         Drain(browser);
 
         // a group SETUP changes gid (SPEC-control.md 1.2); the receiver re-announces its TXT with the cache-flush bit
         clock.Advance(TimeSpan.FromSeconds(30));
         const string group = "6B1F8A1E-2C3D-4E5F-8091-A2B3C4D5E6F7";
-        var txt = SpeakerA.Txt.Select(t => t.StartsWith("gid=", StringComparison.Ordinal) ? "gid=" + group : t).ToList();
-        Feed(browser, BrowseProbe.Response(SpeakerA, txt: txt));
+        var txt = speakerA.Txt.Select(t => t.StartsWith("gid=", StringComparison.Ordinal) ? "gid=" + group : t).ToList();
+        Feed(browser, BrowseProbe.Response(speakerA, txt: txt));
         var updated = Assert.IsType<ReceiverEvent.Updated>(Assert.Single(Drain(browser)));
         Assert.Equal(group, updated.Receiver.Airplay.GroupId);
         Assert.Equal(BrowseProbe.SpeakerAId, updated.Previous.Airplay.GroupId);
@@ -287,8 +287,8 @@ public class ReceiverBrowserTests
     {
         var (browser, clock) = Create();
         await using var _ = browser;
-        var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        var ptr = BrowseProbe.Records(SpeakerA).First();
+        var speakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
+        var ptr = BrowseProbe.Records(speakerA).First();
         var questions = Feed(browser, BrowseProbe.Encode(ptr));
         var instance = BrowseProbe.InstanceName(BrowseProbe.SpeakerAAirplay);
         Assert.Equal(2, questions.Count);
@@ -301,7 +301,7 @@ public class ReceiverBrowserTests
 
         // SRV + TXT without addresses: ask for A and AAAA of the target
         clock.Advance(TimeSpan.FromSeconds(1));
-        var srvTxt = BrowseProbe.Records(SpeakerA, includeAddresses: false).Skip(1).ToArray();
+        var srvTxt = BrowseProbe.Records(speakerA, includeAddresses: false).Skip(1).ToArray();
         var follow = Feed(browser, BrowseProbe.Encode(srvTxt));
         Assert.Equal(new[] { DnsType.A, DnsType.Aaaa }, follow.Select(q => q.Type).Order().ToArray());
         Assert.Empty(browser.Snapshot());
@@ -373,9 +373,9 @@ public class ReceiverBrowserTests
         var options = new ReceiverBrowserOptions { QueryInterval = TimeSpan.FromSeconds(30), ExpiryGrace = TimeSpan.Zero };
         var (browser, clock) = Create(options);
         await using var _ = browser;
-        var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        var multicast = BrowseProbe.Response(SpeakerA, ttlOverride: 4500);
-        var legacy = BrowseProbe.Response(SpeakerA, ttlOverride: 10);
+        var speakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
+        var multicast = BrowseProbe.Response(speakerA, ttlOverride: 4500);
+        var legacy = BrowseProbe.Response(speakerA, ttlOverride: 10);
         Feed(browser, legacyFirst ? legacy : multicast, legacy: legacyFirst);
         Feed(browser, legacyFirst ? multicast : legacy, legacy: !legacyFirst);
         Assert.Single(browser.Snapshot());
@@ -402,8 +402,8 @@ public class ReceiverBrowserTests
     {
         var (browser, clock) = Create();
         await using var _ = browser;
-        var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        var packet = BrowseProbe.Response(SpeakerA);
+        var speakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
+        var packet = BrowseProbe.Response(speakerA);
         browser.Ingest(packet, BrowseProbe.Reflector, 7, legacyUnicast: false);
         clock.Advance(TimeSpan.FromSeconds(1));
         browser.Ingest(packet, BrowseProbe.Reflector, 12, legacyUnicast: false);
@@ -453,7 +453,7 @@ public class ReceiverBrowserTests
         var snapshot = browser.Snapshot();
         Assert.Equal(BrowseProbe.SpeakerAId, MdnsReceiverBrowser.Match(snapshot, "02:1a:2b:3c:4d:5e")?.Id);
         Assert.Equal(BrowseProbe.SpeakerAId, MdnsReceiverBrowser.Match(snapshot, "021A2B3C4D5E")?.Id);
-        Assert.Equal(BrowseProbe.SpeakerAId, MdnsReceiverBrowser.Match(snapshot, "Test Speaker ABCD")?.Id);
+        Assert.Equal(BrowseProbe.SpeakerAId, MdnsReceiverBrowser.Match(snapshot, "test speaker abcd")?.Id);
         Assert.Null(MdnsReceiverBrowser.Match(snapshot, "Kitchen"));
     }
 
@@ -462,10 +462,10 @@ public class ReceiverBrowserTests
     {
         var (browser, clock) = Create();
         await using var _ = browser;
-        var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        Feed(browser, BrowseProbe.Response(SpeakerA));
+        var speakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
+        Feed(browser, BrowseProbe.Response(speakerA));
         clock.Advance(TimeSpan.FromSeconds(3));
-        var renamed = SpeakerA with { Name = "Living Room._airplay._tcp.local" };
+        var renamed = speakerA with { Name = "Living Room._airplay._tcp.local" };
         Feed(browser, BrowseProbe.Response(renamed));
         var receiver = Assert.Single(browser.Snapshot());
         Assert.Equal("Living Room", receiver.Name);

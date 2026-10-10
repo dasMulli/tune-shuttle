@@ -98,7 +98,7 @@ public sealed partial class ProbeCommand(CliServices services)
         if (kind == ProbeKind.Audio && !iKnow)
         {
             // Before any file, store or socket (docs/DEVELOPMENT.md, "Live-device rules").
-            await Services.Error.WriteLineAsync($"Refusing {probe} without --i-know: it sends audio (live rule: only the Test Speaker ABCD, at most 3 s of a quiet tone, level <= 20, user's go-ahead). Nothing was sent.").ConfigureAwait(false);
+            await Services.Error.WriteLineAsync($"Refusing {probe} without --i-know: it sends audio (live rule: only the live receiver (AIRPLAY_LIVE_RECEIVER), at most 3 s of a quiet tone, level <= 20, user's go-ahead). Nothing was sent.").ConfigureAwait(false);
             return ExitCodes.AudioRefused;
         }
 
@@ -106,7 +106,7 @@ public sealed partial class ProbeCommand(CliServices services)
         {
             await Services.Error.WriteLineAsync(probe == "P16"
                 ? "P16 (buffered stream format codes) belongs to the buffered-stream package and is not available from this CLI."
-                : "P20 (mixed group latency) needs the HomePod owner's permission and a microphone measurement; it is part of final integration, not an automated probe.").ConfigureAwait(false);
+                : "P20 (mixed group latency) needs the permission of the Apple receiver's owner and a microphone measurement; it is part of final integration, not an automated probe.").ConfigureAwait(false);
             return ExitCodes.Unavailable;
         }
 

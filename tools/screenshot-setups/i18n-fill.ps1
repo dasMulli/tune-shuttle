@@ -9,7 +9,7 @@
         pwsh tools/web-screenshots.ps1 -Package i18n-fill -Routes /,/receivers,/settings -Sizes 1280x900 -Themes light -Langs fr
             -Setup tools/screenshot-setups/i18n-fill.ps1
 
-    Builds the state with the most text: a group with a long name ("Living room + kitchen + office") holding both fakes
+    Builds the state with the most text: a group with a long name ("Living room + kitchen + bedroom") holding both fakes
     (G 32, r_i 40 and 24) is the active output, so the Player shows the master label with the group name, the members
     rows (wide) and the wrapping members chip (phone, "name level · name level"), the Output card a group row and two
     receiver rows with pills, the Status card "2 of 2 online"; the Receivers page shows both cards connected with their
@@ -63,7 +63,7 @@ if (-not ($ids -contains $one -and $ids -contains $two)) {
 }
 
 # Idempotent for -NoStart runs against a service that already has the group: reuse it.
-$name = 'Living room + kitchen + office'
+$name = 'Living room + kitchen + bedroom'
 $group = $null
 # foreach enumerates the answer whether Invoke-RestMethod hands back the JSON array as one object or item by item.
 foreach ($candidate in (Invoke-Json Get '/api/groups' $null)) {

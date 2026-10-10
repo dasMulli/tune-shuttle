@@ -101,7 +101,7 @@ public class PtpSessionWiringTests
         Assert.Equal([IPAddress.Parse("192.0.2.26"), IPAddress.Parse("203.0.113.150"), IPAddress.Parse("2001:db8::150")], sent);
     }
 
-    // The SpeakerA's answer (SPEC.md P1): IPv4, two ULA (documentation prefix here) and one link-local address.
+    // Receiver A's answer (srcvers 366.0, SPEC.md P1): IPv4, two ULA (documentation prefix here) and one link-local address.
     private static readonly IPAddress[] SpeakerAAddresses =
     [
         IPAddress.Parse("192.0.2.26"),

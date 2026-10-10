@@ -9,9 +9,9 @@ public class BinaryPlistTests
     private static string Vector(string name) => Path.Combine(AppContext.BaseDirectory, "TestVectors", name);
 
     [Fact]
-    public void Decodes_the_SpeakerA_info_response()
+    public void Decodes_the_speaker_A_info_response()
     {
-        var raw = File.ReadAllBytes(Vector("SpeakerA-info-response.bplist"));
+        var raw = File.ReadAllBytes(Vector("info-response.bplist"));
         Assert.Equal(525, raw.Length);
         Assert.True(BinaryPlist.IsBinaryPlist(raw));
         var dict = BinaryPlist.DecodeDictionary(raw);
@@ -35,7 +35,7 @@ public class BinaryPlistTests
     [Fact]
     public void Decodes_the_stage1_response_with_txtAirPlay_data()
     {
-        var raw = File.ReadAllBytes(Vector("SpeakerA-info-response-stage1.bplist"));
+        var raw = File.ReadAllBytes(Vector("info-response-stage1.bplist"));
         Assert.Equal(909, raw.Length);
         var dict = BinaryPlist.DecodeDictionary(raw);
         var txt = dict.GetData("txtAirPlay");
@@ -58,9 +58,9 @@ public class BinaryPlistTests
     }
 
     [Fact]
-    public void Re_encoding_the_SpeakerA_response_round_trips()
+    public void Re_encoding_the_speaker_A_response_round_trips()
     {
-        var raw = File.ReadAllBytes(Vector("SpeakerA-info-response-stage1.bplist"));
+        var raw = File.ReadAllBytes(Vector("info-response-stage1.bplist"));
         var dict = BinaryPlist.DecodeDictionary(raw);
         var encoded = BinaryPlist.Encode(dict);
         var again = BinaryPlist.DecodeDictionary(encoded);
@@ -88,7 +88,7 @@ public class BinaryPlistTests
         var dict = new PlistDictionary
         {
             ["string"] = "hello",
-            ["unicode"] = "Lautsprecher SpeakerA GmbH – äöü \U0001F3B5",
+            ["unicode"] = "Example Audio Maker GmbH – äöü \U0001F3B5",
             ["empty"] = string.Empty,
             ["true"] = true,
             ["false"] = false,
@@ -138,7 +138,7 @@ public class BinaryPlistTests
     {
         Assert.Throws<FormatException>(() => BinaryPlist.Decode(Encoding.ASCII.GetBytes("<?xml version=\"1.0\"?><plist/>")));
         Assert.Throws<FormatException>(() => BinaryPlist.Decode("bplist00"u8.ToArray()));
-        var raw = File.ReadAllBytes(Vector("SpeakerA-info-response.bplist"));
+        var raw = File.ReadAllBytes(Vector("info-response.bplist"));
         raw[^1] = 0xFF; // offset table far beyond the end
         Assert.Throws<FormatException>(() => BinaryPlist.Decode(raw));
     }

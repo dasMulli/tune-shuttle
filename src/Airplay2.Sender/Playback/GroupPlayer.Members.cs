@@ -21,9 +21,9 @@ public sealed partial class GroupPlayer
     /// the factory's). Then session SETUP (timing protocol and port from the transport, <c>groupUUID</c>,
     /// <c>groupContainsGroupLeader</c>, <c>isMultiSelectAirPlay</c>, the PTP clock id) → event channel → RECORD →
     /// (PTP: the receiver becomes a grandmaster peer, <c>SETPEERS</c>) → stream SETUP (type 96, <c>shk</c> per D4,
-    /// our control port, <c>latencyMin/Max</c> around L) → <c>SET_PARAMETER volume</c> (after the stream SETUP: the SpeakerA
+    /// our control port, <c>latencyMin/Max</c> around L) → <c>SET_PARAMETER volume</c> (after the stream SETUP: the srcvers-366 speaker
     /// ignores it before, probe P3) → transport registration in CONNECTED (initial <c>0x90</c> sync + marker with the next
-    /// packet, no catch-up) → text/artwork/progress of the current track, sent in the background (best effort: the SpeakerA
+    /// packet, no catch-up) → text/artwork/progress of the current track, sent in the background (best effort: the srcvers-366 speaker
     /// answers DMAP text with 500 after ~10 s, SPEC-control.md 5.2, and the call must not wait for that). On failure
     /// everything set up is torn down and the session disposed. <c>RECORD</c>'s <c>Audio-Latency</c> becomes part of the
     /// member's <c>offset_frames</c> (SPEC.md C2, never a change of L). Under PTP the grandmaster peer is taken from the
@@ -572,7 +572,7 @@ public sealed partial class GroupPlayer
         }
     }
 
-    /// <summary>D10 fallback: <c>GET_PARAMETER volume</c> every few seconds while playing (the SpeakerA sends no volume events, P4/P13).</summary>
+    /// <summary>D10 fallback: <c>GET_PARAMETER volume</c> every few seconds while playing (the srcvers-366 speaker sends no volume events, P4/P13).</summary>
     private async Task VolumePollLoopAsync(Member member, TimeSpan interval, CancellationToken stop)
     {
         using var timer = new PeriodicTimer(interval);

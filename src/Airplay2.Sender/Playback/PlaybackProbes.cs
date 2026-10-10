@@ -26,7 +26,7 @@ public sealed record PlaybackProbeOptions
     /// <summary>Who we say we are in the session SETUP.</summary>
     public SenderIdentity Sender { get; init; } = new("airplay2-streamer probe", "AA:BB:CC:DD:EE:FF", "AA:BB:CC:DD:EE:FF");
 
-    /// <summary>Control-connection options (30 s per request: the SpeakerA on Wi-Fi needed up to ~10 s, SPEC.md section 4).</summary>
+    /// <summary>Control-connection options (30 s per request: the srcvers-366 speaker on Wi-Fi needed up to ~10 s, SPEC.md section 4).</summary>
     public RtspConnectionOptions Connection { get; init; } = new() { RequestTimeout = TimeSpan.FromSeconds(30) };
 
     /// <summary>Quirks; <see cref="ReceiverQuirks.ForReceiver"/> when null.</summary>
@@ -44,7 +44,7 @@ public sealed record PlaybackProbeOptions
     /// <summary>The receiver address; its first IPv4 address when null.</summary>
     public IPAddress? Address { get; init; }
 
-    /// <summary>The PTP grandmaster for a PTP-timed realtime stream; null runs NTP (the SpeakerA, SPEC.md P1).</summary>
+    /// <summary>The PTP grandmaster for a PTP-timed realtime stream; null runs NTP (the srcvers-366 speaker, SPEC.md P1).</summary>
     public IPtpMaster? Ptp { get; init; }
 }
 
@@ -69,7 +69,7 @@ public sealed class PlaybackProbes
     private readonly ILogger _logger;
     private readonly PlaybackProbeOptions _options;
 
-    /// <summary>Creates the probes for one receiver (live rules: only the Test Speaker ABCD).</summary>
+    /// <summary>Creates the probes for one receiver (live rules: only the live receiver, AIRPLAY_LIVE_RECEIVER).</summary>
     public PlaybackProbes(DiscoveredReceiver receiver, IPairingStore store, ILoggerFactory? loggerFactory = null, PlaybackProbeOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(receiver);

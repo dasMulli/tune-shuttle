@@ -21,7 +21,7 @@ namespace Airplay2.Sender.Tests.Fake;
 public class FakeReceiverControlTests
 {
     [Fact]
-    public async Task Get_info_serves_the_recorded_SpeakerA_plist_with_name_identity_and_volume()
+    public async Task Get_info_serves_the_recorded_speaker_A_plist_with_name_identity_and_volume()
     {
         await using var receiver = await StartAsync(new FakeReceiverOptions { Name = "Kitchen", InitialVolume = -17.5 });
         await using var client = await ConnectAsync(receiver);
@@ -30,7 +30,7 @@ public class FakeReceiverControlTests
         Assert.Equal("Kitchen", bare.GetString("name"));
         Assert.Equal(receiver.DeviceId, bare.GetString("deviceID"));
         Assert.Equal(receiver.DeviceId, bare.GetString("pi"));
-        Assert.Equal("Lautsprecher SpeakerA GmbH", bare.GetString("manufacturer"));
+        Assert.Equal("Example Audio Maker GmbH", bare.GetString("manufacturer"));
         Assert.Equal(0x1C340445F8A00L, bare.GetInt64("features"));
         Assert.Equal(0x404L, bare.GetInt64("statusFlags"));
         Assert.Equal(-17.5, bare.GetDouble("initialVolume"));
@@ -46,7 +46,7 @@ public class FakeReceiverControlTests
     }
 
     [Fact]
-    public async Task Get_info_omits_initialVolume_like_the_SpeakerA_when_not_configured()
+    public async Task Get_info_omits_initialVolume_like_speaker_A_when_not_configured()
     {
         await using var receiver = await StartAsync(new FakeReceiverOptions { InitialVolume = null });
         await using var client = await ConnectAsync(receiver);

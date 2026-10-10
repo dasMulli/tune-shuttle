@@ -9,7 +9,7 @@ namespace Airplay2.Sender.Tests.Rtsp;
 
 /// <summary>
 /// Live checks of the transport (docs/DEVELOPMENT.md, "Live-device rules": unauthenticated <c>GET /info</c> is allowed any time). They
-/// return early unless <c>AIRPLAY_LIVE=1</c>. SpeakerA: <c>$env:AIRPLAY_LIVE=1; dotnet test --filter Category=SpeakerALive</c>
+/// return early unless <c>AIRPLAY_LIVE=1</c>. Live receiver: <c>$env:AIRPLAY_LIVE=1; dotnet test --filter Category=ReceiverLive</c>
 /// (address from <c>AIRPLAY_LIVE_RECEIVER_HOST</c>, no default: <see cref="LiveTarget"/>). shairport-sync: run inside the Docker VM
 /// with <c>docker/shairport-sync/run-live-tests-in-vm.ps1</c> (<c>SPS_HOST</c>/<c>SPS_PORT</c>). Each run writes the
 /// decrypted wire log to <c>artifacts/live/&lt;date&gt;-&lt;probe&gt;.log</c>.
@@ -28,7 +28,9 @@ public class RtspLiveTests(ITestOutputHelper output)
         var expected = BinaryPlist.DecodeDictionary(vector);
         var actual = BinaryPlist.DecodeDictionary(live);
         Assert.Equal(expected.Keys, actual.Keys);
-        foreach (var key in new[] { "name", "model", "manufacturer", "sourceVersion", "protocolVersion", "sdk", "firmwareRevision" })
+        // name, model and manufacturer are synthetic in the vectors (same length as the captured values), so only the
+        // stack's own values are compared.
+        foreach (var key in new[] { "sourceVersion", "protocolVersion", "sdk", "firmwareRevision" })
         {
             Assert.Equal(expected.GetString(key), actual.GetString(key));
         }
@@ -44,8 +46,8 @@ public class RtspLiveTests(ITestOutputHelper output)
         new Dictionary<string, string> { ["X-Apple-ProtocolVersion"] = "1" });
 
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task SpeakerA_GET_info_bare_and_with_qualifier_equal_the_stored_vectors()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Live_GET_info_bare_and_with_qualifier_equal_the_stored_vectors()
     {
         if (!LiveEnabled)
         {
@@ -58,19 +60,19 @@ public class RtspLiveTests(ITestOutputHelper output)
             return;
         }
 
-        var SpeakerAEndpoint = new IPEndPoint(host, LiveTarget.Port);
+        var speakerAEndpoint = new IPEndPoint(host, LiveTarget.Port);
         var log = new CapturingLogger();
         try
         {
             // Two fresh connections, as in the probe (one request each).
             RtspResponse bare;
-            await using (var connection = await RtspConnection.ConnectAsync(SpeakerAEndpoint, new RtspConnectionOptions(), log, CancellationToken.None))
+            await using (var connection = await RtspConnection.ConnectAsync(speakerAEndpoint, new RtspConnectionOptions(), log, CancellationToken.None))
             {
                 bare = await connection.SendExpectOkAsync(RtspRequest.Create("GET", "/info"), CancellationToken.None);
             }
 
             RtspResponse stage1;
-            await using (var connection = await RtspConnection.ConnectAsync(SpeakerAEndpoint, new RtspConnectionOptions(), log, CancellationToken.None))
+            await using (var connection = await RtspConnection.ConnectAsync(speakerAEndpoint, new RtspConnectionOptions(), log, CancellationToken.None))
             {
                 stage1 = await connection.SendExpectOkAsync(QualifierRequest(), CancellationToken.None);
             }
@@ -78,15 +80,16 @@ public class RtspLiveTests(ITestOutputHelper output)
             Assert.Equal("RTSP/1.0", bare.Protocol);
             Assert.Equal(0, bare.CSeq);
             Assert.Equal(RtspContentTypes.BinaryPlist, bare.ContentType);
-            Assert.Equal("Test Speaker ABCD", bare.PlistBody().GetString("name"));
-            // The stored vectors carry synthetic identifiers of the same length (device id, pk, serial number), so a live
+            Assert.False(string.IsNullOrEmpty(bare.PlistBody().GetString("name")));
+            // The stored vectors carry synthetic identifiers of the same length (device id, pk, serial number, name, model,
+            // manufacturer), so a live
             // body equals its vector in size, keys and every value that does not identify the unit.
             AssertMatchesVector(SpeakerACapture.InfoBody, bare.Body.ToArray());
             AssertMatchesVector(SpeakerACapture.Stage1InfoBody, stage1.Body.ToArray());
         }
         finally
         {
-            WriteLiveLog("rtsp-get-info-SpeakerA", log);
+            WriteLiveLog("rtsp-get-info-live-receiver", log);
         }
     }
 
@@ -111,7 +114,7 @@ public class RtspLiveTests(ITestOutputHelper output)
             Assert.Equal(1, bare.CSeq);
             var info = bare.PlistBody();
             Assert.NotNull(info.GetString("deviceID"));
-            Assert.NotNull(info.GetDouble("initialVolume")); // shairport adds it, the SpeakerA does not (SPEC-control.md 1.8)
+            Assert.NotNull(info.GetDouble("initialVolume")); // shairport adds it, the srcvers-366 speaker does not (SPEC-control.md 1.8)
             Assert.NotNull(stage1.PlistBody().GetData("txtAirPlay"));
         }
         finally

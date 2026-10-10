@@ -9,16 +9,16 @@ using Xunit.Abstractions;
 namespace Airplay2.Sender.Tests.Discovery;
 
 /// <summary>
-/// Live discovery of the Test Speaker ABCD (docs/DEVELOPMENT.md, "Live-device rules": mDNS browsing is allowed at any time). Only mDNS
+/// Live discovery of the live receiver (AIRPLAY_LIVE_RECEIVER; docs/DEVELOPMENT.md, "Live-device rules": mDNS browsing is allowed at any time). Only mDNS
 /// traffic is sent; no receiver is contacted. Runs only with <c>AIRPLAY_LIVE=1</c> and the receiver's mDNS name or device id in
 /// <c>AIRPLAY_LIVE_RECEIVER</c> (<see cref="LiveTarget"/>; no default):
-/// <c>$env:AIRPLAY_LIVE=1; $env:AIRPLAY_LIVE_RECEIVER="&lt;name&gt;"; dotnet test --filter Category=SpeakerALive</c>.
+/// <c>$env:AIRPLAY_LIVE=1; $env:AIRPLAY_LIVE_RECEIVER="&lt;name&gt;"; dotnet test --filter Category=ReceiverLive</c>.
 /// </summary>
 public class ReceiverBrowserLiveTests(ITestOutputHelper output)
 {
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task Discover_lists_the_SpeakerA_with_the_capabilities_of_spec_control_1_7()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Discover_lists_the_live_receiver_with_the_capabilities_of_spec_control_1_7()
     {
         if (Environment.GetEnvironmentVariable("AIRPLAY_LIVE") != "1")
         {
@@ -33,42 +33,42 @@ public class ReceiverBrowserLiveTests(ITestOutputHelper output)
 
         await using var browser = new MdnsReceiverBrowser(new ReceiverBrowserOptions(), new TestOutputLogger<MdnsReceiverBrowser>(output));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var SpeakerA = await browser.FindAsync(target, TimeSpan.FromSeconds(10), timeout.Token);
-        if (SpeakerA is null)
+        var liveReceiver = await browser.FindAsync(target, TimeSpan.FromSeconds(10), timeout.Token);
+        if (liveReceiver is null)
         {
             output.WriteLine($"{target} not on the network; nothing to verify");
             return;
         }
 
         // give the _raop record a moment to merge
-        for (var i = 0; i < 20 && SpeakerA!.Raop is null; i++)
+        for (var i = 0; i < 20 && liveReceiver!.Raop is null; i++)
         {
             await Task.Delay(250, timeout.Token);
-            SpeakerA = MdnsReceiverBrowser.Match(browser.Snapshot(), target);
+            liveReceiver = MdnsReceiverBrowser.Match(browser.Snapshot(), target);
         }
 
         var log = Describe(browser.Snapshot());
         output.WriteLine(log);
         WriteArtifact(log);
 
-        Assert.NotNull(SpeakerA);
-        Assert.Equal("Test Speaker ABCD", SpeakerA!.Airplay.Model);
-        Assert.Equal(SpeakerA.Airplay.DeviceId, SpeakerA.Id);
-        Assert.Equal(7000, SpeakerA.Port);
-        Assert.NotNull(SpeakerA.AddressOf(AddressFamily.InterNetwork));
-        Assert.NotNull(SpeakerA.Raop);
+        Assert.NotNull(liveReceiver);
+        Assert.False(string.IsNullOrEmpty(liveReceiver!.Airplay.Model));
+        Assert.Equal(liveReceiver.Airplay.DeviceId, liveReceiver.Id);
+        Assert.Equal(7000, liveReceiver.Port);
+        Assert.NotNull(liveReceiver.AddressOf(AddressFamily.InterNetwork));
+        Assert.NotNull(liveReceiver.Raop);
 
         // SPEC-control.md 1.7
-        Assert.Equal((AirplayFeatures)0x0001C340445F8A00UL, SpeakerA.Airplay.Features);
-        Assert.Equal(AirplayStatusFlags.AudioLink | AirplayStatusFlags.HomeKitAccessControl, SpeakerA.Airplay.Flags);
-        Assert.Equal("366.0", SpeakerA.Airplay.SourceVersion);
-        Assert.Equal(0, SpeakerA.Airplay.AccessControlLevel);
-        Assert.Equal(new[] { 0, 4 }, SpeakerA.Raop!.EncryptionTypes);
-        Assert.Equal(new[] { 0, 1 }, SpeakerA.Raop.Codecs);
-        Assert.Equal(new[] { 0, 1, 2 }, SpeakerA.Raop.MetadataTypes);
-        Assert.Equal("UDP", SpeakerA.Raop.Transport);
+        Assert.Equal((AirplayFeatures)0x0001C340445F8A00UL, liveReceiver.Airplay.Features);
+        Assert.Equal(AirplayStatusFlags.AudioLink | AirplayStatusFlags.HomeKitAccessControl, liveReceiver.Airplay.Flags);
+        Assert.Equal("366.0", liveReceiver.Airplay.SourceVersion);
+        Assert.Equal(0, liveReceiver.Airplay.AccessControlLevel);
+        Assert.Equal(new[] { 0, 4 }, liveReceiver.Raop!.EncryptionTypes);
+        Assert.Equal(new[] { 0, 1 }, liveReceiver.Raop.Codecs);
+        Assert.Equal(new[] { 0, 1, 2 }, liveReceiver.Raop.MetadataTypes);
+        Assert.Equal("UDP", liveReceiver.Raop.Transport);
 
-        var caps = SpeakerA.Capabilities;
+        var caps = liveReceiver.Capabilities;
         Assert.True(caps.IsAirPlay2);
         Assert.Equal(PairingRequirement.Transient, caps.Pairing);
         Assert.True(caps.SupportsRealtimeStream);

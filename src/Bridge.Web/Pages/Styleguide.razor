@@ -145,7 +145,7 @@
                 <span class="chip chip--accent">Output</span>
                 <span class="chip chip--accent">Spotify · martin</span>
             </div>
-            <span class="chip chip--accent chip--members">Downstairs · Test Speaker ABCD 40 · Hallway 24 · Living room speaker with a long name 55</span>
+            <span class="chip chip--accent chip--members">Downstairs · Bookshelf speaker 40 · Bedroom 24 · Living room speaker with a long name 55</span>
         </section>
 
         @* ── Buttons ───────────────────────────────────────────────────────────────────────────────── *@
@@ -216,10 +216,10 @@
                         <After><button type="button" class="step" aria-label="Louder" @onclick="() => _master!.StepAsync(5)">+</button></After>
                     </LevelSlider>
                     <div class="members only-wide">
-                        <div class="member"><span class="meta member__name">Test Speaker ABCD</span><div class="track"><div class="track__fill" style="width: 40%"></div></div><span class="meta member__level">40</span></div>
-                        <div class="member"><span class="meta member__name">Hallway</span><div class="track"><div class="track__fill" style="width: 24%"></div></div><span class="meta member__level">24</span></div>
+                        <div class="member"><span class="meta member__name">Bookshelf speaker</span><div class="track"><div class="track__fill" style="width: 40%"></div></div><span class="meta member__level">40</span></div>
+                        <div class="member"><span class="meta member__name">Bedroom</span><div class="track"><div class="track__fill" style="width: 24%"></div></div><span class="meta member__level">24</span></div>
                     </div>
-                    <span class="chip chip--accent chip--members only-phone">Downstairs · Test Speaker ABCD 40 · Hallway 24</span>
+                    <span class="chip chip--accent chip--members only-phone">Downstairs · Bookshelf speaker 40 · Bedroom 24</span>
                 </div>
             </section>
 
@@ -240,7 +240,7 @@
                             <label class="row__label">
                                 <input type="radio" name="sg-output" class="visually-hidden" checked />
                                 <span class="radio is-on" aria-hidden="true"></span>
-                                <span class="row__main"><strong>Downstairs</strong><span class="meta only-wide">Group · Test Speaker ABCD, Hallway</span><span class="meta only-phone">Test Speaker ABCD, Hallway</span></span>
+                                <span class="row__main"><strong>Downstairs</strong><span class="meta only-wide">Group · Bookshelf speaker, Bedroom</span><span class="meta only-phone">Bookshelf speaker, Bedroom</span></span>
                                 <span class="pill pill--ok">playing</span>
                             </label>
                             <a class="btn btn--sm only-wide" href="_styleguide" aria-label="Edit group Downstairs">Edit</a>
@@ -258,16 +258,16 @@
                             <label class="row__label">
                                 <input type="radio" name="sg-output" class="visually-hidden" />
                                 <span class="radio" aria-hidden="true"></span>
-                                <span class="row__main"><strong>Test Speaker ABCD</strong><span class="meta only-wide">Speaker · 192.0.2.26</span><span class="meta only-phone">Speaker</span></span>
+                                <span class="row__main"><strong>Bookshelf speaker</strong><span class="meta only-wide">Speaker · 192.0.2.26</span><span class="meta only-phone">Speaker</span></span>
                                 <span class="pill pill--ok">online</span>
                             </label>
-                            <LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Volume of Test Speaker ABCD" HideLabel="true" Value="40" Send="SendAsync" />
+                            <LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Volume of Bookshelf speaker" HideLabel="true" Value="40" Send="SendAsync" />
                         </div>
                         <div class="row row--choice is-quiet">
                             <label class="row__label">
                                 <input type="radio" name="sg-output" class="visually-hidden" disabled />
                                 <span class="radio" aria-hidden="true"></span>
-                                <span class="row__main"><strong>Kitchen (offline)</strong><span class="meta only-wide">Apple receiver · 192.0.2.98</span><span class="meta only-phone">Apple receiver</span></span>
+                                <span class="row__main"><strong>Kitchen (offline)</strong><span class="meta only-wide">AirPlay speaker · 192.0.2.98</span><span class="meta only-phone">AirPlay speaker</span></span>
                                 <span class="pill">offline</span>
                             </label>
                             <LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Volume of Kitchen" HideLabel="true" Value="24" Disabled="true" Send="SendAsync" />
@@ -276,7 +276,7 @@
                             <label class="row__label">
                                 <input type="radio" name="sg-output" class="visually-hidden" disabled />
                                 <span class="radio" aria-hidden="true"></span>
-                                <span class="row__main"><strong>Living room TV</strong><span class="meta only-wide">LG TVMODEL0000 · 198.51.100.200</span><span class="meta only-phone">LG TVMODEL0000</span></span>
+                                <span class="row__main"><strong>Living room TV</strong><span class="meta only-wide">Smart TV · 198.51.100.200</span><span class="meta only-phone">Smart TV</span></span>
                                 <span class="pill pill--warn">PIN needed</span>
                             </label>
                             <button type="button" class="btn btn--ghost btn--sm">Pair</button>
@@ -345,7 +345,7 @@
                 </div>
             </div>
             <span class="label">Track (members, progress)</span>
-            <div class="member"><span class="meta member__name">Test Speaker ABCD</span><div class="track"><div class="track__fill" style="width: 72%"></div></div><span class="meta member__level">72</span></div>
+            <div class="member"><span class="meta member__name">Bookshelf speaker</span><div class="track"><div class="track__fill" style="width: 72%"></div></div><span class="meta member__level">72</span></div>
         </section>
 
         @* ── Receivers grid ─────────────────────────────────────────────────────────────────────────── *@
@@ -380,7 +380,7 @@
             </article>
             <article class="card receiver">
                 <div class="card__head"><h2>Living room TV with a long receiver name</h2><span class="pill pill--warn">PIN needed</span></div>
-                <span class="meta">LG TVMODEL0000 · 198.51.100.200:7000</span>
+                <span class="meta">Smart TV · 198.51.100.200:7000</span>
                 <div class="tags"><span class="chip">AirPlay 2</span><span class="chip chip--warn">PIN needed</span><span class="chip">Group: Upstairs</span></div>
                 <p class="meta text-err" role="alert">The last attempt failed: connection refused.</p>
                 <div class="actions">

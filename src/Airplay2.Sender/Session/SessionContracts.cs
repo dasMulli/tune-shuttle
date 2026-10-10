@@ -63,7 +63,7 @@ public sealed record SessionSetupRequest(
 /// <param name="EventPort">The receiver's event-channel TCP port (mandatory).</param>
 /// <param name="TimingPort">
 /// The receiver's <c>timingPort</c>, 0 when absent. Unused for NTP (the receiver sends its 0xD2 requests to our port and we
-/// answer their source). Observed: shairport-sync and airplay2-receiver send 0; the Test Speaker ABCD returns 7001/7005,
+/// answer their source). Observed: shairport-sync and airplay2-receiver send 0; the srcvers-366 speaker returns 7001/7005,
 /// the source port of its 0xD2 requests (SPEC-control.md 4.2 note, 2026-10-09).
 /// </param>
 /// <param name="TimingPeerAddresses">PTP only: <c>timingPeerInfo.Addresses</c> of the receiver.</param>
@@ -190,13 +190,13 @@ public sealed record ReceiverQuirks
     public static ReceiverQuirks Default { get; } = new();
 
     /// <summary>
-    /// The quirks known for a receiver model from the live probes (SPEC.md section 4), or <see cref="Default"/>. Callers
+    /// The quirks known for a receiver's AirPlay stack (TXT <c>srcvers</c>, or <c>model</c> for shairport-sync) from the live probes (SPEC.md section 4), or <see cref="Default"/>. Callers
     /// overlay their per-receiver configuration (<c>AirplaySenderOptions.Quirks</c>, the bridge's <c>receivers.quirks</c>).
     /// </summary>
     public static ReceiverQuirks ForReceiver(DiscoveredReceiver receiver)
     {
         ArgumentNullException.ThrowIfNull(receiver);
-        return KnownReceiverQuirks.For(receiver.Airplay.Model);
+        return KnownReceiverQuirks.For(receiver.Airplay);
     }
 }
 

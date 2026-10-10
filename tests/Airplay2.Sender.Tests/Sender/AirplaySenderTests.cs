@@ -169,9 +169,9 @@ public sealed class AirplaySenderTests
     }
 
     [Fact]
-    public async Task Quirks_overlay_keeps_the_models_timing_protocol_unless_configured()
+    public async Task Quirks_overlay_keeps_the_known_timing_protocol_unless_configured()
     {
-        var SpeakerA = Receiver("Test Speaker ABCD", "02:1A:2B:3C:4D:5E");
+        var speakerA = Receiver("Test Speaker ABCD", "02:1A:2B:3C:4D:5E", srcvers: "366.0"); // known quirks are keyed on srcvers
         var shairport = Receiver("ShairportSync", "11:22:33:44:55:66");
         var other = Receiver("Something", "AA:00:00:00:00:01");
         await using var sender = NewSender(new InMemoryPairingStore(), new AirplaySenderOptions
@@ -183,14 +183,14 @@ public sealed class AirplaySenderTests
             },
         });
 
-        var q = sender.QuirksFor(SpeakerA);
+        var q = sender.QuirksFor(speakerA);
         Assert.Equal(100, q.OffsetFrames);
         Assert.Equal(TimingProtocol.Ntp, q.TimingProtocol);
         Assert.Equal(TimingProtocol.Ptp, sender.TimingProtocolFor(shairport));
         Assert.Equal(TimingProtocol.Ptp, sender.TimingProtocolFor(other));
 
-        Assert.Equal((StreamType.Realtime, TimingProtocol.Ntp), sender.ChooseTransport([SpeakerA]));
-        Assert.Equal((StreamType.Realtime, TimingProtocol.Ptp), sender.ChooseTransport([SpeakerA, shairport]));
+        Assert.Equal((StreamType.Realtime, TimingProtocol.Ntp), sender.ChooseTransport([speakerA]));
+        Assert.Equal((StreamType.Realtime, TimingProtocol.Ptp), sender.ChooseTransport([speakerA, shairport]));
         Assert.Equal((StreamType.Realtime, TimingProtocol.Ntp), sender.ChooseTransport([]));
     }
 
@@ -337,8 +337,8 @@ public sealed class AirplaySenderTests
         }
     }
 
-    private static DiscoveredReceiver Receiver(string model, string id, string features = "features=0x445F8A00,0x1C340") =>
-        new(id, model, [IPAddress.Loopback], 7000, AirplayTxtRecord.Parse(["model=" + model, "deviceid=" + id, features, "flags=0x404"]), null, DateTimeOffset.UtcNow);
+    private static DiscoveredReceiver Receiver(string model, string id, string features = "features=0x445F8A00,0x1C340", string? srcvers = null) =>
+        new(id, model, [IPAddress.Loopback], 7000, AirplayTxtRecord.Parse(["model=" + model, "deviceid=" + id, features, "flags=0x404", .. srcvers is null ? Array.Empty<string>() : ["srcvers=" + srcvers]]), null, DateTimeOffset.UtcNow);
 
     /// <summary>Saves, then cancels <paramref name="cts"/>: the pair-verify after the save sees a cancelled token.</summary>
     private sealed class CancelOnSaveStore(CancellationTokenSource cts) : IPairingStore

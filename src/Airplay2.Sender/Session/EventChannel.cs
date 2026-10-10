@@ -29,7 +29,7 @@ public sealed record EventChannelOptions
     /// <summary>
     /// Delay before each answer. Zero (default) answers immediately, as the receiver closes the channel after ~30 s
     /// without an answer [pyatv:docs/documentation/protocols.md:1786-1795] and shairport-sync reads the answer
-    /// synchronously [sps:ap2_event_message_handler.c:45-67]. Probe P13 sets 5/20/40 s to see when the SpeakerA gives up.
+    /// synchronously [sps:ap2_event_message_handler.c:45-67]. Probe P13 sets 5/20/40 s to see when the srcvers-366 speaker gives up.
     /// </summary>
     public TimeSpan AnswerDelay { get; init; } = TimeSpan.Zero;
 

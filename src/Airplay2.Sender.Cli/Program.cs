@@ -20,7 +20,7 @@ public static class Program
     /// <summary>
     /// How long the process waits after Ctrl+C/SIGTERM for the interrupted command to finish its TEARDOWNs (D7) before it
     /// exits anyway: each member's TEARDOWN is bounded by 10 s (<see cref="Playback.GroupPlayerOptions.TeardownTimeout"/>,
-    /// <see cref="CliCommands.TeardownQuietlyAsync"/>) and the SpeakerA answered FLUSH/TEARDOWN after 10-30 s on bad days,
+    /// <see cref="CliCommands.TeardownQuietlyAsync"/>) and the srcvers-366 speaker answered FLUSH/TEARDOWN after 10-30 s on bad days,
     /// so System.CommandLine's 2 s default would exit in the middle of them.
     /// </summary>
     public static readonly TimeSpan TeardownGrace = TimeSpan.FromSeconds(60);
@@ -83,7 +83,7 @@ public static class Program
         var level = new Option<int>("--level") { Description = "Level 0..100 (live rule: <= 20 until final integration)", DefaultValueFactory = _ => 15 };
         var latency = new Option<int>("--latency") { Description = "Sender latency L in frames", DefaultValueFactory = _ => 77175 };
         var iKnow = new Option<bool>("--i-know") { Description = "Acknowledge the live-audio rules (3 s quiet tone, user present); required for any audio" };
-        var noMetadata = new Option<bool>("--no-metadata") { Description = "Do not send DMAP text/progress (the SpeakerA answers DMAP with 500 after up to 10 s)" };
+        var noMetadata = new Option<bool>("--no-metadata") { Description = "Do not send DMAP text/progress (some receivers answer DMAP with 500 after up to 10 s, e.g. srcvers 366.0)" };
         play.Add(file);
         play.Add(to);
         play.Add(level);

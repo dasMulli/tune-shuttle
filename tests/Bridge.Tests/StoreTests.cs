@@ -76,7 +76,7 @@ public class StoreTests
     private static readonly CancellationToken Ct = CancellationToken.None;
 
     internal static ReceiverRow Receiver(string id, string name = "Speaker", int level = 50) =>
-        new(id, name, "model", "SpeakerA", "192.0.2.26", 7000, unchecked((long)0x0001C340445F8A00UL), 0x404, [1, 2, 3], PairingStates.Transient, level, 0, null, "2026-10-09T12:00:00.000Z");
+        new(id, name, "Speaker A", "Example Audio Maker", "192.0.2.26", 7000, unchecked((long)0x0001C340445F8A00UL), 0x404, [1, 2, 3], PairingStates.Transient, level, 0, null, "2026-10-09T12:00:00.000Z");
 
     private static PairingCredentials RealCredentials()
     {
@@ -217,14 +217,14 @@ public class StoreTests
         Assert.Empty(await store.GetReceiversAsync(Ct));
         Assert.Null(await store.GetReceiverAsync("nope", Ct));
 
-        var SpeakerA = Receiver("02:1A:2B:3C:4D:5E", "Test Speaker ABCD") with { Quirks = """{"sendAuthSetup":false}""" };
-        await store.UpsertReceiverAsync(SpeakerA, Ct);
+        var speakerA = Receiver("02:1A:2B:3C:4D:5E", "Test Speaker ABCD") with { Quirks = """{"sendAuthSetup":false}""" };
+        await store.UpsertReceiverAsync(speakerA, Ct);
         await store.UpsertReceiverAsync(Receiver("AA", "attic"), Ct);
 
-        var loaded = await store.GetReceiverAsync(SpeakerA.Id, Ct);
+        var loaded = await store.GetReceiverAsync(speakerA.Id, Ct);
         Assert.NotNull(loaded);
-        Assert.Equal(SpeakerA with { PublicKey = loaded!.PublicKey }, loaded);
-        Assert.Equal(SpeakerA.PublicKey, loaded.PublicKey);
+        Assert.Equal(speakerA with { PublicKey = loaded!.PublicKey }, loaded);
+        Assert.Equal(speakerA.PublicKey, loaded.PublicKey);
         Assert.Equal(unchecked((long)0x0001C340445F8A00UL), loaded.Features);
 
         // ordered by name, case-insensitive

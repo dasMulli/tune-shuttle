@@ -138,7 +138,7 @@ language select. **Diagnostics** shows the status, the bridge's addresses and po
 
 ```powershell
 airplay2 discover
-airplay2 info "Test Speaker ABCD"
+airplay2 info "Kitchen"
 airplay2 pair "Living Room"                          # the PIN flow if the receiver asks for one
 airplay2 play music.wav --to "Kitchen" --to "Living Room" --level 30 --i-know
 airplay2 play tone:3 --to "Kitchen" --level 15 --i-know
@@ -174,7 +174,7 @@ Kitchen`). What you change in the web app is stored in the database and wins ove
 | `Logging:LogLevel:Airplay2` | `Information` | `Debug` logs the decrypted RTSP exchange; `Logging:LogLevel:Librespot` likewise for Spotify |
 | `Bridge:DeviceName` | `TuneShuttle` | Spotify Connect device name. Settings overrides it |
 | `Bridge:LatencyFrames` | `77175` | Sender latency L in frames (1.75 s at 44.1 kHz); Settings accepts 22 050-176 400. Settings overrides it |
-| `Bridge:PreferredStream` | `Realtime` | `Realtime` or `Buffered`; buffered is used only for receivers that support it and does not play on the SpeakerA. Settings overrides it |
+| `Bridge:PreferredStream` | `Realtime` | `Realtime` or `Buffered`; buffered is used only for receivers that support it and does not play on the srcvers-366 speaker. Settings overrides it |
 | `Bridge:PollReceiverVolumeSeconds` | `3` | Seconds between `GET_PARAMETER volume` polls while playing, which pick up level changes made on a speaker; 0 turns the poll off. Settings switches the poll on or off (at least every second) |
 | `Bridge:ForgetOfflineAfter` | `3.00:00:00` | Offline receivers without user state (no pairing, no group, not the selected output, default level and offset) are forgotten once not seen for this long; checked a minute after start-up, then hourly; `00:00:00` never forgets. Settings overrides it (in days) |
 | `Bridge:ZeroconfPort` | `0` (any free port) | TCP port of the Spotify Connect Zeroconf server; set it to open a fixed port in a firewall |
@@ -217,7 +217,7 @@ change (`receiverChanged`, `receiverRemoved`, `groupChanged`, `groupRemoved`, `o
   address even when mDNS is blocked.
 - **Inbound UDP.** Receivers send NTP timing requests and retransmit requests to the bridge on UDP ports chosen at
   run time, and PTP receivers talk to its PTP clock on UDP 319/320. If the timing requests are blocked, an NTP
-  receiver such as the SpeakerA answers the stream setup with `400` after about 30 s. The Windows install script adds a
+  receiver such as a third-party AirPlay 2 speaker (srcvers 366.0, features 0x445F8A00,0x1C340) answers the stream setup with `400` after about 30 s. The Windows install script adds a
   rule for `bridge.exe` that covers these ports; on Linux, allow the bridge's inbound UDP from the LAN.
 - **Spotify Zeroconf** needs its HTTP port reachable from the phones: any free port by default, fixed with
   `Bridge:ZeroconfPort`.
@@ -231,15 +231,19 @@ change (`receiverChanged`, `receiverRemoved`, `groupChanged`, `groupRemoved`, `o
 
 - **Containers** need a macvlan interface (see "In a container"); NAT does not work.
 
-## Receivers
+## Known receiver quirks
 
-| Receiver | Status |
+Receivers are told apart by what their AirPlay stack advertises in the mDNS TXT record (`srcvers`, `features`), not by
+product name. The rules live in `src/Airplay2.Sender/Session/KnownReceiverQuirks.cs`: keyed on TXT `srcvers` (`model`
+only for shairport-sync), first match wins; anything else takes the defaults.
+
+| Receiver (TXT) | Status |
 |---|---|
-| Test Speaker ABCD (AirPlay 2, srcvers 366.0) | The live target. Transient pairing, the realtime stream under NTP, retransmits, volume, artwork and progress work. Known quirks below. |
-| shairport-sync 5.5.2 | Test receiver for transient and password/PIN pairing, PTP sessions, the realtime stream under PTP and the buffered stream. It refuses NTP sessions, so it always runs under PTP. |
-| Apple devices (HomePod, Apple TV), TVs, others | Not tested yet. A receiver that refuses NTP needs PTP; known models are listed in `src/Airplay2.Sender/Session/KnownReceiverQuirks.cs`. |
+| shairport-sync 5.5.2 (`model=ShairportSync`, also `srcvers=366.0`) | Test receiver for transient and password/PIN pairing, PTP sessions, the realtime stream under PTP and the buffered stream. It refuses NTP sessions, so it always runs under PTP. |
+| `srcvers=366.0`, `features=0x445F8A00,0x1C340` (receiver A, a third-party speaker) | The live target. Transient pairing, the realtime stream under NTP, retransmits, volume, artwork and progress work. Quirks below. |
+| Apple devices (HomePod, Apple TV), TVs, others | Not tested yet. A receiver that refuses NTP needs PTP; add a rule to `KnownReceiverQuirks.cs`. |
 
-Known quirks of the Test Speaker ABCD:
+Quirks of receiver A (`srcvers=366.0`):
 
 - **No track titles.** It answers the DMAP text metadata with `500`, sometimes only after about 10 s. The bridge sends
   the title once per session and then stops; artwork and progress are accepted.
@@ -260,8 +264,8 @@ How each of these was found: [`docs/airplay2/SPEC.md`](docs/airplay2/SPEC.md) se
 | A receiver is not listed | The speaker is on and in the same network; mDNS is not blocked between them. `airplay2 discover` on the same machine shows what mDNS sees. |
 | *Connect* fails after about 30 s with `400` | Inbound UDP to the bridge is blocked (NTP timing requests). Add the firewall rule (see "Firewall and network"). |
 | *Connect* takes long or times out | Slow Wi-Fi receivers can need tens of seconds; `Bridge:ConnectTimeout` (1 minute) is the limit. |
-| Seeking or skipping is slow | The receiver answers `FLUSH` slowly (the SpeakerA takes 2-30 s); nothing to fix on the bridge. |
-| No title on the receiver | It rejects DMAP text (the SpeakerA does); artwork and progress still go out. |
+| Seeking or skipping is slow | The receiver answers `FLUSH` slowly (receiver A takes 2-30 s); nothing to fix on the bridge. |
+| No title on the receiver | It rejects DMAP text (receiver A does); artwork and progress still go out. |
 | Nothing plays with the Buffered stream type | Switch Settings back to Realtime; not every receiver plays the buffered stream. |
 | The rooms of a group are out of step | Set a per-receiver offset under Receivers > Details. |
 | "Bridge:FakeReceivers is set, but this build has no fake receiver" in the log | Fake receivers exist only in Debug builds from the repository. |

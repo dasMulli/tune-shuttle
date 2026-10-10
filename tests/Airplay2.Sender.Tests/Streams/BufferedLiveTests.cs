@@ -25,9 +25,9 @@ namespace Airplay2.Sender.Tests.Streams;
 /// <c>docker/shairport-sync/run-ptp-live-tests-in-vm.ps1 -Filter "FullyQualifiedName~BufferedLiveTests&amp;Category=ShairportLive"</c>
 /// (bridge network: our grandmaster needs UDP 319/320, which nqptp owns in the VM's host namespace). The dummy backend
 /// plays the stream; acceptance is read from <c>docker logs sps-test</c>.</item>
-/// <item><b>SpeakerALive</b>: probe P16 on the Test Speaker ABCD: <b>3 s of the quiet 440 Hz tone at -24 dBFS, level 15</b>,
+/// <item><b>ReceiverLive</b>: probe P16 on the live receiver (AIRPLAY_LIVE_RECEIVER_HOST): <b>3 s of the quiet 440 Hz tone at -24 dBFS, level 15</b>,
 /// per run, only with <c>AIRPLAY_AUDIO_I_KNOW=1</c> (the test-run form of the CLI's <c>--i-know</c>), always ending in
-/// TEARDOWN. One format per run: <c>SpeakerA_P16_alac_44100_s16_0xFACE</c> and <c>SpeakerA_P16_alac_48000_s24_0x15000000</c>.</item>
+/// TEARDOWN. One format per run: <c>Live_P16_alac_44100_s16_0xFACE</c> and <c>Live_P16_alac_48000_s24_0x15000000</c>.</item>
 /// </list>
 /// </summary>
 public sealed class BufferedLiveTests(ITestOutputHelper output)
@@ -38,7 +38,7 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
     private static readonly string[] SpeakerAAirplay =
     [
         "acl=0", "deviceid=02:1A:2B:3C:4D:5E", "features=0x445F8A00,0x1C340", "rsf=0x0", "fv=p20.1.1.36.0x8b4c480", "flags=0x404",
-        "model=Test Speaker ABCD", "manufacturer=Lautsprecher SpeakerA GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
+        "model=Test Speaker ABCD", "manufacturer=Example Audio Maker GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
         "protovers=1.1", "srcvers=366.0", "pi=02:1A:2B:3C:4D:5E", "gid=02:1A:2B:3C:4D:5E", "gcgl=0",
         "pk=d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
     ];
@@ -158,24 +158,24 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
 
     /// <summary>P16 (A-Q7), run 1: buffered ALAC 44.1 kHz/16-bit with shairport-sync's made-up SSRC <c>0x0000FACE</c>.</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P16_alac_44100_s16_0xFACE() => SpeakerAP16Async("P16-buffered-alac44-face", BufferedAudioFormat.Alac44100S16);
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P16_alac_44100_s16_0xFACE() => LiveP16Async("P16-buffered-alac44-face", BufferedAudioFormat.Alac44100S16);
 
     /// <summary>P16 (A-Q7), run 2: buffered ALAC 48 kHz/24-bit with Apple's SSRC <c>0x15000000</c> (uncompressed ALAC frames).</summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public Task SpeakerA_P16_alac_48000_s24_0x15000000() => SpeakerAP16Async("P16-buffered-alac48-24", BufferedAudioFormat.Alac48000S24);
+    [Trait("Category", "ReceiverLive")]
+    public Task Live_P16_alac_48000_s24_0x15000000() => LiveP16Async("P16-buffered-alac48-24", BufferedAudioFormat.Alac48000S24);
 
     /// <summary>
-    /// P16 prerequisite on the SpeakerA, <b>no audio</b> (control plane only, docs/DEVELOPMENT.md, "Live-device rules"): which
+    /// P16 prerequisite on the live receiver, <b>no audio</b> (control plane only, docs/DEVELOPMENT.md, "Live-device rules"): which
     /// SETRATEANCHORTIME body does it accept? Variants on one buffered session: the session package's body (a fraction above
     /// 2^63 becomes a 16-byte bplist integer), the fraction and timeline id as signed 8-byte integers (what airplay2-receiver's
     /// <c>&amp; 0xffffffffffffffff</c> masks suggest senders send), with <c>networkTimeFlags: 0</c>, and rate 0 alone.
     /// Every answer is logged; nothing is written to the data connection.
     /// </summary>
     [Fact]
-    [Trait("Category", "SpeakerALive")]
-    public async Task SpeakerA_P16_anchor_body_probe_without_audio()
+    [Trait("Category", "ReceiverLive")]
+    public async Task Live_P16_anchor_body_probe_without_audio()
     {
         if (!Live())
         {
@@ -266,12 +266,12 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// One P16 run on the SpeakerA: pairing, PTP session SETUP, event channel, RECORD, SETPEERS, stream SETUP 103 with the
+    /// One P16 run on the live receiver: pairing, PTP session SETUP, event channel, RECORD, SETPEERS, stream SETUP 103 with the
     /// format, volume at level 15, an explicit anchor 2 s ahead, 3 s of the quiet tone pushed through the window, feedback
     /// while it plays, TEARDOWN. What the receiver does with the stream is logged: the SETUP answer, whether it accepts and
     /// keeps the TCP connection, its anchor/feedback answers, the PTP exchange. Audibility needs a listener.
     /// </summary>
-    private async Task SpeakerAP16Async(string probe, BufferedAudioFormat format)
+    private async Task LiveP16Async(string probe, BufferedAudioFormat format)
     {
         if (!Live())
         {
@@ -297,7 +297,7 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
         try
         {
             await rig.SetupAsync(session, VolumeMapping.LevelToDb(Level));
-            await Task.Delay(2000); // the SpeakerA's slave yields to our Announce after ~1 s (SPEC-audio.md 4.4 note)
+            await Task.Delay(2000); // the srcvers-366 speaker's slave yields to our Announce after ~1 s (SPEC-audio.md 4.4 note)
 
             var seconds = Math.Min(MaxToneSeconds, 3.0);
             PushResult pushed;

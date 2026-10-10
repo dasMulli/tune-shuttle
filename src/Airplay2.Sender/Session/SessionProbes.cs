@@ -21,8 +21,8 @@ public sealed record SessionProbeOptions
     public SenderIdentity Sender { get; init; } = new("airplay2-streamer probe", "AA:BB:CC:DD:EE:FF", "AA:BB:CC:DD:EE:FF");
 
     /// <summary>
-    /// Control-connection options: 25 s connect, and a 30 s request timeout instead of D6's 10 s, because the SpeakerA MOTIV
-    /// HOME on Wi-Fi answered pair-setup M2/M4 and RECORD after up to ~10 s and once not within 10 s (probe runs
+    /// Control-connection options: 25 s connect, and a 30 s request timeout instead of D6's 10 s, because the srcvers-366
+    /// speaker on Wi-Fi answered pair-setup M2/M4 and RECORD after up to ~10 s and once not within 10 s (probe runs
     /// 2026-10-09, SPEC-control.md 2.1 note).
     /// </summary>
     public RtspConnectionOptions Connection { get; init; } = new() { RequestTimeout = TimeSpan.FromSeconds(30) };
@@ -87,7 +87,7 @@ public sealed class SessionProbes
     private readonly IMasterClock _clock = new MasterClock();
 
     /// <summary>Creates the probes for one receiver.</summary>
-    /// <param name="receiver">The receiver (live rules: only the Test Speaker ABCD).</param>
+    /// <param name="receiver">The receiver (live rules: only the live receiver, AIRPLAY_LIVE_RECEIVER).</param>
     /// <param name="store">Pairing store: stored credentials are verified; otherwise transient pairing is used.</param>
     /// <param name="loggerFactory">Loggers for the connection, pairing and session (the wire log is at Debug).</param>
     /// <param name="options">Options.</param>

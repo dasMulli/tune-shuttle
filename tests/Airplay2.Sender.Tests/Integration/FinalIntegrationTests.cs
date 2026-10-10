@@ -86,7 +86,7 @@ public sealed class RepositoryHygieneTests(ITestOutputHelper output)
         foreach (var file in RepositoryRoot.SourceFiles(root, ["tests"], [".cs"]))
         {
             var text = File.ReadAllText(file);
-            if (!text.Contains("\"SpeakerALive\")]", StringComparison.Ordinal) && !text.Contains("\"ShairportLive\")]", StringComparison.Ordinal))
+            if (!text.Contains("\"ReceiverLive\")]", StringComparison.Ordinal) && !text.Contains("\"ShairportLive\")]", StringComparison.Ordinal))
             {
                 continue;
             }
@@ -142,7 +142,7 @@ public sealed class RepositoryHygieneTests(ITestOutputHelper output)
         }
 
         var script = File.ReadAllText(Path.Combine(root, "build.ps1"));
-        Assert.Contains("Category!=SpeakerALive&Category!=ShairportLive", script, StringComparison.Ordinal);
+        Assert.Contains("Category!=ReceiverLive&Category!=ShairportLive", script, StringComparison.Ordinal);
         Assert.Contains("Remove-Item Env:AIRPLAY_LIVE", script, StringComparison.Ordinal);
         Assert.Contains("docker/Dockerfile", script, StringComparison.Ordinal);
         Assert.Contains("-r\", $Runtime", script, StringComparison.Ordinal);
@@ -227,23 +227,25 @@ public sealed class RepositoryHygieneTests(ITestOutputHelper output)
 public sealed class QuirkDefaultsTests
 {
     [Fact]
-    public void SpeakerA_runs_the_realtime_stream_under_NTP_with_the_wrapped_retransmit_form()
+    public void Srcvers366_speaker_runs_the_realtime_stream_under_NTP_with_the_wrapped_retransmit_form()
     {
         // P1 (control and audio part): NTP accepted, 0xD2 requests arrive; P14: wrapped 0xD6 answers are taken.
-        var SpeakerA = KnownReceiverQuirks.For("Test Speaker ABCD");
-        Assert.Equal(TimingProtocol.Ntp, SpeakerA.TimingProtocol);
-        Assert.False(SpeakerA.RetransmitOnDataPort);
-        Assert.False(SpeakerA.SendAuthSetup);
-        Assert.Equal(0, SpeakerA.OffsetFrames);
-        Assert.True(SpeakerA.VolumeAfterStreamSetup); // P3: a volume before the stream SETUP is not applied
+        var speakerA = KnownReceiverQuirks.For("Test Speaker ABCD", "366.0");
+        Assert.Equal(TimingProtocol.Ntp, speakerA.TimingProtocol);
+        Assert.False(speakerA.RetransmitOnDataPort);
+        Assert.False(speakerA.SendAuthSetup);
+        Assert.Equal(0, speakerA.OffsetFrames);
+        Assert.True(speakerA.VolumeAfterStreamSetup); // P3: a volume before the stream SETUP is not applied
+        Assert.Same(speakerA, KnownReceiverQuirks.For(model: null, "366.0")); // keyed on srcvers, not on the model
     }
 
     [Fact]
     public void Shairport_sync_runs_under_PTP_and_unknown_receivers_take_the_defaults()
     {
         // shairport-sync 5.5.2 answers an NTP session SETUP with 200 and no body (SPEC-control.md 4.2 note).
-        Assert.Equal(TimingProtocol.Ptp, KnownReceiverQuirks.For("ShairportSync").TimingProtocol);
-        Assert.Same(ReceiverQuirks.Default, KnownReceiverQuirks.For("AppleReceiver00,1")); // Apple receiver: untested (P20)
+        // shairport-sync also reports srcvers 366.0; its model rule wins.
+        Assert.Equal(TimingProtocol.Ptp, KnownReceiverQuirks.For("ShairportSync", "366.0").TimingProtocol);
+        Assert.Same(ReceiverQuirks.Default, KnownReceiverQuirks.For("Some Apple receiver", "870.14.1")); // receiver C: untested (P20)
         Assert.Null(ReceiverQuirks.Default.TimingProtocol);
         Assert.False(ReceiverQuirks.Default.RetransmitOnDataPort);
         Assert.False(ReceiverQuirks.Default.SendAuthSetup);
@@ -254,16 +256,16 @@ public sealed class QuirkDefaultsTests
     {
         var options = new AirplaySenderOptions();
         Assert.Equal(TimingProtocol.Ntp, options.DefaultTimingProtocol);
-        Assert.Equal(StreamType.Realtime, options.PreferredStream); // P16: the buffered stream does not play on the SpeakerA
-        Assert.Equal(TimeSpan.FromSeconds(30), options.Connection.RequestTimeout); // SpeakerA answers took up to ~10 s
+        Assert.Equal(StreamType.Realtime, options.PreferredStream); // P16: the buffered stream does not play on the srcvers-366 speaker
+        Assert.Equal(TimeSpan.FromSeconds(30), options.Connection.RequestTimeout); // receiver A's answers took up to ~10 s
         Assert.Equal(TimeSpan.FromSeconds(25), options.Connection.ConnectTimeout); // D6
-        Assert.Equal(TlvMethod.PairSetup, options.Session.PinPairingMethod); // D2; P6: the SpeakerA accepts method 0 and 1
+        Assert.Equal(TlvMethod.PairSetup, options.Session.PinPairingMethod); // D2; P6: receiver A accepts method 0 and 1
     }
 
     [Fact]
     public void Wire_constants_follow_P21_D1_and_D10()
     {
-        Assert.Equal(1024, HapFrameCipher.MaxSendFramePlaintext); // P21: a 2048-byte frame makes the SpeakerA close the connection
+        Assert.Equal(1024, HapFrameCipher.MaxSendFramePlaintext); // P21: a 2048-byte frame makes receiver A close the connection
         Assert.Equal(ushort.MaxValue, HapFrameCipher.MaxReceiveFramePlaintext);
         Assert.Equal(77175, RealtimeStreamConstants.DefaultLatencyFrames); // D1; P7 (microphone) still open
         Assert.Equal(352, RealtimeStreamConstants.FramesPerPacket);
@@ -276,7 +278,7 @@ public sealed class QuirkDefaultsTests
     {
         var player = new GroupPlayerOptions();
         Assert.Equal(TimeSpan.FromSeconds(3), player.VolumePollInterval); // D10 / P4 (no event-channel volume seen yet)
-        Assert.Equal(TimeSpan.FromSeconds(10), player.TeardownTimeout); // the SpeakerA sometimes leaves TEARDOWN unanswered
+        Assert.Equal(TimeSpan.FromSeconds(10), player.TeardownTimeout); // receiver A sometimes leaves TEARDOWN unanswered
         Assert.Equal(RealtimeStreamConstants.DefaultLatencyFrames, player.LatencyFrames);
 
         var ptp = new PtpMasterOptions();

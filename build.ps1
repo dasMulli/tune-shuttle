@@ -7,7 +7,7 @@
     1. build    dotnet build TuneShuttle.sln (warnings are errors in this solution, Directory.Build.props)
     2. privacy  tools/privacy-scan.ps1: no personal or household data in the tracked files (docs/DEVELOPMENT.md,
                 "Privacy scan"); fails the build with the offending lines
-    3. test     dotnet test with --filter "Category!=SpeakerALive&Category!=ShairportLive" (docs/DEVELOPMENT.md, "Live tests":
+    3. test     dotnet test with --filter "Category!=ReceiverLive&Category!=ShairportLive" (docs/DEVELOPMENT.md, "Live tests":
                 live tests never run here; AIRPLAY_LIVE is cleared for the test step as a second guard).
                 -ExcludeTimingTests also drops the 30 s pacer accuracy run (Category=Timing) on loaded runners.
                 TRX files go to <Output>/test-results.
@@ -83,7 +83,7 @@ try {
     }
 
     if (-not $SkipTests) {
-        $filter = "Category!=SpeakerALive&Category!=ShairportLive"
+        $filter = "Category!=ReceiverLive&Category!=ShairportLive"
         if ($ExcludeTimingTests) {
             $filter += "&Category!=Timing"
         }

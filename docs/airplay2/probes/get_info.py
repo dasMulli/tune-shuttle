@@ -1,6 +1,6 @@
 """Unauthenticated GET /info against one AirPlay 2 receiver (plain TCP, port 7000).
 
-Used for docs/airplay2/SPEC-control.md section 1.8 (2026-10-09, Test Speaker ABCD only).
+Used for docs/airplay2/SPEC-control.md section 1.8 (2026-10-09, the srcvers-366 speaker only).
 Sends the headers pyatv's RtspSession.exchange() uses. Three variants, each on its
 own connection. Prints raw response headers and the decoded bplist.
 

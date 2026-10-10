@@ -32,7 +32,7 @@ public sealed class ReceiverSessionUnitTests
     [Fact]
     public async Task SpeakerA_session_setup_answer_with_timing_port()
     {
-        // The SpeakerA's answer: {eventPort: 7002, timingPort: 7001} (live, 2026-10-09).
+        // Receiver A's answer (srcvers 366.0): {eventPort: 7002, timingPort: 7001} (live, 2026-10-09).
         var (session, connection) = Create();
         connection.SendExpectOkAsync(Arg.Any<RtspRequest>(), Arg.Any<CancellationToken>()).Returns(Answer(200, new PlistDictionary { ["eventPort"] = 7002L, ["timingPort"] = 7001L }));
         var result = await session.SetupSessionAsync(SessionTestSupport.NtpSession(), None);
@@ -43,7 +43,7 @@ public sealed class ReceiverSessionUnitTests
     [Fact]
     public async Task Metadata_items_are_best_effort()
     {
-        // The SpeakerA answers DMAP with 500 in a session without audio (probe P9); that must not fail the caller.
+        // Receiver A answers DMAP with 500 in a session without audio (probe P9); that must not fail the caller.
         var (session, connection) = Create();
         connection.SendAsync(Arg.Any<RtspRequest>(), Arg.Any<CancellationToken>()).Returns(Answer(500));
         await session.SetMetadataAsync(new TrackMetadata("T", "A", "B", null), 1, None);
@@ -61,7 +61,7 @@ public sealed class ReceiverSessionUnitTests
     [Fact]
     public async Task Dmap_text_stops_after_the_first_refusal_while_artwork_and_progress_continue()
     {
-        // SPEC.md 4.2: the SpeakerA answers DMAP 500, sometimes after ~10 s, and the control connection carries one request
+        // SPEC.md 4.2: receiver A answers DMAP 500, sometimes after ~10 s, and the control connection carries one request
         // at a time, so the session stops sending DMAP after the first non-2xx answer.
         var (session, connection) = Create();
         connection.SendAsync(Arg.Is<RtspRequest>(r => r.ContentType == RtspContentTypes.DmapTagged), Arg.Any<CancellationToken>()).Returns(Answer(500));
@@ -97,7 +97,7 @@ public sealed class ReceiverSessionUnitTests
     [InlineData("garbage", 0)]
     public async Task Record_returns_audio_latency(string? header, int expected)
     {
-        // The SpeakerA's RECORD answer has no Audio-Latency header at all (live, 2026-10-09).
+        // Receiver A's RECORD answer has no Audio-Latency header at all (live, 2026-10-09).
         var (session, connection) = Create();
         var headers = new Dictionary<string, string>();
         if (header is not null)
@@ -165,7 +165,7 @@ public sealed class ReceiverSessionUnitTests
         Assert.Null(await session.TryGetVolumeAsync(None));
         await Assert.ThrowsAsync<InvalidDataException>(() => session.GetVolumeAsync(None));
 
-        // The SpeakerA's shape: no leading blank line (live, 2026-10-09).
+        // Receiver A's shape: no leading blank line (live, 2026-10-09).
         connection.SendExpectOkAsync(Arg.Any<RtspRequest>(), Arg.Any<CancellationToken>()).Returns(new RtspResponse("RTSP/1.0", 200, "OK", new Dictionary<string, string>(), "volume: -24.000000\r\n"u8.ToArray()));
         Assert.Equal(-24.0, await session.GetVolumeAsync(None));
     }

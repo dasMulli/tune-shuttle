@@ -33,7 +33,7 @@ public sealed class ReleaseConsistencyTests(ITestOutputHelper output)
         Assert.Equal(defaults.LatencyFrames, shipped.LatencyFrames);
         Assert.Equal(77175, shipped.LatencyFrames); // SPEC.md D1
         Assert.Equal(defaults.PreferredStream, shipped.PreferredStream);
-        Assert.Equal("Realtime", shipped.PreferredStream); // SPEC.md section 4, P16: buffered does not play on the SpeakerA
+        Assert.Equal("Realtime", shipped.PreferredStream); // SPEC.md section 4, P16: buffered does not play on the srcvers-366 speaker
         Assert.Equal(defaults.PollReceiverVolumeSeconds, shipped.PollReceiverVolumeSeconds);
         Assert.Equal(defaults.ZeroconfPort, shipped.ZeroconfPort);
         Assert.Equal(defaults.SenderPorts.Timing, shipped.SenderPorts.Timing);
