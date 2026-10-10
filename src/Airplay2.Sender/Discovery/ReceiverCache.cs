@@ -24,7 +24,7 @@ internal sealed record CacheUpdate(IReadOnlyList<ReceiverEvent> Events, IReadOnl
 /// Rules and their sources:
 /// <list type="bullet">
 /// <item>Addresses come only from A/AAAA records of the SRV target; the UDP source is never used, because answers may
-/// come from a reflector (SPEC-control.md 1.1: every answer on our LAN came from 203.0.113.1).</item>
+/// come from a reflector (SPEC-control.md 1.1: in the captured browse every answer came from the reflector).</item>
 /// <item>A record with TTL 0 is a goodbye (RFC 6762 section 10.1): it expires one second later and the grace period
 /// does not apply, so <see cref="ReceiverEvent.Lost"/> follows on the next sweep.</item>
 /// <item>A record with the cache-flush bit replaces records of the same name and type that are older than one second;

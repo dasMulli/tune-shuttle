@@ -20,7 +20,7 @@ public sealed class PlaybackLiveTests(ITestOutputHelper output)
     private static readonly string[] SpeakerAAirplay =
     [
         "acl=0", "deviceid=02:1A:2B:3C:4D:5E", "features=0x445F8A00,0x1C340", "rsf=0x0", "fv=p20.1.1.36.0x8b4c480", "flags=0x404",
-        "model=Test Speaker ABCD", "manufacturer=Lautsprecher SpeakerA GmbH", "serialNumber=00000000-0000-0000-0000-000000000000",
+        "model=Test Speaker ABCD", "manufacturer=Lautsprecher SpeakerA GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
         "protovers=1.1", "srcvers=366.0", "pi=02:1A:2B:3C:4D:5E", "gid=02:1A:2B:3C:4D:5E", "gcgl=0",
         "pk=d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
     ];
@@ -83,16 +83,18 @@ public sealed class PlaybackLiveTests(ITestOutputHelper output)
             return;
         }
 
+        if (!LiveTarget.TryHost(output, out var host))
+        {
+            return;
+        }
+
         using var log = new SessionLiveLog(name, output);
-        var probes = new PlaybackProbes(SpeakerA(), new InMemoryPairingStore(), log, new PlaybackProbeOptions { Level = 15, Sender = SessionTestSupport.Sender with { Name = "airplay2-streamer probe" } });
+        var probes = new PlaybackProbes(SpeakerA(host), new InMemoryPairingStore(), log, new PlaybackProbeOptions { Level = 15, Sender = SessionTestSupport.Sender with { Name = "airplay2-streamer probe" } });
         var report = await probe(probes);
         log.Write($"RESULT {report.Probe}: {report.Summary}");
         Assert.DoesNotContain("failed:", report.Summary, StringComparison.Ordinal);
     }
 
-    private static DiscoveredReceiver SpeakerA()
-    {
-        var host = IPAddress.Parse(Environment.GetEnvironmentVariable("SpeakerA_HOST") ?? "192.0.2.26");
-        return new DiscoveredReceiver("02:1A:2B:3C:4D:5E", "Test Speaker ABCD", [host], 7000, AirplayTxtRecord.Parse(SpeakerAAirplay), RaopTxtRecord.Parse(SpeakerARaop), DateTimeOffset.UtcNow);
-    }
+    private static DiscoveredReceiver SpeakerA(IPAddress host) =>
+        new("02:1A:2B:3C:4D:5E", "Test Speaker ABCD", [host], LiveTarget.Port, AirplayTxtRecord.Parse(SpeakerAAirplay), RaopTxtRecord.Parse(SpeakerARaop), DateTimeOffset.UtcNow);
 }

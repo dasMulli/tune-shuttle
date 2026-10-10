@@ -12,12 +12,13 @@ namespace Bridge.Tests.Service;
 /// TEARDOWN are allowed; audio only as the CLI's quiet tone, which is not the bridge's). The bridge finds the speaker by
 /// mDNS, connects it as the single output (transient pairing, session and stream SETUP, volume at level 15), changes the
 /// level and disconnects it (TEARDOWN) without ever starting the pacer, so no audio packet is sent. Returns early unless
-/// <c>AIRPLAY_LIVE=1</c>; the decrypted wire exchange goes to <c>artifacts/live/&lt;date&gt;-bridge-connect.log</c>.
+/// <c>AIRPLAY_LIVE=1</c> and <c>AIRPLAY_LIVE_RECEIVER</c> (the receiver's mDNS name or device id, no default; docs/DEVELOPMENT.md,
+/// "Live tests"); the decrypted wire exchange goes to <c>artifacts/live/&lt;date&gt;-bridge-connect.log</c>.
 /// </summary>
 public sealed class BridgeLiveTests(ITestOutputHelper output)
 {
-    /// <summary>The only receiver the live tests may contact (docs/DEVELOPMENT.md, "Live-device rules").</summary>
-    public const string SpeakerAName = "Test Speaker ABCD";
+    /// <summary>The variable naming the only receiver the live tests may contact (docs/DEVELOPMENT.md, "Live-device rules").</summary>
+    public const string ReceiverVariable = "AIRPLAY_LIVE_RECEIVER";
 
     [Fact]
     [Trait("Category", "SpeakerALive")]
@@ -26,6 +27,12 @@ public sealed class BridgeLiveTests(ITestOutputHelper output)
         if (Environment.GetEnvironmentVariable("AIRPLAY_LIVE") != "1")
         {
             output.WriteLine("AIRPLAY_LIVE not set");
+            return;
+        }
+
+        if (Environment.GetEnvironmentVariable(ReceiverVariable) is not { Length: > 0 } target)
+        {
+            output.WriteLine($"{ReceiverVariable} not set (the receiver's mDNS name or device id); skipped");
             return;
         }
 
@@ -39,7 +46,7 @@ public sealed class BridgeLiveTests(ITestOutputHelper output)
         while (SpeakerA is null && DateTime.UtcNow < deadline)
         {
             var receivers = await client.GetJsonAsync<List<ReceiverDto>>(ApiRoutes.Receivers);
-            SpeakerA = receivers.FirstOrDefault(r => r.Name == SpeakerAName && r.Online);
+            SpeakerA = receivers.FirstOrDefault(r => (string.Equals(r.Name, target, StringComparison.OrdinalIgnoreCase) || string.Equals(r.Id, target, StringComparison.OrdinalIgnoreCase)) && r.Online);
             if (SpeakerA is null)
             {
                 await Task.Delay(500);

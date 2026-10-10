@@ -8,8 +8,8 @@ disagree, this document wins (it fixes the mockups' contrast problems and adds w
 and the mockup rule does not apply to them.
 
 The app is `src/Bridge.Web`, a Blazor WebAssembly SPA served by `src/Bridge.Service` at `http://<host>:8080`. The
-house style is the one of `D:\daikin-ai-automation\src\DasMulli.DaikinOnecta.Web` and
-`D:\smarthome-integrations\src\DasMulli.ButtonWeb` (server-rendered Razor Pages); this document ports their
+house style is the one of two earlier, non-public web apps by the same author (server-rendered Razor Pages, called
+"the reference apps" below); this document ports their
 mechanisms (tokens, theme picker, catalog) to the SPA. It does not copy their files.
 
 Sections: 1 tokens and CSS, 2 theme, 3 language, 4 layout and pages, 5 mobile and breakpoints, 6 accessibility,
@@ -21,8 +21,8 @@ Sections: 1 tokens and CSS, 2 theme, 3 language, 4 layout and pages, 5 mobile an
 
 ### 1.1 Token set
 
-One accent blue: **`#2f6df6`** (light) with its dark-mode counterpart **`#4c8dff`** (the Daikin pair; the old
-`#0a6cff` of app.css goes away). Everything the mockups use takes the Daikin values below. The `*-ink` and `*-fill`
+One accent blue: **`#2f6df6`** (light) with its dark-mode counterpart **`#4c8dff`** (the reference apps' pair; the old
+`#0a6cff` of app.css goes away). Everything the mockups use takes the reference values below. The `*-ink` and `*-fill`
 tokens are additions: the raw status colours are tuned as dots, borders and fills, and several of them fail 4.5:1 as
 small text on the light surfaces (`--ok` 4.14, `--warn` 3.64, `--accent` 4.0 on `--bg`; see 6.3). **Text is always
 set in an ink token; dots, borders, fills and large glyphs use the raw token.**
@@ -65,7 +65,7 @@ set in an ink token; dots, borders, fills and large glyphs use the raw token.**
 
 ### 1.2 The exact CSS pattern
 
-`wwwroot/css/app.css` starts with exactly this structure (the Daikin pattern). **Rule: the two dark blocks are
+`wwwroot/css/app.css` starts with exactly this structure (the reference apps' pattern). **Rule: the two dark blocks are
 identical, byte for byte; a token is added to both or to neither.** `DesignTokenTests` (`docs/DEVELOPMENT.md`, "Static checks")
 parses the file and fails when they differ.
 
@@ -144,7 +144,7 @@ The brand tile holds the mockup's AirPlay glyph (the three arcs, dot and triangl
 20px phone, `aria-hidden`). The white stroke is a non-text graphic: 4.5:1 on the light accent and 3.2:1 on the dark
 accent, which clears the 3:1 floor for graphics; the same holds for the white note of the artwork placeholder. The
 tabs are centred by the three-column flex (`justify-content: space-between` with the brand and the
-tools of similar width) at ≥ 700px; at ≥ 1024px they are absolutely centred like Daikin (`position: absolute;
+tools of similar width) at ≥ 700px; at ≥ 1024px they are absolutely centred like the reference apps (`position: absolute;
 left: 50%; transform: translateX(-50%)`) so they never shift between pages.
 
 ### 1.5 Components (class names are the contract between CSS and components)
@@ -166,7 +166,7 @@ left: 50%; transform: translateX(-50%)`) so they never shift between pages.
 | long names | user-named text | `h1, .label, .chip, .dialog h2, .card > p { overflow-wrap: anywhere }`: group and receiver names (up to 64 characters, possibly without a space) wrap instead of widening the page on a phone: the master label "Master volume · {{name}}" (4.3), the Receivers group chip (4.4), the group editor's `h1` and its Name card (4.6), the pairing dialog's "Pair with {{name}}" (4.11); `.meta`, `.chip--members`, `.hero__title` and the row names already wrap. `tools/screenshot-setups/mobile-polish.ps1` names its group with 63 characters and no space so the audit's overflow check exercises it; `DesignTokenTests` checks the rule |
 | `.tools` | top-bar right cluster | `display: flex; align-items: center; gap: .5rem; min-width: 0` (also in 1.4) |
 | `.theme-picker` | theme radio group | `display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface-2)` |
-| `.theme-btn` | one theme option | `display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 0; background: transparent; color: var(--muted); overflow: hidden; transition: width .15s ease, opacity .15s ease` (ButtonWeb's values; `overflow: hidden` is what makes the collapse rule of 2.4 visible) ; `.theme-btn .ico { width: 15px; height: 15px }` (the reference apps' 15px, not the mockup's 18px; 18px inside the 34px phone button, 5.2); hover `color: var(--accent-ink)` under `(hover: hover)` |
+| `.theme-btn` | one theme option | `display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 0; background: transparent; color: var(--muted); overflow: hidden; transition: width .15s ease, opacity .15s ease` (the reference apps' values; `overflow: hidden` is what makes the collapse rule of 2.4 visible) ; `.theme-btn .ico { width: 15px; height: 15px }` (the reference apps' 15px, not the mockup's 18px; 18px inside the 34px phone button, 5.2); hover `color: var(--accent-ink)` under `(hover: hover)` |
 | `.theme-btn.is-active` | chosen option | `background: var(--accent-soft); color: var(--accent)` (the mockup's colour; the icon is a glyph, not text: 3.8:1 light / 4.3:1 dark on `--accent-soft` over `--surface-2`, above the 3:1 floor for graphics; listed in 6.3) |
 | `.lang-select` | top-bar language select | `font-size: .85rem; padding: .35rem 1.6rem .35rem .7rem; min-height: 32px; min-width: 4.5rem; flex-shrink: 3; max-width: 11rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--text); appearance: none; background: var(--surface) url(<chevron svg>) no-repeat right .55rem center; text-overflow: ellipsis` (the chevron colours are in 3.2; the shrink factor 3 lets it give way first in a tight tablet bar, down to the `4.5rem` floor that keeps one readable character plus the chevron; hidden below 760px, 5.5); the Settings page uses the `Field` variant of the component with `.input` instead (4.6) |
 | `.only-phone` / `.only-wide` | responsive toggles | `.only-phone { display: none }` at ≥ 700px, `.only-wide { display: none }` at ≤ 699px; used where the phone shows different text or actions than the desktop (4.3). Nothing else is hidden with these two classes |
@@ -258,7 +258,7 @@ updates the draft, raises `DraftChanged` and sends through the same `CoalescingS
 - `<html data-theme="light|dark">` mirrors the stored value; no attribute for system.
 - `<meta name="theme-color">`: two media-scoped metas (`#eef1f6` for `(prefers-color-scheme: light)`, `#0d1117`
   for dark) plus, for an explicit choice, one media-less override meta inserted **before** them
-  (`id="theme-color-override"`, the ButtonWeb mechanism; browsers take the first matching meta). Choosing system
+  (`id="theme-color-override"`, the reference apps' mechanism; browsers take the first matching meta). Choosing system
   removes the override.
 
 ### 2.2 Pre-paint bootstrap in `wwwroot/index.html`
@@ -328,7 +328,7 @@ OnOutsideClickAsync(ElementReference, DotNetObjectReference<T>, string)`, `Task 
 ### 2.4 The theme picker (component `Components/ThemePicker.razor`)
 
 Exactly the reference apps' control: a `role="radiogroup"` pill with three `role="radio"` buttons, light / dark /
-system, in that order, icons sun / moon / half-disc (the SVG paths of ButtonWeb's `_Layout`). Behaviour:
+system, in that order, icons sun / moon / half-disc (the SVG paths of the reference apps' `_Layout`). Behaviour:
 
 - Collapsed it shows only the active option (`.theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open)
   .theme-btn:not(.is-active) { width: 0; opacity: 0; pointer-events: none }`, and `gap: 0` on the group); hover or
@@ -365,7 +365,7 @@ system, in that order, icons sun / moon / half-disc (the SVG paths of ButtonWeb'
 - Size: 26px buttons in a 2px-padded pill at ≥ 700px with a fine pointer; 34px buttons (`.ico` 18px) on phones and on
   every coarse pointer (the touch block of 5.4, so landscape phones and touch tablets get them too). The buttons are **not** grown
   to 44px and get **no** `::before` halo: `.theme-btn` has `overflow: hidden` (it drives the collapse animation) and
-  would clip a halo, and three 44px buttons would not fit beside the status pill at 320px (ButtonWeb's site.css
+  would clip a halo, and three 44px buttons would not fit beside the status pill at 320px (the reference apps' site.css
   documents the same decision). 34px clears the 24px WCAG 2.5.8 floor; the audit's `small` list (5.6) allow-lists
   `.theme-btn`, and the Settings Appearance card is the 44px way to choose a theme on a phone.
 
@@ -378,10 +378,10 @@ collapsing), driven by the same `BrowserBridge`; it is the thumb-friendly place 
 
 ### 3.1 Model (port of `I18nCatalog`, plus additions)
 
-`Bridge.Web/Localization/I18n.cs`, a singleton registered in `Program.AddBridgeClient`. Daikin's `I18nCatalog`
+`Bridge.Web/Localization/I18n.cs`, a singleton registered in `Program.AddBridgeClient`. The reference apps' `I18nCatalog`
 (indexer, `GetString`, `Format`, `ResolveCulture`; neither reference catalog has plural keys) is the reference for
 the embedded-JSON loading, the flattening and the fallback order. **New here, with no reference implementation:**
-`Plural`/`PluralRules`, `SetLanguage`, `Changed`, `Culture`, `Keys()`. Daikin's `Format` formats with
+`Plural`/`PluralRules`, `SetLanguage`, `Changed`, `Culture`, `Keys()`. Their `Format` formats with
 `CultureInfo.CurrentCulture`; this `Format` uses the `Culture` property, and `SetLanguage` sets
 `CultureInfo.DefaultThreadCurrentCulture`/`DefaultThreadCurrentUICulture` to the same value; it **never** sets the
 `AsyncLocal` `CurrentCulture`/`CurrentUICulture`: a value set there would be captured by every flow started afterwards
@@ -623,7 +623,7 @@ left, Output and Status stacked right. One column below.
      the clamp hint (groups.clampHint) appears as `.meta` under the row when `GroupVolumePreview.Clamps`. For a single
      receiver output this row is omitted (one member = the master).
    Phone (≤ 699px, `.only-phone`): row 3 is replaced by one `.chip.chip--members` line (1.5), e.g.
-   "Downstairs · Test Speaker ABCD 40 · Office 24": player.membersChip with `{{output}}` = the group name and
+   "Downstairs · Test Speaker ABCD 40 · Hallway 24": player.membersChip with `{{output}}` = the group name and
    `{{members}}` = the members as "name level" (name, a space, the level) joined with " · ". Names are used as they
    come from the receivers (the phone mockup's shortened "SpeakerA" is illustrative; nothing truncates), and the chip
    wraps onto several lines inside the card (`white-space: normal; max-width: 100%`). The chip is omitted for a
@@ -669,7 +669,7 @@ left, Output and Status stacked right. One column below.
     player.editGroup "{{name}}"; wide screens only: on phones the head's player.editGroups link leads to the editor,
     5.3). Radio disabled when the group has no members or no member is online.
     Meta is two spans: `.meta.only-wide` player.groupMeta "Group · {{members}}" (names joined by ", "; player.groupEmpty
-    when none) and `.meta.only-phone` with the member names joined by ", " alone (the phone mockup's "SpeakerA, Office";
+    when none) and `.meta.only-phone` with the member names joined by ", " alone (the phone mockup's "SpeakerA, Hallway";
     player.groupEmptyShort when none).
   - Receiver: `<strong>` name, meta, pill (4.8), then either `LevelSlider Variant="Compact"` (150px, `Label` =
     receivers.volumeOf "{{name}}" hidden, `ValueText` common.levelText, sends `Commands.SetReceiverLevelAsync`; value
@@ -1252,7 +1252,7 @@ printed in the test output and has no floor (it is decorative, 1.1).
 
 ### 6.4 Motion
 
-The live dot pulses (`@keyframes pulse`, 1.8 s, section 7: adapted from Daikin's keyframes, which are hard-coded to
+The live dot pulses (`@keyframes pulse`, 1.8 s, section 7: adapted from the reference apps' keyframes, which are hard-coded to
 `--ok`; here they use `currentColor` and are applied to `.status--live::before` only); the theme picker animates
 width/opacity 0.15 s; cards do not lift on hover (they are not clickable). `prefers-reduced-motion: reduce` turns
 the animation and the transitions off (1.3) and the static halo of the base rule shows for every state.

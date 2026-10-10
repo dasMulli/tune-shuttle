@@ -18,12 +18,12 @@
       "model=TVMODEL0000.DEUQDJP",
       "integrator=LG Electronics",
       "manufacturer=LG",
-      "serialNumber=000SYNTH0001_02:4c:47:00:00:02",
+      "serialNumber=000ABCD00000_02:4c:47:00:00:02",
       "protovers=1.1",
       "srcvers=377.40.00",
       "pi=02:4C:47:00:00:01",
-      "psi=00000000-0000-0000-0000-024C47000001",
-      "gid=00000000-0000-0000-0000-024C47000001",
+      "psi=00000000-0000-0000-0000-024c47000001",
+      "gid=00000000-0000-0000-0000-024c47000001",
       "gcgl=0",
       "pk=3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c"
     ],
@@ -48,7 +48,7 @@
       "flags=0x404",
       "model=Test Speaker ABCD",
       "manufacturer=Lautsprecher SpeakerA GmbH",
-      "serialNumber=00000000-0000-0000-0000-000000000000",
+      "serialNumber=00000000-0000-4000-8000-000000000026",
       "protovers=1.1",
       "srcvers=366.0",
       "pi=02:1A:2B:3C:4D:5E",
@@ -58,11 +58,11 @@
     ],
     "addresses": [
       "192.0.2.26",
-      "2001:db8:1:30:1a2b:3cff:fe4d:5e01",
-      "fe80::1a2b:3cff:fe4d:5e01",
+      "2001:db8:0:30:1a:2bff:fe3c:4d5e",
+      "fe80::1a:2bff:fe3c:4d5e",
       "192.0.2.26",
-      "2001:db8:1:30:1a2b:3cff:fe4d:5e01",
-      "fe80::1a2b:3cff:fe4d:5e01"
+      "2001:db8:0:30:1a:2bff:fe3c:4d5e",
+      "fe80::1a:2bff:fe3c:4d5e"
     ]
   },
   "021A2B3C4D5E@Test Speaker ABCD._raop._tcp.local": {
@@ -88,11 +88,11 @@
     ],
     "addresses": [
       "192.0.2.26",
-      "2001:db8:1:30:1a2b:3cff:fe4d:5e01",
-      "fe80::1a2b:3cff:fe4d:5e01",
+      "2001:db8:0:30:1a:2bff:fe3c:4d5e",
+      "fe80::1a:2bff:fe3c:4d5e",
       "192.0.2.26",
-      "2001:db8:1:30:1a2b:3cff:fe4d:5e01",
-      "fe80::1a2b:3cff:fe4d:5e01"
+      "2001:db8:0:30:1a:2bff:fe3c:4d5e",
+      "fe80::1a:2bff:fe3c:4d5e"
     ]
   }
 }

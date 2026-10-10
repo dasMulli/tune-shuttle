@@ -19,7 +19,7 @@ namespace Airplay2.Sender.Discovery;
 /// and, when <see cref="ReceiverBrowserOptions.UseLegacyUnicastQueries"/> is set, one ephemeral-port socket per local
 /// address (IPv4) or interface (IPv6) that sends the same queries as legacy unicast queries, as pyatv does with one
 /// socket per local address plus one on 5353 [pyatv:pyatv/core/mdns.py:506-531]. The second path is the fallback for
-/// reflectors: on our LAN an mDNS proxy at 203.0.113.1 answers for receivers on other subnets.</para>
+/// reflectors: an mDNS proxy (for example a router reflecting mDNS between VLANs) answers for receivers on other subnets.</para>
 /// <para>Queries: PTR for <c>_airplay._tcp.local</c> and <c>_raop._tcp.local</c> 20-120 ms after start (RFC 6762
 /// section 5.2), then after 1 s and 3 s, then at the constant <see cref="ReceiverBrowserOptions.QueryInterval"/> (the
 /// scaffold contract; RFC 6762 5.2 asks continuous queriers to keep doubling the interval up to a cap, a deviation left

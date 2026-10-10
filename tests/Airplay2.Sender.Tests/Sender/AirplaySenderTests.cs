@@ -178,7 +178,7 @@ public sealed class AirplaySenderTests
         {
             Quirks = new Dictionary<string, ReceiverQuirks>
             {
-                ["021A2B3C4D5E"] = new() { OffsetFrames = 100 },
+                ["021a2b3c4d5e"] = new() { OffsetFrames = 100 },
                 ["AA:00:00:00:00:01"] = new() { TimingProtocol = TimingProtocol.Ptp },
             },
         });

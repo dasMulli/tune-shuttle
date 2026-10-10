@@ -94,20 +94,20 @@ public class PtpSessionWiringTests
         session.Connection.Returns(connection);
         IReadOnlyList<IPAddress>? sent = null;
         session.SetPeersAsync(Arg.Do<IReadOnlyList<IPAddress>>(p => sent = p), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        var setup = new SessionSetupResult(7006, 0, [IPAddress.Parse("2001:db8:1:30:1a2b:3cff:fe4d:5e01"), IPAddress.Parse("192.0.2.26")], new PlistDictionary());
+        var setup = new SessionSetupResult(7006, 0, [IPAddress.Parse("2001:db8:0:30:1a:2bff:fe3c:4d5e"), IPAddress.Parse("192.0.2.26")], new PlistDictionary());
 
-        var peer = await PtpSessionWiring.AttachAsync(session, master, setup, [IPAddress.Parse("203.0.113.150"), IPAddress.Parse("fd00::150")], CancellationToken.None);
+        var peer = await PtpSessionWiring.AttachAsync(session, master, setup, [IPAddress.Parse("203.0.113.150"), IPAddress.Parse("2001:db8::150")], CancellationToken.None);
         Assert.Equal(IPAddress.Parse("192.0.2.26"), peer);
-        Assert.Equal([IPAddress.Parse("192.0.2.26"), IPAddress.Parse("203.0.113.150"), IPAddress.Parse("fd00::150")], sent);
+        Assert.Equal([IPAddress.Parse("192.0.2.26"), IPAddress.Parse("203.0.113.150"), IPAddress.Parse("2001:db8::150")], sent);
     }
 
-    // The SpeakerA's answer (SPEC.md P1): IPv4, two ULA and one link-local address.
+    // The SpeakerA's answer (SPEC.md P1): IPv4, two ULA (documentation prefix here) and one link-local address.
     private static readonly IPAddress[] SpeakerAAddresses =
     [
         IPAddress.Parse("192.0.2.26"),
-        IPAddress.Parse("2001:db8:1:30:1a2b:3cff:fe4d:5e01"),
-        IPAddress.Parse("2001:db8:1:30::26"),
-        IPAddress.Parse("fe80::1a2b:3cff:fe4d:5e01"),
+        IPAddress.Parse("2001:db8:0:30:1a:2bff:fe3c:4d5e"),
+        IPAddress.Parse("2001:db8:0:30::26"),
+        IPAddress.Parse("fe80::1a:2bff:fe3c:4d5e"),
     ];
 
     [Fact]
@@ -120,13 +120,13 @@ public class PtpSessionWiringTests
     [Fact]
     public void Selects_an_address_of_our_family_when_the_connected_one_is_not_listed()
     {
-        // Connected over IPv6 ULA to an address the receiver does not list: first ULA, link-local skipped.
-        var picked = PtpSessionWiring.SelectPeerAddress(SpeakerAAddresses, IPAddress.Parse("2001:db8:1:30::99"), IPAddress.Parse("2001:db8:1:30::150"));
-        Assert.Equal(IPAddress.Parse("2001:db8:1:30:1a2b:3cff:fe4d:5e01"), picked);
+        // Connected over IPv6 (ULA in the capture) to an address the receiver does not list: first ULA, link-local skipped.
+        var picked = PtpSessionWiring.SelectPeerAddress(SpeakerAAddresses, IPAddress.Parse("2001:db8:0:30::99"), IPAddress.Parse("2001:db8:0:30::150"));
+        Assert.Equal(IPAddress.Parse("2001:db8:0:30:1a:2bff:fe3c:4d5e"), picked);
 
         // We are link-local: the receiver's link-local address gets our scope.
         var local = new IPAddress(IPAddress.Parse("fe80::150").GetAddressBytes(), 7);
-        var linkLocal = PtpSessionWiring.SelectPeerAddress([IPAddress.Parse("fe80::1a2b:3cff:fe4d:5e01")], IPAddress.Parse("fe80::1"), local);
+        var linkLocal = PtpSessionWiring.SelectPeerAddress([IPAddress.Parse("fe80::1a:2bff:fe3c:4d5e")], IPAddress.Parse("fe80::1"), local);
         Assert.Equal(7, linkLocal.ScopeId);
 
         // Nothing usable: the connected address.

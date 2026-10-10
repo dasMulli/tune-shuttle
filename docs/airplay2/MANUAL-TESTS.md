@@ -10,7 +10,7 @@ line, as the probes so far have been. Live logs go to `artifacts/live/` (git-ign
 
 The live-device rules apply ([`docs/DEVELOPMENT.md`, "Live-device rules"](../DEVELOPMENT.md#live-device-rules)).
 AirPlay wakes receivers, and they play at their current volume. Contacting the LG TV is the owner's decision, because
-it turns on. The Apple receiver "Office" may be used only with its owner's permission. Start every listening test at a
+it turns on. The Apple receiver "Hallway" may be used only with its owner's permission. Start every listening test at a
 low level (15-20) and raise it from the web app.
 
 Section and item numbers are stable: `SPEC.md` section 4.1 refers to them (for example "2.6").
@@ -95,7 +95,7 @@ behaviour.
 Last known result: not run with two real receivers. A single SpeakerA kept its own `gid` (`gcgl=0`) during a session
 with our `groupUUID` (2026-10-09).
 
-1. [ ] Choose the second receiver. Options: another AirPlay 2 speaker you own; the Apple receiver "Office" **only with
+1. [ ] Choose the second receiver. Options: another AirPlay 2 speaker you own; the Apple receiver "Hallway" **only with
        its owner's permission**; the LG TV (it turns on; the owner's call). Check what `airplay2 discover` says about
        its pairing mode and timing.
    - A receiver that refuses NTP sessions (answers the NTP session SETUP with 501, or with 200 and no body as

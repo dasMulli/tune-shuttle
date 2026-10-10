@@ -13,7 +13,7 @@ namespace Airplay2.Sender.Tests.Session;
 
 /// <summary>
 /// Live session tests and probes (docs/DEVELOPMENT.md, "Live-device rules"): pairing, session SETUP, event channel, RECORD,
-/// stream SETUP, volume, feedback and TEARDOWN on the Test Speaker ABCD (<c>SpeakerA_HOST</c>, default 192.0.2.26),
+/// stream SETUP, volume, feedback and TEARDOWN on the Test Speaker ABCD (<c>AIRPLAY_LIVE_RECEIVER_HOST</c>, no default: <see cref="LiveTarget"/>),
 /// <b>never audio</b>; and the PTP session path on shairport-sync inside the Docker VM (<c>SPS_HOST</c>/<c>SPS_PORT</c>).
 /// They return early unless <c>AIRPLAY_LIVE=1</c>. Every run writes the decrypted wire exchange (Debug) to
 /// <c>artifacts/live/&lt;date&gt;-&lt;probe&gt;.log</c>.
@@ -23,7 +23,7 @@ public sealed class SessionLiveTests(ITestOutputHelper output)
     private static readonly string[] SpeakerAAirplay =
     [
         "acl=0", "deviceid=02:1A:2B:3C:4D:5E", "features=0x445F8A00,0x1C340", "rsf=0x0", "fv=p20.1.1.36.0x8b4c480", "flags=0x404",
-        "model=Test Speaker ABCD", "manufacturer=Lautsprecher SpeakerA GmbH", "serialNumber=00000000-0000-0000-0000-000000000000",
+        "model=Test Speaker ABCD", "manufacturer=Lautsprecher SpeakerA GmbH", "serialNumber=00000000-0000-4000-8000-000000000026",
         "protovers=1.1", "srcvers=366.0", "pi=02:1A:2B:3C:4D:5E", "gid=02:1A:2B:3C:4D:5E", "gcgl=0",
         "pk=d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
     ];
@@ -41,13 +41,13 @@ public sealed class SessionLiveTests(ITestOutputHelper output)
     [Trait("Category", "SpeakerALive")]
     public async Task SpeakerA_session_startup_without_audio()
     {
-        if (!Live())
+        if (!Live() || !LiveTarget.TryHost(output, out var host))
         {
             return;
         }
 
         using var log = new SessionLiveLog("session-startup", output);
-        var receiver = SpeakerA();
+        var receiver = SpeakerA(host);
         await using var connection = await RtspConnection.ConnectAsync(new IPEndPoint(receiver.Addresses[0], receiver.Port), new RtspConnectionOptions { RequestTimeout = TimeSpan.FromSeconds(30) }, log.CreateLogger("rtsp"), CancellationToken.None);
         await using var session = new ReceiverSession(receiver, connection, new HapPairingClient(log.CreateLogger<HapPairingClient>()), ReceiverQuirks.ForReceiver(receiver), log.CreateLogger<ReceiverSession>());
         await using var timing = new TimingResponder(new MasterClock(), log.CreateLogger<TimingResponder>());
@@ -200,13 +200,13 @@ public sealed class SessionLiveTests(ITestOutputHelper output)
 
     private async Task RunProbeAsync(string name, Func<SessionProbes, Task<ProbeReport>> probe)
     {
-        if (!Live())
+        if (!Live() || !LiveTarget.TryHost(output, out var host))
         {
             return;
         }
 
         using var log = new SessionLiveLog(name, output);
-        var probes = new SessionProbes(SpeakerA(), new InMemoryPairingStore(), log, new SessionProbeOptions { Sender = SessionTestSupport.Sender with { Name = "airplay2-streamer probe" } });
+        var probes = new SessionProbes(SpeakerA(host), new InMemoryPairingStore(), log, new SessionProbeOptions { Sender = SessionTestSupport.Sender with { Name = "airplay2-streamer probe" } });
         var report = await probe(probes);
         log.Write($"RESULT {report.Probe}: {report.Summary}");
     }
@@ -222,11 +222,8 @@ public sealed class SessionLiveTests(ITestOutputHelper output)
         return true;
     }
 
-    private static DiscoveredReceiver SpeakerA()
-    {
-        var host = IPAddress.Parse(Environment.GetEnvironmentVariable("SpeakerA_HOST") ?? "192.0.2.26");
-        return new DiscoveredReceiver("02:1A:2B:3C:4D:5E", "Test Speaker ABCD", [host], 7000, AirplayTxtRecord.Parse(SpeakerAAirplay), RaopTxtRecord.Parse(SpeakerARaop), DateTimeOffset.UtcNow);
-    }
+    private static DiscoveredReceiver SpeakerA(IPAddress host) =>
+        new("02:1A:2B:3C:4D:5E", "Test Speaker ABCD", [host], LiveTarget.Port, AirplayTxtRecord.Parse(SpeakerAAirplay), RaopTxtRecord.Parse(SpeakerARaop), DateTimeOffset.UtcNow);
 
     private static double Seconds(string variable, double fallback) =>
         double.TryParse(Environment.GetEnvironmentVariable(variable), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : fallback;

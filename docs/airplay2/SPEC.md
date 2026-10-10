@@ -97,7 +97,7 @@ The results follow as dated "Result (date): ..." entries; add new ones the same 
 the code keeps both branches the parts name (NTP/PTP, event/poll, wrapped/raw).
 
 - Discovery (no P id) Result (2026-10-09): `MdnsReceiverBrowser` found the SpeakerA (192.0.2.26, port
-  7000, two ULA and one link-local AAAA), the HomePod "Office" and the LG TV, all via the reflector 203.0.113.1, the
+  7000, two ULA and one link-local AAAA), the HomePod "Hallway" and the LG TV, all via the reflector 203.0.113.1, the
   first two with their `_raop` record merged (none for the TV in that run); addresses taken from A/AAAA records only. Port-5353 queries get multicast answers with
   normal TTLs, ephemeral-port queries get legacy unicast answers with TTL 10 (the SpeakerA answered only the former).
   Details in SPEC-control 1.1 (note) and `artifacts/live/2026-10-09-discover.log`.

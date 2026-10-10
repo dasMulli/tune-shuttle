@@ -27,6 +27,7 @@ tests/
 tools/
   web-screenshots.ps1           screenshots of the web app in headless Edge
   web-audit.ps1                 layout audit of the web app in headless Edge
+  privacy-scan.ps1              fails on personal or household data in the tracked files (see "Privacy scan")
   screenshot-setups/            scripts that put the fake receivers into a state before screenshots or audits
 docker/
   Dockerfile                    the Linux image of the bridge
@@ -64,7 +65,7 @@ Test categories:
 |---|---|---|
 | (none) | everything offline: unit tests, the in-process fake receiver, loopback sockets, `WebApplicationFactory`, bUnit | always |
 | `Timing` | the 30 s pacer accuracy run | always; excluded with `-ExcludeTimingTests` |
-| `SpeakerALive` | against the Test Speaker ABCD on the LAN | `AIRPLAY_LIVE=1`; audio additionally `AIRPLAY_AUDIO_I_KNOW=1` |
+| `SpeakerALive` | against a Test Speaker ABCD on the LAN | `AIRPLAY_LIVE=1` plus the target (`AIRPLAY_LIVE_RECEIVER` or `AIRPLAY_LIVE_RECEIVER_HOST`, see "Live tests"); audio additionally `AIRPLAY_AUDIO_I_KNOW=1` |
 | `ShairportLive` | against shairport-sync in Docker | `AIRPLAY_LIVE=1`; set by the VM scripts |
 
 A live test returns early unless its gate is set, so a plain `dotnet test` never contacts a receiver even without the
@@ -83,9 +84,9 @@ The CI script runs the whole sequence:
 ```
 
 Parameters: `-Configuration Debug|Release` (default Release), `-Output` (default `artifacts`), `-Runtime` (default
-`win-x64`), `-SelfContained`, `-ImageTag` (default `tune-shuttle:dev`), `-SkipBuild`, `-SkipTests`, `-SkipPublish`,
+`win-x64`), `-SelfContained`, `-ImageTag` (default `tune-shuttle:dev`), `-SkipBuild`, `-SkipPrivacyScan`, `-SkipTests`, `-SkipPublish`,
 `-SkipContainer`, `-RequireContainer` (fail instead of warn without Docker), `-ExcludeTimingTests`. The test step
-clears `AIRPLAY_LIVE` as a second guard.
+clears `AIRPLAY_LIVE` as a second guard. Before the tests it runs the privacy scan (below).
 
 | Output | Path |
 |---|---|
@@ -99,6 +100,28 @@ equals the `BridgeOptions` defaults; publish folder and web port agree between `
 Dockerfile) and `DeploymentTests` (the endpoint key in the install script, the Dockerfile and the systemd unit).
 `QuirkDefaultsTests` pins the receiver defaults of `SPEC.md` section 4.2, and a test checks that every relative link
 in `README.md` points to a file that exists.
+
+### Privacy scan
+
+The repository is public, and its specs and test vectors come from captures of real receivers on a home network.
+`tools/privacy-scan.ps1` keeps personal and household data out: it reads every tracked (and every new, not ignored)
+file except `reference/`, binary plists included, and exits 1 with `path:line: [check] text` for each hit.
+
+```powershell
+./tools/privacy-scan.ps1          # also step 2 of ./build.ps1 (skip with -SkipPrivacyScan)
+```
+
+It flags the home network's subnets, domain and host names, the TV's user-given name, MAC addresses and IPv6 interface
+ids derived from globally administered (real hardware) MACs, IPv6 ULAs with a global id, receiver `pk` values other
+than the RFC 8032 test keys, and 32-hex ids next to "client" or "secret" other than the public Spotify client ids
+librespot ships. The exact identifiers that were replaced are not in the repository: the script reads them from the
+git-ignored `.local/privacy-scan-patterns.txt` (one value per line, also matched hex-encoded) and the Spotify developer
+credentials from `.local/spotify-dev-app.json`, when those files exist.
+
+Rules for new material: addresses in docs and tests come from 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 and
+2001:db8::/32 (loopback where the test is about loopback); device ids are locally administered (`02:...`); keys are
+test keys; receiver names are neutral ("Living room TV", "Kitchen", "Hallway"). Anonymize a new capture before
+committing it, in binary files with same-length replacements so offsets stay valid (SPEC-control.md 1.7).
 
 ### Running the bridge from the repository
 
@@ -115,14 +138,28 @@ serves it too.
 ## Live tests
 
 ```powershell
-$env:AIRPLAY_LIVE=1; dotnet test --filter Category=SpeakerALive                      # control-plane tests, no audio
-$env:AIRPLAY_LIVE=1; $env:AIRPLAY_AUDIO_I_KNOW=1; dotnet test --filter "FullyQualifiedName~SpeakerA_sender_M1"
+$env:AIRPLAY_LIVE=1
+$env:AIRPLAY_LIVE_RECEIVER="Test Speaker ABCD"   # the receiver's mDNS name or device id, as `airplay2 discover` shows it
+$env:AIRPLAY_LIVE_RECEIVER_HOST="192.0.2.26"     # its IP address (example value: use your receiver's)
+dotnet test --filter Category=SpeakerALive                                            # control-plane tests, no audio
+$env:AIRPLAY_AUDIO_I_KNOW=1; dotnet test --filter "FullyQualifiedName~SpeakerA_sender_M1"
 ./docker/shairport-sync/run-live-tests-in-vm.ps1 -Filter "Category=ShairportLive&FullyQualifiedName!~PtpLiveTests&FullyQualifiedName!~BufferedLiveTests"
 ./docker/shairport-sync/run-ptp-live-tests-in-vm.ps1                                # PtpLiveTests
 ./docker/shairport-sync/run-ptp-live-tests-in-vm.ps1 -Filter "FullyQualifiedName~BufferedLiveTests&Category=ShairportLive"
 ```
 
-Each run writes its decrypted wire log to `artifacts/live/`. The CLI's `probe` command runs the protocol probes of
+The SpeakerALive tests have no built-in target: nothing in the repository names or addresses a particular receiver.
+They read it from the environment and return early (reported as passed, with the reason in the output) when the variable
+they need is unset (`tests/Airplay2.Sender.Tests/LiveTarget.cs`):
+
+| Variable | Used by | Value |
+|---|---|---|
+| `AIRPLAY_LIVE_RECEIVER` | the tests that discover the receiver by mDNS (`ReceiverBrowserLiveTests`, `CliLiveTests`, `BridgeLiveTests`) | its mDNS instance name or device id (what `--to` accepts) |
+| `AIRPLAY_LIVE_RECEIVER_HOST` | the tests that connect directly (RTSP, pairing, session, playback, PTP, buffered) | its IPv4 or IPv6 address |
+| `AIRPLAY_LIVE_RECEIVER_PORT` | the same | its RTSP port; default 7000 |
+
+The receiver must be a Test Speaker ABCD (the direct-connect tests use its TXT record and quirks, and `RtspLiveTests`
+compares its `GET /info` with the stored vectors). Each run writes its decrypted wire log to `artifacts/live/`. The CLI's `probe` command runs the protocol probes of
 `SPEC.md` section 4 one at a time (`airplay2 probe P3 "Test Speaker ABCD"`) and appends its log there too.
 
 ### Live-device rules
@@ -133,7 +170,7 @@ an agent:
 - **Allowed:** the Test Speaker ABCD and the shairport-sync container. mDNS browsing and unauthenticated `GET /info`
   are fine at any time; pairing, session `SETUP`/`TEARDOWN` and control-plane probes without audio are fine too.
 - **Never:** the LG TV "Living room TV" (AirPlay turns it on), any receiver not listed here, and the Apple receiver
-  "Office" without its owner's go-ahead. No PIN pairing attempts on devices that show a PIN.
+  "Hallway" without its owner's go-ahead. No PIN pairing attempts on devices that show a PIN.
 - **Audio** only as a 3-second quiet test tone (440 Hz, -24 dBFS) at a level of at most 20 (15 is the default), and
   only with the explicit acknowledgement: `--i-know` for the CLI (without it `play` and the audio probes exit with
   code 2 before opening a socket), `AIRPLAY_AUDIO_I_KNOW=1` for the tests. The probes enforce the 3 s and level 20
@@ -355,8 +392,8 @@ docker buildx build --platform linux/arm64 -f docker/Dockerfile -t <registry>/tu
 ```
 
 The SDK stage runs natively on the build host and cross-compiles for `TARGETARCH`; only the runtime stage is pulled
-for the target platform, so an arm64 image (the Raspberry Pi clusters) builds without QEMU. The header of
-`docker/Dockerfile` has the command with the registry in use. `./build.ps1` builds `tune-shuttle:dev` for the host.
+for the target platform, so an arm64 image (e.g. for a Raspberry Pi) builds without QEMU. The header of
+`docker/Dockerfile` has the command with a placeholder registry. `./build.ps1` builds `tune-shuttle:dev` for the host.
 
 ## Manual tests
 

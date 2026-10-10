@@ -5,14 +5,16 @@
 .DESCRIPTION
   Steps (each can be skipped):
     1. build    dotnet build TuneShuttle.sln (warnings are errors in this solution, Directory.Build.props)
-    2. test     dotnet test with --filter "Category!=SpeakerALive&Category!=ShairportLive" (docs/DEVELOPMENT.md, "Live tests":
+    2. privacy  tools/privacy-scan.ps1: no personal or household data in the tracked files (docs/DEVELOPMENT.md,
+                "Privacy scan"); fails the build with the offending lines
+    3. test     dotnet test with --filter "Category!=SpeakerALive&Category!=ShairportLive" (docs/DEVELOPMENT.md, "Live tests":
                 live tests never run here; AIRPLAY_LIVE is cleared for the test step as a second guard).
                 -ExcludeTimingTests also drops the 30 s pacer accuracy run (Category=Timing) on loaded runners.
                 TRX files go to <Output>/test-results.
-    3. publish  the bridge (src/Bridge.Service, the web app included) to <Output>/bridge, the folder
+    4. publish  the bridge (src/Bridge.Service, the web app included) to <Output>/bridge, the folder
                 install/windows/install-service.ps1 expects, and the CLI (src/Airplay2.Sender.Cli) to <Output>/airplay2,
                 both for -Runtime (win-x64), framework-dependent unless -SelfContained.
-    4. container docker build -f docker/Dockerfile -t <ImageTag> . (skipped with a warning when docker is not
+    5. container docker build -f docker/Dockerfile -t <ImageTag> . (skipped with a warning when docker is not
                 available, unless -RequireContainer).
 
   Works in Windows PowerShell 5.1 and PowerShell 7. Run from anywhere; paths are relative to this script.
@@ -33,6 +35,7 @@ param(
     [switch]$SelfContained,
     [string]$ImageTag = "tune-shuttle:dev",
     [switch]$SkipBuild,
+    [switch]$SkipPrivacyScan,
     [switch]$SkipTests,
     [switch]$SkipPublish,
     [switch]$SkipContainer,
@@ -70,6 +73,13 @@ try {
     if (-not $SkipBuild) {
         Invoke-Native "build ($Configuration)" "dotnet" @("build", $solution, "-c", $Configuration, "-nologo")
         $summary.Add("build: $Configuration, 0 errors")
+    }
+
+    if (-not $SkipPrivacyScan) {
+        # Same PowerShell edition as this script (Windows PowerShell 5.1 or pwsh).
+        $shell = (Get-Process -Id $PID).Path
+        Invoke-Native "privacy scan" $shell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $repo "tools/privacy-scan.ps1"))
+        $summary.Add("privacy scan: clean")
     }
 
     if (-not $SkipTests) {

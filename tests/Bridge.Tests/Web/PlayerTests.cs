@@ -454,14 +454,14 @@ public sealed class PlayerTests : ComponentTestBase
     {
         UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
         UseReceiverOutput(level: 40);
-        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("r2", "Office")));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("r2", "Hallway")));
         var cut = _ctx.Render<Player>();
 
         var output = cut.Find("[data-receiver-id=r1]");
         Assert.Contains("is-active", output.ClassList);
         Assert.DoesNotContain("is-quiet", output.ClassList);
         Assert.Contains("is-quiet", cut.Find("[data-receiver-id=r2]").ClassList);
-        Assert.Equal("Volume of Office", cut.Find("[data-receiver-id=r2] input[type=range]").GetAttribute("aria-label"));
+        Assert.Equal("Volume of Hallway", cut.Find("[data-receiver-id=r2] input[type=range]").GetAttribute("aria-label"));
         Assert.Equal("50 of 100", cut.Find("[data-receiver-id=r2] input[type=range]").GetAttribute("aria-valuetext"));
     }
 
@@ -669,12 +669,12 @@ public sealed class PlayerTests : ComponentTestBase
     {
         var api = UseApi((request, _) => PathOf(request) switch
         {
-            "/api/receivers/c/connect" => StubHandler.Json(Dto.Receiver("c", "Office", state: ReceiverConnectionState.Connected)),
+            "/api/receivers/c/connect" => StubHandler.Json(Dto.Receiver("c", "Hallway", state: ReceiverConnectionState.Connected)),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         });
         _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "Kitchen")));
         _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("b", "Living room")));
-        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("c", "Office")));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("c", "Hallway")));
         _state.Apply(new BridgeEvent.OutputChanged(Dto.NoOutput));
         var cut = _ctx.Render<OutputList>();
 
@@ -730,10 +730,10 @@ public sealed class PlayerTests : ComponentTestBase
     public void Picking_a_receiver_outside_the_active_group_connects_it_without_stopping_the_group_first()
     {
         var api = UseApi((request, _) => PathOf(request) == "/api/receivers/c/connect"
-            ? StubHandler.Json(Dto.Receiver("c", "Office", state: ReceiverConnectionState.Connected))
+            ? StubHandler.Json(Dto.Receiver("c", "Hallway", state: ReceiverConnectionState.Connected))
             : new HttpResponseMessage(HttpStatusCode.NotFound));
         _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("a", "Kitchen", state: ReceiverConnectionState.Connected, groupId: "g")));
-        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("c", "Office")));
+        _state.Apply(new BridgeEvent.ReceiverChanged(Dto.Receiver("c", "Hallway")));
         _state.Apply(new BridgeEvent.GroupChanged(Dto.Group("g", "Downstairs", 50, true, ("a", "Kitchen", 30))));
         _state.Apply(new BridgeEvent.OutputChanged(new OutputDto("g", null, 50, [new("a", "Kitchen", 30, ReceiverConnectionState.Connected)])));
         var cut = _ctx.Render<OutputList>();

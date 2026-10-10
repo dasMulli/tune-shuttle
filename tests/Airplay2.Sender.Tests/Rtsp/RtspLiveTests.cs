@@ -10,23 +10,32 @@ namespace Airplay2.Sender.Tests.Rtsp;
 /// <summary>
 /// Live checks of the transport (docs/DEVELOPMENT.md, "Live-device rules": unauthenticated <c>GET /info</c> is allowed any time). They
 /// return early unless <c>AIRPLAY_LIVE=1</c>. SpeakerA: <c>$env:AIRPLAY_LIVE=1; dotnet test --filter Category=SpeakerALive</c>
-/// (address from <c>SpeakerA_HOST</c>, default the documented 192.0.2.26:7000). shairport-sync: run inside the Docker VM
+/// (address from <c>AIRPLAY_LIVE_RECEIVER_HOST</c>, no default: <see cref="LiveTarget"/>). shairport-sync: run inside the Docker VM
 /// with <c>docker/shairport-sync/run-live-tests-in-vm.ps1</c> (<c>SPS_HOST</c>/<c>SPS_PORT</c>). Each run writes the
 /// decrypted wire log to <c>artifacts/live/&lt;date&gt;-&lt;probe&gt;.log</c>.
 /// </summary>
 public class RtspLiveTests(ITestOutputHelper output)
 {
-    private const string SpeakerADefaultHost = "192.0.2.26";
-
     private static bool LiveEnabled => Environment.GetEnvironmentVariable("AIRPLAY_LIVE") == "1";
-
-    private static IPEndPoint SpeakerAEndpoint => new(
-        IPAddress.Parse(Environment.GetEnvironmentVariable("SpeakerA_HOST") ?? SpeakerADefaultHost),
-        int.Parse(Environment.GetEnvironmentVariable("SpeakerA_PORT") ?? "7000", CultureInfo.InvariantCulture));
 
     private static IPEndPoint ShairportEndpoint => new(
         IPAddress.Parse(Environment.GetEnvironmentVariable("SPS_HOST") ?? "127.0.0.1"),
         int.Parse(Environment.GetEnvironmentVariable("SPS_PORT") ?? "7000", CultureInfo.InvariantCulture));
+
+    private static void AssertMatchesVector(byte[] vector, byte[] live)
+    {
+        Assert.Equal(vector.Length, live.Length);
+        var expected = BinaryPlist.DecodeDictionary(vector);
+        var actual = BinaryPlist.DecodeDictionary(live);
+        Assert.Equal(expected.Keys, actual.Keys);
+        foreach (var key in new[] { "name", "model", "manufacturer", "sourceVersion", "protocolVersion", "sdk", "firmwareRevision" })
+        {
+            Assert.Equal(expected.GetString(key), actual.GetString(key));
+        }
+
+        Assert.Equal(expected.GetInt64("features"), actual.GetInt64("features"));
+        Assert.Equal(expected.GetInt64("statusFlags"), actual.GetInt64("statusFlags"));
+    }
 
     private static RtspRequest QualifierRequest() => RtspRequest.WithPlist(
         "GET",
@@ -44,6 +53,12 @@ public class RtspLiveTests(ITestOutputHelper output)
             return;
         }
 
+        if (!LiveTarget.TryHost(output, out var host))
+        {
+            return;
+        }
+
+        var SpeakerAEndpoint = new IPEndPoint(host, LiveTarget.Port);
         var log = new CapturingLogger();
         try
         {
@@ -64,8 +79,10 @@ public class RtspLiveTests(ITestOutputHelper output)
             Assert.Equal(0, bare.CSeq);
             Assert.Equal(RtspContentTypes.BinaryPlist, bare.ContentType);
             Assert.Equal("Test Speaker ABCD", bare.PlistBody().GetString("name"));
-            Assert.Equal(SpeakerACapture.InfoBody, bare.Body.ToArray());
-            Assert.Equal(SpeakerACapture.Stage1InfoBody, stage1.Body.ToArray());
+            // The stored vectors carry synthetic identifiers of the same length (device id, pk, serial number), so a live
+            // body equals its vector in size, keys and every value that does not identify the unit.
+            AssertMatchesVector(SpeakerACapture.InfoBody, bare.Body.ToArray());
+            AssertMatchesVector(SpeakerACapture.Stage1InfoBody, stage1.Body.ToArray());
         }
         finally
         {

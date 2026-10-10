@@ -66,7 +66,7 @@ audio (bit 40), **PTP (bit 41)**, HomeKit pairing (46), peer management (47) and
 **not** set bit 45 (`NTPClock`). Its `/info` response has no `supportedFormats`, no `audioLatencies` and no
 `initialVolume`. This feature word is byte-for-byte the one `[ot]` lists for AirPort Express 2 and Sonos Symfonisk
 (`[ot] outputs/airplay.c:3909,3919`), i.e. the Apple "p20" audio SDK profile, which is exactly the class of receiver
-`[ot]` drove with NTP timing before it gained a PTP master. A Apple receiver ("Office", `AppleReceiver00,1`,
+`[ot]` drove with NTP timing before it gained a PTP master. A Apple receiver ("Hallway", `AppleReceiver00,1`,
 192.0.2.98) is also on the LAN but was not probed (not on the allowed list); it is the natural second test
 device for M3 and for the buffered stream.
 
@@ -1104,7 +1104,7 @@ web app or on a single receiver are pushed back to Spirc with `round(G * 65535 /
 Each question names the disagreement or gap, the receiver to test and a concrete probe. They are merged with the
 control plane's questions as probes P1-P21 in `SPEC.md` section 4 (column "Parts": `A-Qx` is the row here), where
 every result is recorded; `SPEC.md` 4.1 says which are settled. "SpeakerA" is the MOTIV
-HOME (192.0.2.26); "HomePod" is the Apple receiver "Office" (192.0.2.98), which may only be used once its
+HOME (192.0.2.26); "HomePod" is the Apple receiver "Hallway" (192.0.2.98), which may only be used once its
 owner allows it; the LG TV is never used.
 
 | # | Question | Why it was open | Probe |
@@ -1126,24 +1126,25 @@ owner allows it; the LG TV is never used.
 ## Appendix A. Live probe results (2026-10-09, sender at 203.0.113.150)
 
 mDNS browse (`_airplay._tcp` and `_raop._tcp`, unicast-response queries; replies came via the router
-203.0.113.1, which reflects mDNS between VLANs; scripts in the scratchpad, not committed):
+203.0.113.1, which reflects mDNS between VLANs; scripts in the scratchpad, not committed). Identifiers, addresses and
+user-given names are anonymized as described in SPEC-control.md 1.7:
 
 ```
 Test Speaker ABCD._airplay._tcp.local  SRV 7000 speakera-021a2b3c4d5d.local
-  A 192.0.2.26   AAAA 2001:db8:1:30:1a2b:3cff:fe4d:5e01
+  A 192.0.2.26   AAAA 2001:db8:0:30:1a:2bff:fe3c:4d5e
   TXT acl=0 deviceid=02:1A:2B:3C:4D:5E features=0x445F8A00,0x1C340 rsf=0x0 fv=p20.1.1.36.0x8b4c480
       flags=0x404 model=Test Speaker ABCD manufacturer=Lautsprecher SpeakerA GmbH
-      serialNumber=00000000-0000-0000-0000-000000000000 protovers=1.1 srcvers=366.0
+      serialNumber=00000000-0000-4000-8000-000000000026 protovers=1.1 srcvers=366.0
       pi=02:1A:2B:3C:4D:5E gid=02:1A:2B:3C:4D:5E gcgl=0
       pk=d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a
 021A2B3C4D5E@Test Speaker ABCD._raop._tcp.local  SRV 7000 (same host)
   TXT cn=0,1 da=true et=0,4 ft=0x445F8A00,0x1C340 fv=p20.1.1.36.0x8b4c480 md=0,1,2
       am=Test Speaker ABCD sf=0x404 tp=UDP vn=65537 vs=366.0 pk=(same)
 
-Office._airplay._tcp.local (Apple receiver, not probed)  SRV 7000 Office.local  A 192.0.2.98
+Hallway._airplay._tcp.local (Apple receiver, not probed)  SRV 7000 Hallway.local  A 192.0.2.98
   TXT model=AppleReceiver00,1 features=0x4A7FCA00,0x3C354BD0 flags=0x80404 srcvers=980.77.2 osvers=27.0
-      igl=1 gcgl=1 gid=00000001-...+00000002-... (stereo pair / group leader)
-02AABBCC0001@Office._raop._tcp.local  TXT cn=0,1,2,3 et=0,3,5 md=0,1,2 am=AppleReceiver00,1 vs=980.77.2
+      igl=1 gcgl=1 gid=11111111-...+22222222-... (stereo pair / group leader)
+02CAFE000098@Hallway._raop._tcp.local  TXT cn=0,1,2,3 et=0,3,5 md=0,1,2 am=AppleReceiver00,1 vs=980.77.2
 
 Living room TV._airplay._tcp.local (LG, never targeted)  A 198.51.100.200
   TXT features=0x7F8AD0,0x38BCF46 srcvers=377.40.00 model=TVMODEL0000.DEUQDJP

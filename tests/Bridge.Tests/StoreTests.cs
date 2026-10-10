@@ -420,7 +420,7 @@ public class StoreTests
         Random.Shared.NextBytes(blob);
         blob[0] = 0;
         blob[^1] = 0;
-        var credentials = new Credentials { Username = "dasmulli", AuthType = AuthenticationType.AuthenticationStoredSpotifyCredentials, AuthData = blob };
+        var credentials = new Credentials { Username = "spotify-user", AuthType = AuthenticationType.AuthenticationStoredSpotifyCredentials, AuthData = blob };
         await store.SaveSpotifyCredentialsAsync(new SpotifyCredentialRow(credentials.Username!, (int)credentials.AuthType, credentials.AuthData), Ct);
 
         var loaded = await store.GetSpotifyCredentialsAsync(Ct);
@@ -431,7 +431,7 @@ public class StoreTests
         Assert.Equal(blob, restored.AuthData);
 
         // Same user again replaces; another user replaces the whole cache (one account at a time).
-        await store.SaveSpotifyCredentialsAsync(new SpotifyCredentialRow("dasmulli", 1, [9, 9]), Ct);
+        await store.SaveSpotifyCredentialsAsync(new SpotifyCredentialRow("spotify-user", 1, [9, 9]), Ct);
         Assert.Equal([9, 9], (await store.GetSpotifyCredentialsAsync(Ct))!.AuthData);
         await store.SaveSpotifyCredentialsAsync(new SpotifyCredentialRow("other", 1, [7]), Ct);
         Assert.Equal("other", (await store.GetSpotifyCredentialsAsync(Ct))!.Username);

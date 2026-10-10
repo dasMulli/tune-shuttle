@@ -10,13 +10,12 @@ namespace Airplay2.Sender.Tests.Discovery;
 
 /// <summary>
 /// Live discovery of the Test Speaker ABCD (docs/DEVELOPMENT.md, "Live-device rules": mDNS browsing is allowed at any time). Only mDNS
-/// traffic is sent; no receiver is contacted. Runs only with <c>AIRPLAY_LIVE=1</c>:
-/// <c>$env:AIRPLAY_LIVE=1; dotnet test --filter Category=SpeakerALive</c>.
+/// traffic is sent; no receiver is contacted. Runs only with <c>AIRPLAY_LIVE=1</c> and the receiver's mDNS name or device id in
+/// <c>AIRPLAY_LIVE_RECEIVER</c> (<see cref="LiveTarget"/>; no default):
+/// <c>$env:AIRPLAY_LIVE=1; $env:AIRPLAY_LIVE_RECEIVER="&lt;name&gt;"; dotnet test --filter Category=SpeakerALive</c>.
 /// </summary>
 public class ReceiverBrowserLiveTests(ITestOutputHelper output)
 {
-    private const string SpeakerAName = "Test Speaker ABCD";
-
     [Fact]
     [Trait("Category", "SpeakerALive")]
     public async Task Discover_lists_the_SpeakerA_with_the_capabilities_of_spec_control_1_7()
@@ -27,12 +26,17 @@ public class ReceiverBrowserLiveTests(ITestOutputHelper output)
             return;
         }
 
+        if (!LiveTarget.TryReceiver(output, out var target))
+        {
+            return;
+        }
+
         await using var browser = new MdnsReceiverBrowser(new ReceiverBrowserOptions(), new TestOutputLogger<MdnsReceiverBrowser>(output));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var SpeakerA = await browser.FindAsync(SpeakerAName, TimeSpan.FromSeconds(10), timeout.Token);
+        var SpeakerA = await browser.FindAsync(target, TimeSpan.FromSeconds(10), timeout.Token);
         if (SpeakerA is null)
         {
-            output.WriteLine("Test Speaker ABCD not on the network; nothing to verify");
+            output.WriteLine($"{target} not on the network; nothing to verify");
             return;
         }
 
@@ -40,7 +44,7 @@ public class ReceiverBrowserLiveTests(ITestOutputHelper output)
         for (var i = 0; i < 20 && SpeakerA!.Raop is null; i++)
         {
             await Task.Delay(250, timeout.Token);
-            SpeakerA = MdnsReceiverBrowser.Match(browser.Snapshot(), SpeakerAName);
+            SpeakerA = MdnsReceiverBrowser.Match(browser.Snapshot(), target);
         }
 
         var log = Describe(browser.Snapshot());
@@ -48,7 +52,8 @@ public class ReceiverBrowserLiveTests(ITestOutputHelper output)
         WriteArtifact(log);
 
         Assert.NotNull(SpeakerA);
-        Assert.Equal("02:1A:2B:3C:4D:5E", SpeakerA!.Id);
+        Assert.Equal("Test Speaker ABCD", SpeakerA!.Airplay.Model);
+        Assert.Equal(SpeakerA.Airplay.DeviceId, SpeakerA.Id);
         Assert.Equal(7000, SpeakerA.Port);
         Assert.NotNull(SpeakerA.AddressOf(AddressFamily.InterNetwork));
         Assert.NotNull(SpeakerA.Raop);

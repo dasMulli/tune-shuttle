@@ -56,7 +56,7 @@ public class ReceiverBrowserTests
         Assert.Equal(IPAddress.Parse("192.0.2.26"), SpeakerA.Addresses[0]);
         Assert.Equal(IPAddress.Parse("192.0.2.26"), SpeakerA.AddressOf(AddressFamily.InterNetwork));
         Assert.Equal(3, SpeakerA.Addresses.Count);
-        Assert.Equal(IPAddress.Parse("2001:db8:1:30:1a2b:3cff:fe4d:5e01"), SpeakerA.Addresses[1]);
+        Assert.Equal(IPAddress.Parse("2001:db8:0:30:1a:2bff:fe3c:4d5e"), SpeakerA.Addresses[1]);
         Assert.True(SpeakerA.Addresses[2].IsIPv6LinkLocal);
         Assert.Equal(InterfaceIndex, SpeakerA.Addresses[2].ScopeId); // link-local scoped to the arrival interface
 
@@ -140,7 +140,7 @@ public class ReceiverBrowserTests
         var (browser, _) = Create();
         await using var _ = browser;
         var SpeakerA = BrowseProbe.Instances[BrowseProbe.SpeakerAAirplay];
-        var v6Only = SpeakerA with { Addresses = [IPAddress.Parse("2001:db8:1:30:1a2b:3cff:fe4d:5e01")] };
+        var v6Only = SpeakerA with { Addresses = [IPAddress.Parse("2001:db8:0:30:1a:2bff:fe3c:4d5e")] };
         Feed(browser, BrowseProbe.Response(v6Only));
         var receiver = Assert.Single(browser.Snapshot());
         Assert.Equal(AddressFamily.InterNetworkV6, Assert.Single(receiver.Addresses).AddressFamily);
@@ -451,7 +451,7 @@ public class ReceiverBrowserTests
         }
 
         var snapshot = browser.Snapshot();
-        Assert.Equal(BrowseProbe.SpeakerAId, MdnsReceiverBrowser.Match(snapshot, "02:1A:2B:3C:4D:5E")?.Id);
+        Assert.Equal(BrowseProbe.SpeakerAId, MdnsReceiverBrowser.Match(snapshot, "02:1a:2b:3c:4d:5e")?.Id);
         Assert.Equal(BrowseProbe.SpeakerAId, MdnsReceiverBrowser.Match(snapshot, "021A2B3C4D5E")?.Id);
         Assert.Equal(BrowseProbe.SpeakerAId, MdnsReceiverBrowser.Match(snapshot, "Test Speaker ABCD")?.Id);
         Assert.Null(MdnsReceiverBrowser.Match(snapshot, "Kitchen"));

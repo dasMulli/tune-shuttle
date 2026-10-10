@@ -1,8 +1,8 @@
 # Linux container image of TuneShuttle (docs/ARCHITECTURE.md, "Deployment"). Build from the repository root:
 #   docker build -f docker/Dockerfile -t tune-shuttle .
-# Cross-build for the Raspberry Pi clusters (the SDK stage runs natively on the build host and cross-compiles;
+# Cross-build for arm64, e.g. a Raspberry Pi (the SDK stage runs natively on the build host and cross-compiles;
 # only the runtime stage is pulled for the target platform, so nothing runs under QEMU):
-#   docker buildx build --platform linux/arm64 -f docker/Dockerfile -t registry.example.com/dasmulli/tune-shuttle:latest --push .
+#   docker buildx build --platform linux/arm64 -f docker/Dockerfile -t registry.example.com/tune-shuttle:latest --push .
 # Run with a macvlan interface so mDNS and inbound UDP work (Kubernetes: a macvlan/multus pod interface):
 #   docker network create -d macvlan --subnet=192.0.2.0/24 --gateway=192.0.2.1 -o parent=eth0 lan
 #   docker run -d --network lan --ip 192.0.2.60 -v bridge-data:/data tune-shuttle

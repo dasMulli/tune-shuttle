@@ -13,7 +13,7 @@ namespace Airplay2.Sender.Tests.Pairing;
 /// Live pairing tests (docs/DEVELOPMENT.md, "Live-device rules"). They return early unless <c>AIRPLAY_LIVE=1</c>; the default
 /// <c>dotnet test</c> therefore never touches a receiver. ShairportLive runs inside the Docker VM against the
 /// shairport-sync container (<c>SPS_HOST</c>/<c>SPS_PORT</c>); SpeakerALive targets the Test Speaker ABCD only
-/// (<c>SpeakerA_HOST</c>, default 192.0.2.26) and is for the stage that allows pairing on it (wave 3, session-streams):
+/// (<c>AIRPLAY_LIVE_RECEIVER_HOST</c>, no default: <see cref="LiveTarget"/>) and is for the stage that allows pairing on it (wave 3, session-streams):
 /// probes P2 (transient pairing with flags bit 10), P6 (M1 method byte) and P11 (<c>X-Apple-HKP</c> required?).
 /// Every live test logs the wire exchange to <c>artifacts/live/&lt;date&gt;-&lt;probe&gt;.log</c>.
 /// </summary>
@@ -122,8 +122,13 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
             return;
         }
 
+        if (!LiveTarget.TryHost(output, out var host))
+        {
+            return;
+        }
+
         using var log = new LiveLog("P2", output);
-        await using var connection = await ConnectSpeakerAAsync(log);
+        await using var connection = await ConnectSpeakerAAsync(host, log);
         var client = new HapPairingClient(log.CreateLogger<HapPairingClient>());
         PairingSession session;
         try
@@ -153,8 +158,13 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
             return;
         }
 
+        if (!LiveTarget.TryHost(output, out var host))
+        {
+            return;
+        }
+
         using var log = new LiveLog("P11", output);
-        await using var connection = await ConnectSpeakerAAsync(log);
+        await using var connection = await ConnectSpeakerAAsync(host, log);
         var m1 = new Tlv8Document().AddMethod(TlvMethod.PairSetup).AddState(1).Add(TlvType.Flags, (byte)TlvFlags.Transient).Encode();
         var noHkp = new Dictionary<string, string> { [RtspHeaders.Connection] = "keep-alive" };
         await connection.SendAsync(RtspRequest.WithEmptyBody("POST", HapPairingEndpoints.PinStart, RtspContentTypes.OctetStream, noHkp), CancellationToken.None);
@@ -173,10 +183,15 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
             return;
         }
 
+        if (!LiveTarget.TryHost(output, out var host))
+        {
+            return;
+        }
+
         using var log = new LiveLog("P6", output);
         foreach (var method in new[] { TlvMethod.PairSetup, TlvMethod.PairSetupWithAuth })
         {
-            await using var connection = await ConnectSpeakerAAsync(log);
+            await using var connection = await ConnectSpeakerAAsync(host, log);
             var m1 = new Tlv8Document().AddMethod(method).AddState(1).Encode();
             var headers = new Dictionary<string, string> { [RtspHeaders.Connection] = "keep-alive", [RtspHeaders.XAppleHkp] = HapPairingEndpoints.HkpRegular };
             var response = await connection.SendAsync(RtspRequest.WithBody("POST", HapPairingEndpoints.PairSetup, RtspContentTypes.OctetStream, m1, headers), CancellationToken.None);
@@ -197,11 +212,10 @@ public sealed class PairingLiveTests(ITestOutputHelper output)
         }
     }
 
-    private static async Task<RtspConnection> ConnectSpeakerAAsync(LiveLog log)
+    private static async Task<RtspConnection> ConnectSpeakerAAsync(IPAddress host, LiveLog log)
     {
-        // Only the Test Speaker ABCD may be contacted (live-device rules); never the LG TV or a HomePod.
-        var host = Environment.GetEnvironmentVariable("SpeakerA_HOST") ?? "192.0.2.26";
-        return await RtspConnection.ConnectAsync(new IPEndPoint(IPAddress.Parse(host), 7000), new RtspConnectionOptions(), log.CreateLogger("rtsp"), CancellationToken.None);
+        // Only the allowed Test Speaker ABCD may be contacted (live-device rules); never a TV or a HomePod.
+        return await RtspConnection.ConnectAsync(new IPEndPoint(host, LiveTarget.Port), new RtspConnectionOptions(), log.CreateLogger("rtsp"), CancellationToken.None);
     }
 
     /// <summary>Writes every log line (incl. the connection's Debug wire log) to the test output and to <c>artifacts/live</c>.</summary>
