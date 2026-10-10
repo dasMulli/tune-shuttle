@@ -454,6 +454,9 @@ public sealed class GroupsPairingTests : ComponentTestBase
         Assert.Equal("50 of 100", row.QuerySelector(".level--compact input[type=range]")!.GetAttribute("aria-valuetext"));
         var remove = cut.Find(".row[data-receiver-id=a] button.btn--icon");
         Assert.Equal("Remove Bedroom", remove.GetAttribute("aria-label"));
+        // The DOM order is the visual order at every width (name, slider, remove; the phone row wraps after the name
+        // and puts no `order` on its children), so Tab and a screen reader follow what is seen (UI-SPEC 5.3).
+        Assert.Equal(["row__main", "level", "btn"], row.Children.Select(c => c.ClassList.First()));
 
         remove.Click();
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".row[data-receiver-id=a]")));

@@ -178,7 +178,9 @@ legend { padding: 0; }
     backdrop-filter: saturate(1.2) blur(8px);
     border-bottom: 1px solid var(--line);
 }
-.brand { display: flex; align-items: center; gap: .6rem; min-width: 0; color: var(--text); }
+/* flex-shrink 3: in a tight tablet bar the brand name gives way faster than the tools cluster, whose language select
+   stops at its 4.5rem floor (5.5, REVIEW-2 #12). */
+.brand { display: flex; align-items: center; gap: .6rem; min-width: 0; flex-shrink: 3; color: var(--text); }
 .brand__tile {
     width: 34px;
     height: 34px;
@@ -217,7 +219,12 @@ legend { padding: 0; }
     font-size: .85rem;
     padding: .35rem 1.6rem .35rem .7rem;
     min-height: 32px;
-    min-width: 118px;
+    /* Gives way first when the tablet bar is tight (700-760px in pt, ru, uk: REVIEW-2 #12): a larger shrink factor than
+       the brand name, while the status pill does not shrink at all. The 4.5rem floor keeps one readable character plus
+       the chevron (Chromium does not ellipsize a select narrower than its padding plus one glyph); the ellipsized brand
+       name gives the rest. */
+    min-width: 4.5rem;
+    flex-shrink: 3;
     max-width: 11rem;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-sm);
@@ -257,8 +264,13 @@ legend { padding: 0; }
 }
 .theme-btn .ico { width: 15px; height: 15px; }
 .theme-btn.is-active { background: var(--accent-soft); color: var(--accent); }
-.theme-picker:not(:hover):not(:focus-within):not(.theme-picker--open) { gap: 0; }
-.theme-picker:not(:hover):not(:focus-within):not(.theme-picker--open) .theme-btn:not(.is-active) {
+/* Collapse. Hover-capable pointers: hover, keyboard focus or the open class keep it unfolded. Touch (the component sets
+   theme-picker--touch when hoverCapable() is false): the twin rule has no :hover in it, because a tap leaves :hover stuck
+   on the tapped button until the next tap elsewhere, which kept the pill unfolded after a choice (REVIEW-2 #1). */
+.theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open),
+.theme-picker--touch:not(:focus-within):not(.theme-picker--open) { gap: 0; }
+.theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open) .theme-btn:not(.is-active),
+.theme-picker--touch:not(:focus-within):not(.theme-picker--open) .theme-btn:not(.is-active) {
     width: 0;
     opacity: 0;
     pointer-events: none;
@@ -279,6 +291,9 @@ legend { padding: 0; }
     color: var(--muted);
     white-space: nowrap;
     min-width: 0;
+    /* The connection word is the only shell-wide connection state: at >= 700px it never shrinks, the language select and
+       the brand name give way instead (REVIEW-2 #12). The phone shell lets it shrink again (5.2). */
+    flex-shrink: 0;
 }
 .status::before {
     content: "";
@@ -606,7 +621,10 @@ select.input {
 }
 .card.empty { border-style: dashed; box-shadow: none; padding: 2rem 1rem; }
 
-.facts { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; margin: 0; font-size: .9rem; }
+.facts { display: grid; grid-template-columns: minmax(0, max-content) minmax(9rem, 1fr); gap: .25rem 1rem; margin: 0; font-size: .9rem; }
+/* A fact whose value is a list (the Diagnostics addresses): the label and the list each take the full row, so long
+   labels in other languages never squeeze the addresses into a column that breaks them mid-number (REVIEW-2 #4). */
+.facts > .facts__wide { grid-column: 1 / -1; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
 .mono { font-family: var(--font-mono); font-size: .85em; }
@@ -825,10 +843,14 @@ select.input {
     padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
     background: var(--scrim);
 }
+/* While the pairing dialog is open the page behind it does not scroll (REVIEW-2 #7); the styleguide's in-flow dialog
+   sample is excluded. */
+:root:has(.scrim:not(.sg-frame .scrim)) { overflow: hidden; }
 .dialog {
     width: min(26rem, 100%);
     max-height: calc(100dvh - 2rem);
     overflow: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
     gap: .9rem;
@@ -878,6 +900,10 @@ select.input {
 }
 
 @media (min-width: 1024px) {
+    /* Desktop: the classic (non-overlay) scrollbar of Windows keeps its gutter while the pairing dialog locks the page
+       (4.11), so the content and the sticky bar do not shift sideways. Overlay scrollbars reserve nothing; below 1024px
+       (phones, tablets: overlay scrollbars) the gutter is not reserved, so a narrow layout keeps its full width. */
+    html { scrollbar-gutter: stable; }
     .topbar .tabs { position: absolute; left: 50%; transform: translateX(-50%); }
     .player { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } /* 2 x 2 in the half-width column: no fact alone */
@@ -904,18 +930,23 @@ select.input {
     .brand__tile { width: 32px; height: 32px; }
     .brand__tile svg { width: 20px; height: 20px; }
     .brand__name { font-size: 1rem; }
-    .tools { gap: .4rem; }
+    /* The tools cluster (theme pill, status) does not shrink on phones from 360px: the brand name gives way, so the
+       status word stays whole even with the theme pill open (es "en directo" at 390px; 5.2). Below 360px, where the
+       name is hidden, the cluster may shrink again and the status ellipsizes as a last resort. */
+    .tools { gap: .4rem; flex-shrink: 0; }
     .btn--back { margin-inline-start: -.75rem; } /* main has .875rem side padding: the box stays inside the viewport */
 
-    .theme-btn { width: 34px; height: 34px; }
-    .theme-btn .ico { width: 18px; height: 18px; }
-    .theme-picker:not(:hover):not(:focus-within):not(.theme-picker--open) { padding: 0; border-color: transparent; background: transparent; }
-    .theme-picker:not(:hover):not(:focus-within):not(.theme-picker--open) .theme-btn.is-active {
+    /* The 34px buttons are in the touch block (5.4), which covers phones by width. Collapsed, the pill is the mockup's
+       single round button; the same two selectors as the collapse rules of 2.4 (touch twin included). */
+    .theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open),
+    .theme-picker--touch:not(:focus-within):not(.theme-picker--open) { padding: 0; border-color: transparent; background: transparent; }
+    .theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open) .theme-btn.is-active,
+    .theme-picker--touch:not(:focus-within):not(.theme-picker--open) .theme-btn.is-active {
         border: 1px solid var(--line-strong);
         background: var(--surface);
     }
 
-    .status { font-size: .74rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .status { font-size: .74rem; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
 
     .banner-slot { top: env(safe-area-inset-top, 0px); } /* the bar that carries the inset has scrolled away (PWA, notch) */
     .banner { padding: .45rem .875rem; padding-left: max(.875rem, env(safe-area-inset-left)); padding-right: max(.875rem, env(safe-area-inset-right)); }
@@ -954,9 +985,13 @@ select.input {
     .output .level--compact { display: none; }
     /* Stop output keeps its 44px box but less side padding, so the head fits one line in longer languages (de). */
     .output .card__actions .btn--sm { padding-inline: .5rem; }
-    /* Compact sliders that do show on phones (group editor members): narrower, so a name like "Fake Receiver 1"
-       keeps one line beside the slider and the 44px remove button. */
-    .row .level--compact { width: 120px; }
+    /* Group editor members: the name and pill take the first line, the compact slider and the remove button share the
+       second, the slider spanning the card up to the button, so the member level can be set precisely (a 120px box
+       left a 70px track: REVIEW-2 #6). No `order`: the visual order is the DOM order (name, slider, remove), so Tab
+       and a screen reader follow what is seen (WCAG 1.3.2 / 2.4.3). */
+    .row--member { flex-wrap: wrap; }
+    .row--member .row__main { flex: 1 1 100%; }
+    .row--member .level--compact { flex: 1 1 auto; width: auto; }
     .fact-grid { grid-template-columns: minmax(0, 1fr); }
     .cards { grid-template-columns: minmax(0, 1fr); }
     /* Fact lists stack like the Status card's facts: the label over its value, so long values (addresses, dates,
@@ -1012,6 +1047,14 @@ select.input {
 
 @media (max-width: 359px) {
     .brand__name { display: none; }
+    .tools { flex-shrink: 1; }
+}
+
+/* The top-bar language select needs 700px plus room for its 4.5rem floor: below 760px (pt, ru, uk with the theme pill
+   open, or a longer status word) the tools cluster would overflow it (REVIEW-2 #12). It is hidden there like on phones;
+   Settings keeps the full language field (4.6). */
+@media (max-width: 759px) {
+    .lang-select { display: none; }
 }
 
 /* Landscape phones (844 x 390 is wider than 699px: the tablet shell with the tabs in the top bar, and no tab bar). The
@@ -1030,6 +1073,25 @@ select.input {
     .brand__tile { width: 28px; height: 28px; }
     .brand__tile svg { width: 18px; height: 18px; }
     .tabs a { padding: .22rem .7rem; }
+    /* The pairing dialog is top-anchored and compacter, like the phone sheet: with a landscape keyboard the visible
+       height is 150-200px, and the PIN field and the actions must stay in the upper part (REVIEW-2 #3). */
+    .scrim { align-items: start; padding-top: max(.5rem, env(safe-area-inset-top)); }
+    /* The PIN field and the Pair/Cancel row share one line (a grid; the DOM and so the Tab order stay field, actions), so
+       with a landscape keyboard (150-200px visible) the actions are visible next to the field without any scrolling:
+       there is no Escape key on a phone keyboard and the scrim does not cancel. The error line goes below them. */
+    .dialog {
+        display: grid;
+        grid-template-columns: minmax(7rem, 1fr) auto;
+        align-items: end;
+        gap: .6rem .75rem;
+        width: min(32rem, 100%);
+        padding: .8rem 1rem;
+        max-height: calc(100dvh - 1rem);
+    }
+    .dialog > * { grid-column: 1 / -1; }
+    .dialog > .field { grid-column: 1; grid-row: 3; }
+    .dialog > .dialog__actions { grid-column: 2; grid-row: 3; }
+    .dialog > .validation-message { grid-row: 4; }
 }
 
 /* 5.4 Touch targets: phones by width (what headless Edge exercises) and coarse pointers at any width. */
@@ -1039,6 +1101,10 @@ select.input {
     .step, .btn--icon { width: 44px; height: 44px; }
     .step--lg { width: 44px; height: 44px; }
     .master__row .step { width: 44px; height: 44px; }
+    /* The theme buttons: 34px on phones and on coarse pointers wider than 699px (landscape phones, touch tablets:
+       REVIEW-2 #5); not 44px and no halo (2.4), allow-listed in the audit. */
+    .theme-btn { width: 34px; height: 34px; }
+    .theme-btn .ico { width: 18px; height: 18px; }
     .toast__close { width: 44px; height: 44px; top: .1rem; right: .1rem; }
     .toast { padding-right: 3.2rem; }
     /* .btn--sm keeps its small type and padding but its box is 44 x 44 (an invisible ::before hit area would not count

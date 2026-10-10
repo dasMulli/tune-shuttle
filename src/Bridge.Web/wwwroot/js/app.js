@@ -278,17 +278,33 @@ function unnamedControls() {
     return unnamed;
 }
 
+/** Text that must never be cut by an ellipsis (REVIEW-2 #12): the shell's connection word. */
+const NEVER_TRUNCATED = ".status__text";
+
+/** Visible elements of NEVER_TRUNCATED whose text does not fit their box (scrollWidth > clientWidth). */
+function truncatedTexts() {
+    const truncated = [];
+    for (const el of document.querySelectorAll(NEVER_TRUNCATED)) {
+        if (el.getClientRects().length === 0) continue; // display: none
+        if (el.scrollWidth > el.clientWidth) truncated.push(describe(el) + " \"" + text(el.textContent) + "\"");
+    }
+    return truncated;
+}
+
 /**
  * The layout audit of UI-SPEC 5.6, returned as a JSON string (BrowserBridge.AuditAsync hands it on unchanged):
- * { overflow, small, unnamed }. overflow = scrollWidth - innerWidth (must be 0). small lists interactive elements
- * under 44 x 44 CSS px; it is computed unconditionally at innerWidth <= 699 (headless Edge never reports a coarse
- * pointer) or when (pointer: coarse) matches, else it is empty. unnamed lists controls without an accessible name.
+ * { overflow, small, unnamed, truncated }. overflow = scrollWidth - innerWidth (must be 0). small lists interactive
+ * elements under 44 x 44 CSS px; it is computed unconditionally at innerWidth <= 699 (headless Edge never reports a
+ * coarse pointer) or when (pointer: coarse) matches, else it is empty. unnamed lists controls without an accessible
+ * name. truncated lists texts that must stay whole but are cut by an ellipsis (the status word, REVIEW-2 #12); it is
+ * checked from 360px (below that the phone shell may shorten the word, 5.2).
  */
 export function audit() {
     const phoneOrTouch = window.innerWidth <= 699 || window.matchMedia("(pointer: coarse)").matches;
     return JSON.stringify({
         overflow: document.documentElement.scrollWidth - window.innerWidth,
         small: phoneOrTouch ? smallTargets() : [],
-        unnamed: unnamedControls()
+        unnamed: unnamedControls(),
+        truncated: window.innerWidth >= 360 ? truncatedTexts() : []
     });
 }

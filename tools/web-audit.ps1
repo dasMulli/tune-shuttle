@@ -7,13 +7,20 @@
     -Setup script against it, then loads http://localhost:<Port>/_audit?route=<route>&theme=<theme>&lang=<lang> for
     every route x size x theme x language. The /_audit page renders the routed page inside the normal layout and, once
     the page has its data (State.Loaded + one more render + 500 ms), writes the JSON of app.js audit() into
-    <pre id="audit-result">: { overflow, small, unnamed }.
+    <pre id="audit-result">: { overflow, small, unnamed, truncated }.
 
     A run fails when
       - overflow > 0 (horizontal scroll: document scrollWidth - innerWidth),
       - unnamed is not empty (a control without an accessible name), or
       - small (interactive elements under 44 x 44 CSS px; computed at innerWidth <= 699 or with a coarse pointer, which
-        -Pointer emulates below 1024px wide by default) has an entry that is not one of the allow-listed controls .theme-btn and .lang-select (UI-SPEC 2.4 / 5.4).
+        -Pointer emulates below 1024px wide by default) has an entry that is not one of the allow-listed controls .theme-btn and .lang-select (UI-SPEC 2.4 / 5.4),
+      - truncated is not empty (the top bar's connection word .status__text cut by an ellipsis, from 360px wide;
+        REVIEW-2 #12), or
+      - the open-pill probe fails: with the top-bar theme picker unfolded (theme-picker--open added for one
+        measurement with the picker's width transitions switched off, so the settled open pill is measured; the touch
+        state of a first tap), the page still has no horizontal overflow, the connection word is still whole, all
+        three theme buttons are wider than 0 (else the probe did not open the pill) and a visible top-bar language
+        select keeps at least 72px (the open pill is the widest the bar gets; REVIEW-2 #5 and #12).
     The small list is always printed, allow-listed entries marked "(allowed)". The exit code is 1 on any failure.
 
     How the page is read: WORK-PLAN 2.3 names "msedge --dump-dom --window-size=390,844", but headless Edge never lays a
@@ -99,13 +106,20 @@ function ConvertTo-Argument([string] $value) {
     if ($value -match '[\s"]') { '"' + ($value -replace '"', '\"') + '"' } else { $value }
 }
 
-function Stop-Tree($process) {
+function Stop-Tree($process, [string] $commandLineMark) {
     if ($process -and -not $process.HasExited) {
         # taskkill reports children that exit on their own as errors; keep that from becoming a terminating error.
         $previous = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         try { & taskkill.exe /PID $process.Id /T /F 2>&1 | Out-Null }
         finally { $ErrorActionPreference = $previous }
+    }
+    if ($commandLineMark) {
+        # Edge helper processes that left the launcher's tree (REVIEW-2 #11): everything whose command line names this
+        # run's own profile directory, and nothing else.
+        Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -and $_.CommandLine.Contains($commandLineMark) } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -225,6 +239,43 @@ function Get-Audit([System.Net.WebSockets.ClientWebSocket] $socket, [string] $ur
     $audit = $text | ConvertFrom-Json
     if ($audit.PSObject.Properties['error']) { throw "The audit page reported: $($audit.error) ($url)" }
 
+    # The open-pill probe: the top-bar picker unfolded for one synchronous measurement (Blazor does not re-render in
+    # between), then folded back. .theme-btn animates its width (.15s), so the class alone would measure the collapsed
+    # pill (the inactive buttons still 0px wide at that instant): a temporary style switches the transitions off for the
+    # probe, which makes the open state the settled state; the style is removed only after the pill is folded back and
+    # laid out again, so nothing animates afterwards. The three button widths are returned and must all be > 0, so a
+    # probe that does not really open the pill fails instead of passing. The top-bar language select (when shown) must
+    # keep at least 72px (its 4.5rem floor: one readable character plus the chevron, UI-SPEC 5.5).
+    $probe = @'
+(function () {
+    var picker = document.querySelector('.topbar .theme-picker');
+    if (!picker || innerWidth < 360) return JSON.stringify({ skipped: true, overflow: 0, truncated: [], buttons: [], picker: 0, lang: null });
+    var still = document.createElement('style');
+    still.textContent = '.topbar .theme-picker, .topbar .theme-picker * { transition: none !important; }';
+    document.head.appendChild(still);
+    var had = picker.classList.contains('theme-picker--open');
+    picker.classList.add('theme-picker--open');
+    void picker.offsetWidth;
+    var all = Array.prototype.slice.call(document.querySelectorAll('.status__text'));
+    var lang = document.querySelector('.topbar .lang-select');
+    var result = {
+        skipped: false,
+        overflow: document.documentElement.scrollWidth - innerWidth,
+        truncated: all.filter(function (e) { return e.getClientRects().length > 0 && e.scrollWidth > e.clientWidth; })
+                      .map(function (e) { return e.textContent.trim(); }),
+        buttons: Array.prototype.slice.call(picker.querySelectorAll('.theme-btn'))
+                      .map(function (b) { return Math.round(b.getBoundingClientRect().width); }),
+        picker: Math.round(picker.getBoundingClientRect().width),
+        lang: lang && lang.getClientRects().length > 0 ? Math.round(lang.getBoundingClientRect().width) : null
+    };
+    if (!had) picker.classList.remove('theme-picker--open');
+    void picker.offsetWidth;
+    still.remove();
+    return JSON.stringify(result);
+})()
+'@
+    $open = [string](Invoke-CdpEval $socket $probe) | ConvertFrom-Json
+
     # The allow-list is decided in the page: an entry is allowed when every element its selector names is a
     # .theme-btn or a .lang-select (the selector of the top-bar language select is select#lang-select, for example).
     $notAllowed = @()
@@ -233,7 +284,7 @@ function Get-Audit([System.Net.WebSockets.ClientWebSocket] $socket, [string] $ur
         $check = "(function (s) { try { var all = Array.from(document.querySelectorAll(s)); return all.length > 0 && all.every(function (e) { return e.matches('$allowSmall'); }); } catch (x) { return false; } })($quoted)"
         if (-not [bool](Invoke-CdpEval $socket $check)) { $notAllowed += [string]$selector }
     }
-    @{ Audit = $audit; NotAllowed = $notAllowed }
+    @{ Audit = $audit; NotAllowed = $notAllowed; Open = $open }
 }
 
 # ---- run -----------------------------------------------------------------------------------------------------------
@@ -325,11 +376,25 @@ try {
                     $unnamed = @($audit.unnamed)
                     if ($unnamed.Count -gt 0) { $problems += "unnamed: $($unnamed -join ' | ')" }
                     if ($result.NotAllowed.Count -gt 0) { $problems += "small: $($result.NotAllowed -join ' | ')" }
+                    $truncated = @(if ($audit.PSObject.Properties['truncated']) { $audit.truncated })
+                    if ($truncated.Count -gt 0) { $problems += "truncated: $($truncated -join ' | ')" }
+                    if ([int]$result.Open.overflow -gt 0) { $problems += "open picker: overflow $($result.Open.overflow) px" }
+                    $openTruncated = @($result.Open.truncated)
+                    if ($openTruncated.Count -gt 0) { $problems += "open picker: truncated $($openTruncated -join ' | ')" }
+                    $openButtons = @($result.Open.buttons)
+                    $openText = 'open pill -'
+                    if (-not $result.Open.skipped) {
+                        $openText = "open pill $($openButtons -join '/') = $($result.Open.picker)px" + $(if ($null -ne $result.Open.lang) { ", lang $($result.Open.lang)px" } else { '' })
+                        if ($openButtons.Count -ne 3 -or @($openButtons | Where-Object { [int]$_ -le 0 }).Count -gt 0) {
+                            $problems += "open picker: not unfolded (buttons $($openButtons -join '/'))"
+                        }
+                        if ($null -ne $result.Open.lang -and [int]$result.Open.lang -lt 72) { $problems += "open picker: language select $($result.Open.lang) px (< 72)" }
+                    }
 
                     $small = @($audit.small | ForEach-Object { if ($result.NotAllowed -contains $_) { $_ } else { "$_ (allowed)" } })
                     $smallText = if ($small.Count -gt 0) { $small -join ' | ' } else { '-' }
                     if ($problems.Count -eq 0) {
-                        Write-Host "ok   $label  overflow $($audit.overflow), unnamed 0, small: $smallText"
+                        Write-Host "ok   $label  overflow $($audit.overflow), unnamed 0, truncated 0, $openText, small: $smallText"
                     }
                     else {
                         $failures.Add("$label`: $($problems -join '; ')")
@@ -348,7 +413,7 @@ catch {
 finally {
     if ($browser) {
         try { $browser.Socket.Dispose() } catch { }
-        Stop-Tree $browser.Process
+        Stop-Tree $browser.Process $profileDir
     }
     if ($service -and -not $service.HasExited) {
         Write-Host 'Stopping the bridge.'

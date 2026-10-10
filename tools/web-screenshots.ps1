@@ -116,7 +116,7 @@ function ConvertTo-Argument([string] $value) {
     if ($value -match '[\s"]') { '"' + ($value -replace '"', '\"') + '"' } else { $value }
 }
 
-function Stop-Tree($process) {
+function Stop-Tree($process, [string] $commandLineMark) {
     if ($process -and -not $process.HasExited) {
         # taskkill reports children that exit on their own as errors; Windows PowerShell 5.1 would turn that stderr
         # line into a terminating error under $ErrorActionPreference = 'Stop'.
@@ -124,6 +124,13 @@ function Stop-Tree($process) {
         $ErrorActionPreference = 'Continue'
         try { & taskkill.exe /PID $process.Id /T /F 2>&1 | Out-Null }
         finally { $ErrorActionPreference = $previous }
+    }
+    if ($commandLineMark) {
+        # Edge helper processes that left the launcher's tree (REVIEW-2 #11, not reproduced, kept as a safety net):
+        # everything whose command line names this screenshot's own profile directory, and nothing else.
+        Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -and $_.CommandLine.Contains($commandLineMark) } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -257,7 +264,7 @@ function Save-Screenshot([string] $url, [int] $width, [int] $height, [bool] $for
     }
     finally {
         try { $socket.Dispose() } catch { }
-        Stop-Tree $browser.Process
+        Stop-Tree $browser.Process $profileDir
         Remove-Item -Recurse -Force $profileDir -ErrorAction SilentlyContinue
     }
 }

@@ -140,7 +140,11 @@ layout audit below).
   uses the tablet layout with a slimmer sticky top bar (its tabs are the navigation there) and a compact now-playing
   card. Every control is at least 44 x 44 px on phones and touch screens (the theme picker's 34px buttons are the one
   exception; Settings > Appearance has the same choice as full-size radios), inputs use a 16px font, and fixed
-  bars keep clear of notches and the home indicator (`viewport-fit=cover` with `env(safe-area-inset-*)`).
+  bars keep clear of notches and the home indicator (`viewport-fit=cover` with `env(safe-area-inset-*)`). On phones,
+  portrait and landscape, the PIN dialog opens at the top of the screen so the on-screen keyboard does not cover the
+  PIN field (in landscape the Pair and Cancel buttons sit next to the field, so they stay visible too), and the page
+  behind it does not scroll. The top-bar language select shows from 760px wide; narrower screens choose the language
+  in Settings.
 - **Theme**: light, dark or system, from the top-bar picker or Settings > Appearance; stored in the browser
   (`localStorage`). **Language**: Deutsch, English, Français, Español, Русский, Українська, Português (Brasil); the
   browser's language until one is chosen.
@@ -156,8 +160,10 @@ pwsh tools/web-screenshots.ps1 -Package mine -Routes /,/receivers,/settings -Siz
 pwsh tools/web-screenshots.ps1 -Package mine -Routes / -Sizes 390x2200            # a tall viewport shows the end of a page
 pwsh tools/web-screenshots.ps1 -Package mine -Routes / -Setup tools/screenshot-setups/mobile-polish.ps1   # with an active group
 
-# Layout audit: fails on horizontal overflow, on controls without an accessible name and on touch targets under
-# 44 x 44 px; defaults: /, /receivers, /settings, /settings/diagnostics, /groups at 390x844 and 768x1024 in light
+# Layout audit: fails on horizontal overflow, on controls without an accessible name, on touch targets under
+# 44 x 44 px and on a cut-off connection word in the top bar; it also measures the bar with the theme picker really
+# unfolded (transitions off for that measurement; fails when a theme button reads 0px wide, i.e. the pill did not open,
+# or the top-bar language select gets narrower than 72px); defaults: /, /receivers, /settings, /settings/diagnostics, /groups at 390x844 and 768x1024 in light
 # and dark. Sizes under 1024px wide are audited as touch devices (DevTools touch emulation: (pointer: coarse)
 # matches and the touch rules apply), so the 44px check covers tablets too; -Pointer fine audits them with a mouse,
 # -Pointer coarse also audits desktop sizes as touch screens.

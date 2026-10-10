@@ -1,6 +1,7 @@
 @* The theme picker of the top bar (UI-SPEC 2.4), the reference apps' control: a role="radiogroup" pill of three
    role="radio" buttons (light / dark / system). Collapsed it shows only the checked option; hover or focus-within
-   unfolds it (CSS). Keyboard: one Tab stop (roving tabindex on the checked button), arrows/Home/End move focus and
+   unfolds it (CSS). On a pointer that cannot hover the group carries theme-picker--touch and the CSS ignores :hover,
+   which a tap leaves stuck on the tapped button. Keyboard: one Tab stop (roving tabindex on the checked button), arrows/Home/End move focus and
    selection, Escape collapses. Touch (no hover): the first pointer tap opens the pill (theme-picker--open) instead of
    selecting, the next tap selects; a document click outside (BrowserBridge.OnOutsideClickAsync, a bubbling click
    listener) or Escape collapses it. A pointer selection and Escape also move the focus out of the pill
@@ -12,7 +13,7 @@
 @using Microsoft.JSInterop
 @inject BrowserBridge Browser
 
-<div @ref="_picker" class="@(_open ? "theme-picker theme-picker--open" : "theme-picker")" role="radiogroup" aria-label="@L["theme.groupLabel"]" @onkeydown="OnKeyDownAsync">
+<div @ref="_picker" class="@PickerClass" role="radiogroup" aria-label="@L["theme.groupLabel"]" @onkeydown="OnKeyDownAsync">
     @for (var i = 0; i < Themes.Length; i++)
     {
         var index = i;
@@ -49,6 +50,20 @@
 
     /// <summary>True while the touch "open" state unfolds the pill (<c>theme-picker--open</c>).</summary>
     public bool IsOpen => _open;
+
+    /// <summary>
+    /// The group's classes. <c>theme-picker--touch</c> marks a pointer that cannot hover: there the CSS collapses the
+    /// pill without looking at <c>:hover</c>, which a tap leaves stuck on the tapped button until the next tap elsewhere
+    /// and which would keep the pill unfolded after a choice (REVIEW-2 #1). <c>theme-picker--open</c> is the touch
+    /// "open" state of the first tap.
+    /// </summary>
+    private string PickerClass => (_hoverCapable, _open) switch
+    {
+        (true, false) => "theme-picker",
+        (true, true) => "theme-picker theme-picker--open",
+        (false, false) => "theme-picker theme-picker--touch",
+        (false, true) => "theme-picker theme-picker--touch theme-picker--open",
+    };
 
     /// <summary>
     /// Called by app.js for a document click outside the picker (registered on touch screens only, where the pill can
@@ -94,9 +109,15 @@
                 return;
             }
 
+            var changed = !_hoverCapable; // the touch class (theme-picker--touch) has to reach the markup
             if (Array.IndexOf(Themes, stored) >= 0 && stored != _theme)
             {
                 _theme = stored;
+                changed = true;
+            }
+
+            if (changed)
+            {
                 StateHasChanged();
             }
 

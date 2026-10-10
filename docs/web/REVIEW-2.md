@@ -61,6 +61,15 @@ next free number so the references to 1–11 stay valid.
 
 ### 1. On touch screens the theme picker stays unfolded after a choice: sticky `:hover` holds it open (major, mobile UX; REVIEW-1 #3 not closed on touch)
 
+- **Status (fix-2): fixed.** `ThemePicker` adds `theme-picker--touch` when `hoverCapable()` is false; the collapse
+  rules (and the phone collapsed look) are two-selector lists: the desktop rule now starts with
+  `.theme-picker:not(.theme-picker--touch):not(:hover)…`, and the touch twin `.theme-picker--touch:not(:focus-within):not(.theme-picker--open)`
+  has no `:hover` (`app.css`, UI-SPEC 2.4). `DesignTokenTests.Unguarded_not_hover_selectors_never_apply_on_touch` replaces
+  the blanket exemption with a shape check; `ShellTests` asserts the class on touch and its absence with a mouse.
+  Verified: `probes/touch-pass.ps1` reads `0/34/0` right after the selecting tap and 1 s later at 390×844 **and** at
+  844×390 while `pickerHover` is still true (`artifacts/ui/fix-2/touch/touch-pass-*.json`); a new mouse probe
+  (`artifacts/ui/fix-2/probes/hover-probe.ps1`, 1280×900, fine pointer) reads `0/0/26` → hover `26/26/26` → leave
+  `0/0/26` (`artifacts/ui/fix-2/hover/hover-probe.json`), so the desktop unfold is proven.
 - **Where:** `src/Bridge.Web/wwwroot/css/app.css:260-265` (`.theme-picker:not(:hover):not(:focus-within):not(.theme-picker--open) …`)
   and the phone variant at `:912-916`. `tests/Bridge.Tests/Web/DesignTokenTests.cs:312-314` exempts `:not(:hover)`
   from the hover-guard test.
@@ -102,6 +111,12 @@ next free number so the references to 1–11 stay valid.
 
 ### 2. In English the connection banner shows a raw runtime resource key: "Live updates paused: net_webstatus_ConnectFailure Retrying shortly." (major, i18n/UX)
 
+- **Status (fix-2): fixed.** `ConnectionError.Text` keeps the mapping of the client's own sentence to
+  banner.closedByBridge and leaves every other text out in every language, English included (the client already logs
+  the detail through `ILogger`, which is the browser console). UI-SPEC 3.5 updated.
+  `ShellTests.Connection_banner_never_shows_the_clients_runtime_text` (de and en, with `net_webstatus_ConnectFailure`
+  and an English sentence) replaces the German-only test; the status-pill theory gained an en row with the resource
+  key, and its en expectations now read the error-free sentences.
 - **Where:** `src/Bridge.Web/Components/ConnectionError.cs:30` (`_ when l.Code == English => error`), used by
   `ConnectionBanner` (banner.pausedError) and `StatusPill` (status.title.paused/offline). Screenshots
   `states/banner-player-390x844-light-en.png`, `states/banner-player-844x390-light-en.png`.
@@ -121,6 +136,21 @@ next free number so the references to 1–11 stay valid.
 
 ### 3. Landscape phones get the centred dialog, and with the keyboard open the PIN field ends below the visible part of the dialog (minor, mobile UX)
 
+- **Status (fix-2): fixed (CSS); the real-device check stays manual.** The `(max-height: 500px)` block top-anchors the
+  scrim (`align-items: start`, top padding `.5rem` plus the inset) and compacts the dialog (padding `.8rem 1rem`, gap
+  `.6rem`, `max-height: calc(100dvh - 1rem)`); UI-SPEC 4.11 and 5.1. Re-measured with `probes/states.ps1 -Mode dialog`:
+  at 844×390 the dialog is 8–250px; with the 200px keyboard viewport the PIN field is at 130–183px, inside the visible
+  dialog (8–192px), and the Pair/Cancel row (192–236px) is one short scroll inside the dialog away; Enter in the field
+  submits (`artifacts/ui/fix-2/states/dialog-844x390-light-en-kbd190.png`). Portrait is unchanged (PIN 148–201px with
+  the keyboard). The optional `scrollIntoView` helper was not added: the browser already keeps the focused field in
+  view, and the field now sits in the upper part either way.
+- **Follow-up (after the final review):** the Pair/Cancel row is no longer below the visible part. In the
+  `(max-height: 500px)` block the dialog is a grid whose third row holds the PIN field and the actions side by side
+  (`grid-template-columns: minmax(7rem, 1fr) auto`, width `min(32rem, 100%)`; UI-SPEC 4.11), so Cancel is reachable
+  without scrolling although the scrim does not cancel and a phone keyboard has no Escape. Re-measured with
+  `probes/states.ps1 -Mode dialog -Width 844 -Height 390 -KeyboardHeight 190`: with the 200px viewport the dialog is
+  8–192px and the field and both buttons end at 183px in de, ru and es (161px in en)
+  (`artifacts/screenshots/final/states/dialog-844x390-light-{en,de,ru,es}-kbd190.png`).
 - **Where:** `app.css:819-840` (`.scrim` centres `.dialog` at ≥ 700px) and `:1022-1033` (the `(max-height: 500px)` block
   has no dialog rule). Screenshots `states/dialog-844x390-light-en.png` and
   `states/dialog-844x390-light-en-kbd190.png`. The second simulates `interactive-widget=resizes-content` with a 200px
@@ -139,6 +169,11 @@ next free number so the references to 1–11 stay valid.
 
 ### 4. Diagnostics at ≥ 700px: long fact labels squeeze the address list into a 60–90px column that breaks IP addresses mid-number (minor, i18n/layout)
 
+- **Status (fix-2): fixed.** `.facts` is `minmax(0, max-content) minmax(9rem, 1fr)` (a long label wraps before a value
+  does), and the addresses' `dt` and `dd` carry `.facts__wide` (`grid-column: 1 / -1`), so the list spans the card at
+  every size (`Diagnostics.razor`, `app.css`, UI-SPEC 1.5). Checked in pt and es at 768 and 1280
+  (`artifacts/ui/fix-2/checks/settings-diagnostics-*-light-{pt,es}.png`): no address is broken mid-number any more; at 1280
+  every line fits, and at 768 (a 330px-wide card) the longest lines wrap at the space after the interface name.
 - **Where:** `app.css:609-611` (`.facts { grid-template-columns: max-content 1fr }`, `dd { overflow-wrap: anywhere }`),
   `Pages/Diagnostics.razor:48-70` (`dd.addresses`). Screenshots `i18n/settings-diagnostics-1280x900-light-{pt,es,de}.png`,
   crop `montage/crop-diag-pt-1280.png`.
@@ -156,6 +191,17 @@ next free number so the references to 1–11 stay valid.
 
 ### 5. On coarse-pointer screens wider than 699px the theme buttons stay 26px (minor, mobile UX)
 
+- **Status (fix-2): fixed, together with finding 12.** `.theme-btn` 34px / `.ico` 18px moved from the phone block into the
+  touch block `(max-width: 699px), (pointer: coarse)` (UI-SPEC 2.4, 5.2, 5.4). Measured 34×34 at 844×390 with touch
+  emulated. The width budget was probed as asked: `tools/web-audit.ps1` now runs an open-pill probe on every page (the
+  pill unfolded for one measurement), and `/` and `/receivers` at 700×900 and 768×1024 with touch emulated in pt, ru
+  and uk report overflow 0 and an untruncated status word with the open pill.
+- **Follow-up (after the final review): the probe now really measures the open pill.** It added the class and measured
+  synchronously, but `.theme-btn` animates its width over .15s, so it read the collapsed pill (0/0/34 at 700×900) and its
+  "open pill ok" did not guard anything. The probe now switches the picker's transitions off with a temporary style
+  for the measurement, records the three button widths (34/34/34 = 112px on touch) and fails when one is 0 or when the
+  top-bar language select is narrower than 72px. Measuring the real open pill showed the select shrinking to 43–53px
+  (a clipped half letter) at 700px in pt, ru and uk; see the follow-up of #12.
 - **Where:** `app.css:244-258` (26px), `:910-911` (34px only in the `(max-width: 699px)` block), touch block `:1036-1065`.
   Measured in `touch/touch-pass-844x390-light-en.json` (`themeBtns: 26x26`). Screenshot `touch/touch-player-844x390-light-en.png`.
 - **Spec:** 2.4 (26px at ≥ 700px, 34px at ≤ 699px; allow-listed), 5.4.
@@ -174,6 +220,15 @@ next free number so the references to 1–11 stay valid.
 
 ### 6. Group editor member sliders on phones have a track of about 70px (minor, mobile UX)
 
+- **Status (fix-2): fixed.** Member rows are `.row.row--member`; at ≤ 699px the row wraps and the compact slider takes
+  `order: 1; flex: 1 1 100%; width: auto`, so it sits on its own line under name, pill and remove button and spans the
+  card (about 290px of track at 390px). The 5.3 row of the 120px rule is replaced
+  (`artifacts/ui/fix-2/checks/groups-*-390x844-*.png`). The drag feel stays on the manual list.
+- **Follow-up (after the final review):** `order: 1` made the visual order (name, remove, slider) differ from the DOM
+  and Tab order (name, slider, remove). The phone row now gives `.row__main` the first line (`flex: 1 1 100%`) and puts
+  the slider (`flex: 1 1 auto`) and the remove button side by side on the second, so the visual order is the DOM order
+  at every width (about 240px of track at 390px, `artifacts/screenshots/final/states/members-390x844-light-en.png`).
+  `GroupsPairingTests` asserts the DOM order, and `DesignTokenTests` rejects any `order` declaration in `app.css`.
 - **Where:** `app.css:959` (`.row .level--compact { width: 120px }` on phones). Screenshots
   `phone/groups-<id>-390x844-*.png`, `i18n/groups-<id>-390x844-light-*.png`.
 - **Spec:** 5.3 (the 120px rule), 5.4 (the 44px slider band).
@@ -188,6 +243,16 @@ next free number so the references to 1–11 stay valid.
 
 ### 7. The page behind the pairing dialog still scrolls on touch (nit, mobile UX)
 
+- **Status (fix-2): fixed.** `:root:has(.scrim:not(.sg-frame .scrim)) { overflow: hidden }` (the styleguide's in-flow
+  sample is excluded) plus `overscroll-behavior: contain` on `.scrim` and `.dialog` (UI-SPEC 4.11; no new media query).
+  Verified with `artifacts/ui/fix-2/probes/scroll-lock.ps1` on the real dialog: root overflow `hidden`, a wheel over the
+  scrim leaves `scrollY` at 0 (309px scrollable); after Cancel the root is `visible` again and the same wheel scrolls.
+- **Follow-up (after the final review):** `overscroll-behavior` on `.scrim` was inert (the scrim is not a scroll
+  container) and is gone; `.dialog` keeps it. Removing the root scrollbar shifted the page 15px on desktop Windows
+  (classic scrollbars): from 1024px `html { scrollbar-gutter: stable }` keeps the gutter, and a probe with visible
+  scrollbars on `/settings/diagnostics` at 1280×900 reads the same brand, tabs and status positions before and with the
+  dialog (`artifacts/screenshots/final/states/gutter-1280x900-{before,dialog}.png`). Below 1024px (overlay scrollbars)
+  the rule is not applied, so phone and tablet layouts keep their full width in the headless runs too.
 - **Where:** `Components/PairingDialog.razor` (no scroll lock), `app.css:819`. Measured: `body` overflow stays
   `visible` while the dialog is open (`states/*dialog*` JSON in the run log).
 - **What is wrong:** a swipe on the scrim scrolls the Player underneath (scroll chaining). iOS Safari is especially
@@ -198,6 +263,10 @@ next free number so the references to 1–11 stay valid.
 
 ### 8. The long stream options are cut off in the collapsed `<select>` on phones (nit, mobile UX/i18n)
 
+- **Status (fix-2): fixed.** settings.streamRealtime / settings.streamBuffered are the mode names alone in all seven
+  catalogs (de "Realtime" / "Gepuffert", en "Realtime" / "Buffered", fr "Temps réel" / "Tamponné", …), and
+  settings.streamHint now carries the transport detail for both modes. UI-SPEC 10 and `I18nTests` updated
+  (`artifacts/ui/fix-2/checks/settings-390x844-light-{de,fr}.png`).
 - **Where:** `Pages/Settings.razor:74` (`InputSelect id="stream"`), catalogs settings.streamRealtime /
   settings.streamBuffered. Screenshots `phone/settings-390x844-*-de.png`, `i18n/settings-390x844-light-*.png`:
   "Realtime (RTP über UDP, NTP- oder PT…", "Temps réel (RTP sur UDP, synchronisat…".
@@ -208,6 +277,9 @@ next free number so the references to 1–11 stay valid.
 
 ### 9. "1 events": the event count in diagnostics.liveUpdatesValue has no plural (nit, i18n)
 
+- **Status (fix-2): fixed.** de, en, fr, es and pt use the ru/uk pattern: "events: {{events}}", "Ereignisse:
+  {{events}}", "événements : {{events}}" (with the catalog's no-break space), "eventos: {{events}}". UI-SPEC 10,
+  `I18nTests` and `SettingsDiagnosticsTests` updated; parity and placeholder tests green.
 - **Where:** `Resources/i18n/{en,de,fr,pt,es}.json:278-279` ("{{count}} connection, {{events}} events"), consumer
   `Pages/Diagnostics.razor` (`Plural` on the connection count only).
 - **What is wrong:** the plural follows `count`, the connections, while `events` is always plural. With exactly one
@@ -218,6 +290,10 @@ next free number so the references to 1–11 stay valid.
 
 ### 10. The toast region is an unnamed `complementary` landmark (nit, a11y; needs a spec change)
 
+- **Status (fix-2): fixed.** `NoticeArea` renders `<div class="toasts" aria-live="polite">`; the container keeps
+  `aria-live`, error toasts keep `role="alert"`, the others keep `role="status"` (the nested status is harmless; the
+  container covers browsers that miss an inserted live node). The styleguide sample is a `div` too. UI-SPEC 4.9 updated
+  (6.1 is unchanged, since the roles stay); the `ShellTests` selectors are `div.toasts`.
 - **Where:** `Components/NoticeArea.razor:6` (`<aside class="toasts" aria-live="polite">`).
 - **Spec:** 4.9 names the element ("A fixed `aside.toasts` (`aria-live="polite"`)"), and 6.1 requires
   `role="status"` on non-error toasts, `role="alert"` on error toasts and `aria-live="polite"` on the toast region. The
@@ -236,6 +312,13 @@ next free number so the references to 1–11 stay valid.
 
 ### 11. Tooling: headless Edge processes were left over after this review's runs (nit, tooling; reproduce before fixing)
 
+- **Status (fix-2): not reproduced; a safety net added.** After this package's complete runs of `web-audit.ps1`,
+  `web-screenshots.ps1` (several runs, three in parallel), `probes/touch-pass.ps1`, `probes/states.ps1` and the two new
+  probes, no `msedge.exe` with a `bridge-screens-`, `bridge-audit-`, `bridge-hero-` or `r2-edge-` profile was left
+  (`Get-CimInstance Win32_Process`, matched on `CommandLine`). As the cheapest guard against helpers that leave the
+  launcher's tree, `Stop-Tree` in `web-screenshots.ps1` and `web-audit.ps1` now also stops the Edge processes whose
+  command line names the run's **own** profile directory, and nothing else (no start-up sweep of a prefix, which
+  could kill a parallel run).
 - **Where:** `tools/web-screenshots.ps1` `Stop-Tree` (`taskkill /PID <launcher> /T /F`), the same helper in
   `tools/web-audit.ps1` and `tools/screenshot-setups/mobile-polish.ps1`.
 - **What was seen:** after this review's runs, 22 `msedge.exe` processes with temporary `bridge-screens-*` profiles
@@ -258,6 +341,23 @@ next free number so the references to 1–11 stay valid.
 
 ### 12. At 700–760px the top bar truncates the brand, the language select and the status pill in pt, ru and uk (major, i18n/mobile UX)
 
+- **Status (fix-2): fixed.** `.status { flex-shrink: 0 }` from 700px (the phone shell sets 1 again), `.lang-select {
+  min-width: 0; flex-shrink: 3 }` (the 118px minimum is gone), `.brand__name` keeps its ellipsis; no new media query
+  (UI-SPEC 1.5, 5.2, 5.5, 7). At 700×900 the bar reads "AirPlay B…", "Portugu…" / "Українська" and the whole status word
+  ("ao vivo", "онлайн", "в ефірі") (`artifacts/ui/fix-2/tablet/player-700x900-light-{pt,ru,uk}.png`).
+  Verification as asked: `audit()` returns a new `truncated` list (`.status__text` with `scrollWidth > clientWidth`,
+  from 360px), `tools/web-audit.ps1` fails on it and on the open-pill probe, and the final audit covers 700×900 and
+  768×1024 in all seven languages (see "State at the end").
+- **Follow-up (after the final review):** with the open pill really measured (#5), the select shrank to 43–53px at 700px
+  in pt, ru and uk and showed a clipped half letter. `.lang-select` now has a `min-width: 4.5rem` floor (one readable
+  character plus the chevron) and `.brand` `flex-shrink: 3`, so the brand name gives way faster than the tools cluster.
+  At 700px in pt and ru that still overflowed by 6–9px with the open pill, so the top-bar select is hidden below 760px
+  (` (max-width: 759px)`, added to the UI-SPEC 5.1 table and to `DesignTokenTests.AllowedMediaQueries`; Settings
+  keeps the full field). At 760px with the open pill and the longest status word ("подключение…") the select keeps
+  87px and the bar does not overflow; the audit fails on a select under 72px.
+  The real open pill also cut the phone status word: es "en directo" at 390px lost 2px, because the tools cluster shared
+  the shrink with the brand name. The phone `.tools` now has `flex-shrink: 0` (back to 1 below 360px, where the name is
+  hidden), so from 360px only the name gives way (UI-SPEC 5.2).
 - **Where:** `app.css:162-232` (`.topbar`, `.brand__name` with `min-width: 0` and ellipsis, `.tabs { flex: none }`,
   `.tools { min-width: 0 }`, `.lang-select { min-width: 118px; max-width: 11rem }`), `:269-292` (`.status` with
   `min-width: 0`, `.status__text` with ellipsis). Screenshots `tablet/player-700x900-light-{pt,ru,uk}.png` and
@@ -418,3 +518,95 @@ next free number so the references to 1–11 stay valid.
 - The `/_styleguide` page's English sample texts: it is a developer page (WORK-PLAN 1).
 - A third review is not needed. The findings are contained (CSS, two small C# changes, catalog text, spec text, a tooling check), and
   fix-2 can verify them with the probes in `artifacts/screenshots/review-2/probes/`.
+
+## State at the end (fix-2, wave 7)
+
+All twelve findings are closed: eleven fixed, and #11 not reproduced (a safety net was added). Each finding's
+**Status (fix-2)** line above gives the change and the evidence. There are no open blockers, majors or minors.
+
+### What was run at the end
+
+| Check | Result |
+|---|---|
+| `dotnet build AirplayBridge.sln -warnaserror` | green: 0 warnings, 0 errors |
+| `dotnet test tests/Bridge.Tests --filter FullyQualifiedName~Bridge.Tests.Web` | 428/428 passed (423 at review-2, plus the new and split tests below) |
+| `dotnet test AirplayBridge.sln --filter "Category!=SpeakerALive&Category!=ShairportLive"` | `Airplay2.Sender.Tests` 566/566. `Bridge.Tests` 513/514 on the first run: `Service.BridgeApiTests.WebSocket_sends_the_snapshot_first_answers_ping_and_streams_the_log_on_request` threw `ObjectDisposedException` from the test's own `EventClient.DisposeAsync` (a teardown race in `tests/Bridge.Tests/Service/BridgeTestSupport.cs:281`, outside the web packages; no web file is involved). It passed in 5 of 5 isolated reruns, and a full rerun of `Bridge.Tests` was 514/514 (`artifacts/screenshots/final/test-full.log`, `test-bridge-rerun.log`). |
+| Final screenshot set, `tools/web-screenshots.ps1 -Package final` (service on port 18120, `--Bridge:FakeReceivers=2`, `mobile-polish.ps1` setup: group "Downstairs" active, both fakes connected) | **168 PNGs** in `artifacts/screenshots/final/`: 7 routes (`/`, `/receivers`, `/groups`, `/groups/new`, `/groups/<id>`, `/settings`, `/settings/diagnostics`) × 390×844, 844×390, 768×1024, 1280×900 × light, dark × en, de, ru. No horizontal-overflow warning in any run (`shots-{en,de,ru}.log`). |
+| `tools/web-audit.ps1` (now also with `truncated` and the open-pill probe) | **210/210 passed**: the 7 routes × 390×844, 844×390, 700×900, 768×1024, 1280×900 × light, dark × en, de, ru (`audit.log`; touch emulated below 1024px). **84/84 passed**: the 7 routes × 390×844, 700×900, 768×1024 × light × fr, es, uk, pt (`audit-langs.log`). So the 700–767px band is covered in all seven languages. In every run overflow is 0 and `unnamed` and `truncated` are empty. The "open pill ok" of these runs did not hold: the probe read the collapsed pill (see #5 and "Follow-up after the final review", which has the re-run with the real open pill). `small` held only the allow-listed entries, `.theme-btn.is-active` and, from 700px with a coarse pointer, `select#lang-select`. |
+| Emulated-touch pass (`probes/touch-pass.ps1`) at 390×844 and 844×390 | 44px ranges, 24px thumbs, 34px theme buttons at both sizes, 16px inputs; the picker opens on the first tap, selects on the second, and shows `0/34/0` right after and 1 s later although `:hover` is still stuck (`artifacts/ui/fix-2/touch/`) |
+| Desktop hover probe (new, `artifacts/ui/fix-2/probes/hover-probe.ps1`) | `0/0/26` → hover `26/26/26` → leave `0/0/26` |
+| Pairing dialog (`probes/states.ps1 -Mode dialog`) | portrait unchanged; landscape top-anchored, the PIN field is visible with a 200px keyboard viewport (`artifacts/ui/fix-2/states/`). Follow-up: the field and the Pair/Cancel buttons share one row in landscape and all end at 183px (de, ru, es) or 161px (en) in the 200px viewport (`artifacts/screenshots/final/states/dialog-844x390-*`) |
+| Scroll lock (new, `artifacts/ui/fix-2/probes/scroll-lock.ps1`) | page does not scroll behind the open dialog; scrolls again after Cancel |
+| Leftover Edge processes after all of the above | none |
+
+### Tests added or changed by fix-2
+
+- `DesignTokenTests.Unguarded_not_hover_selectors_never_apply_on_touch` (new; narrows the `:not(:hover)` exemption of
+  the hover-guard test to the desktop collapse rule plus its touch twin).
+- `ShellTests.Connection_banner_never_shows_the_clients_runtime_text` (de and en; replaces the German-only
+  `…never_shows_the_clients_english_in_another_language`); `Status_pill_maps_the_connection_to_class_text_and_title`
+  gained an en row for `net_webstatus_ConnectFailure`; the two touch tests of the theme picker assert
+  `theme-picker--touch`, and the mouse test asserts that it is absent; the toast tests select `div.toasts`.
+- `I18nTests.Catalogs_hold_the_texts_of_the_spec` gained settings.streamRealtime / settings.streamBuffered rows; the
+  live-updates plural expectations follow the new "events: N" form (en, de, fr, es, pt), and so does
+  `SettingsDiagnosticsTests.Live_updates_word_comes_from_the_status_keys`.
+
+### Spec and user-facing changes
+
+UI-SPEC: 1.5 (`.lang-select`, `.facts`, `.facts__wide`), 2.3 (`audit()` fields), 2.4 (the touch twin, 34px on
+coarse pointers), 3.5 (no runtime text in any language), 4.5 (`.row--member`), 4.9 (`div.toasts`), 4.11 (landscape
+anchoring, scroll lock), 5.1–5.6 (landscape dialog, status pill shrink, member slider line, 34px in the touch block,
+the tablet bar rules, `truncated` and the open-pill probe), 7 (`flex-shrink: 0`), and 10 (stream options,
+live-updates value). README: the phone/landscape PIN dialog and scroll lock, and the audit's new checks. No new
+catalog key and no new media query; the 5.1 list is unchanged.
+
+### Follow-up after the final review
+
+A final review found that the open-pill probe measured the collapsed pill (the width transition had not run when it
+measured) and four smaller mobile issues. Changes, all in the follow-up lines of #3, #5, #6, #7 and #12 above:
+
+- `tools/web-audit.ps1`: the probe switches the picker's transitions off for its measurement, logs the three button
+  widths, the pill and the select width, and fails on a 0px button or a top-bar select under 72px (UI-SPEC 5.6).
+- `app.css`: `.lang-select { min-width: 4.5rem }`, `.brand { flex-shrink: 3 }`, a new ` (max-width: 759px)`
+  that hides the top-bar select (UI-SPEC 5.1 list and `DesignTokenTests.AllowedMediaQueries` updated); phone
+  `.tools { flex-shrink: 0 }` (1 again below 360px); member rows without `order`; `.scrim` without the inert
+  `overscroll-behavior`; `html { scrollbar-gutter: stable }` from 1024px; the landscape dialog as a grid with the
+  field and the actions in one row.
+- Tests: `DesignTokenTests.No_rule_reorders_flex_or_grid_children_so_the_tab_order_is_the_visual_order` (new), the
+  DOM order assertion in `GroupsPairingTests.Group_editor_adds_and_removes_members`, the new allowed media query.
+  `dotnet test tests/Bridge.Tests --filter FullyQualifiedName~Bridge.Tests.Web`: 429/429.
+- `tools/web-audit.ps1 -NoStart` against a fake-receiver service with the `mobile-polish.ps1` group: **294/294 passed**
+  (the 7 routes × 360×740, 390×844, 844×390, 700×900, 760×900, 768×1024, 1280×900 × light, dark × en, de, ru;
+  `artifacts/screenshots/final/audit.log`) and **140/140 passed** (the 7 routes × 360×740, 390×844, 700×900, 760×900,
+  768×1024 × light × fr, es, uk, pt; `audit-langs.log`). Every line now shows the real open pill (34/34/34 = 112px on
+  touch, 26/26/26 = 88px with a mouse) and the narrowest top-bar select is 104px. The first run of this matrix failed
+  on es at 390×844 ("en directo" cut), which led to the phone `.tools` rule above.
+- Seen while measuring, not changed: at 1024px with a coarse pointer (an iPad in landscape) the absolutely centred
+  tabs and the tools cluster overlap by about 14px in pt and ru while the theme pill is open (22px in headless Edge,
+  which reserves the 15px gutter of its classic scrollbar); the collapsed pill fits. This is the existing manual check
+  6 below; it needs a decision on the centred tabs at that width, not a CSS tweak.
+
+### Open items
+
+None from the findings. Things knowingly left as they are:
+
+- **Brand name at 700–760px:** in pt, ru and uk it shows "AirPlay B…". This is the intended give-way (#12). The brand
+  tile and the link stay; the name is not information that the bar loses.
+- **The service-side test race** above is outside the web packages' paths; it belongs to whoever owns
+  `tests/Bridge.Tests/Service/`.
+
+### Manual checks that remain
+
+1. On-screen keyboard over the pairing sheet on **iOS Safari** and **Android Chrome**, portrait and landscape: the PIN
+   field stays visible, and in landscape the Pair and Cancel buttons beside it stay visible too (#3).
+2. `env(safe-area-inset-*)` on a notched iPhone, in Safari and as a home-screen web app.
+3. Drag feel of the 44px slider band: the hero slider, the Receivers slider and the now full-width group-editor
+   member sliders (#6). Also check that a vertical page scroll that starts on a slider still scrolls the page.
+4. `<select>` picker sheets on iOS (language, stream type, log level, member choice): the sheet opens, and the change
+   event fires once.
+5. The theme picker on a real Android phone and a real iPhone: after a choice the pill collapses at once (#1; the
+   emulation shows it, but the real gesture handling should be confirmed once).
+6. A coarse-pointer tablet at ≥ 1024px (for example an iPad in landscape): the touch block applies with the 34px
+   theme buttons, and the absolutely centred tabs do not collide with the tools cluster in pt.
+7. The scroll lock behind the dialog on iOS Safari (`:root:has(...) { overflow: hidden }`; iOS honours `overflow` on
+   the root from 16 on, and older versions may still rubber-band the page).

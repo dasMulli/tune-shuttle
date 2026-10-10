@@ -159,7 +159,9 @@ public sealed partial class I18nTests
     [InlineData("actions.playbackPrevious", "Zurückschalten zum vorherigen Titel", "Going back to the previous track")]
     [InlineData("settings.validation.latencyRange", "Die Latenz muss zwischen 22050 und 176400 Frames liegen.", "The latency must be between 22050 and 176400 frames.")]
     [InlineData("player.receiversOnline_one", "{{count}} von {{total}} online", "{{count}} of {{total}} online")]
-    [InlineData("diagnostics.liveUpdatesValue_other", "{{state}} ({{count}} Verbindungen, {{events}} Ereignisse)", "{{state}} ({{count}} connections, {{events}} events)")]
+    [InlineData("diagnostics.liveUpdatesValue_other", "{{state}} ({{count}} Verbindungen, Ereignisse: {{events}})", "{{state}} ({{count}} connections, events: {{events}})")]
+    [InlineData("settings.streamRealtime", "Realtime", "Realtime")]
+    [InlineData("settings.streamBuffered", "Gepuffert", "Buffered")]
     public void Catalogs_hold_the_texts_of_the_spec(string key, string de, string en)
     {
         var l = new I18n();
@@ -241,15 +243,15 @@ public sealed partial class I18nTests
     [InlineData("uk", 3, "в ефірі (3 підключення, подій: 1 234)")]
     [InlineData("uk", 12, "в ефірі (12 підключень, подій: 1 234)")]
     [InlineData("uk", 101, "в ефірі (101 підключення, подій: 1 234)")]
-    [InlineData("fr", 0, "en direct (0 connexion, 1 234 événements)")]
-    [InlineData("fr", 1, "en direct (1 connexion, 1 234 événements)")]
-    [InlineData("fr", 2, "en direct (2 connexions, 1 234 événements)")]
-    [InlineData("pt", 0, "ao vivo (0 conexão, 1.234 eventos)")]
-    [InlineData("pt", 1, "ao vivo (1 conexão, 1.234 eventos)")]
-    [InlineData("pt", 2, "ao vivo (2 conexões, 1.234 eventos)")]
-    [InlineData("es", 0, "en directo (0 conexiones, 1.234 eventos)")]
-    [InlineData("es", 1, "en directo (1 conexión, 1.234 eventos)")]
-    [InlineData("es", 2, "en directo (2 conexiones, 1.234 eventos)")]
+    [InlineData("fr", 0, "en direct (0 connexion, événements : 1 234)")]
+    [InlineData("fr", 1, "en direct (1 connexion, événements : 1 234)")]
+    [InlineData("fr", 2, "en direct (2 connexions, événements : 1 234)")]
+    [InlineData("pt", 0, "ao vivo (0 conexão, eventos: 1.234)")]
+    [InlineData("pt", 1, "ao vivo (1 conexão, eventos: 1.234)")]
+    [InlineData("pt", 2, "ao vivo (2 conexões, eventos: 1.234)")]
+    [InlineData("es", 0, "en directo (0 conexiones, eventos: 1.234)")]
+    [InlineData("es", 1, "en directo (1 conexión, eventos: 1.234)")]
+    [InlineData("es", 2, "en directo (2 conexiones, eventos: 1.234)")]
     public void Plural_picks_the_form_of_the_real_catalogs(string code, long connections, string expected)
     {
         // The Diagnostics live-updates line (UI-SPEC 4.7), as the page composes it.
@@ -405,14 +407,14 @@ public sealed partial class I18nTests
         var l = new I18n("en");
         Assert.Equal("1 of 2 online", l.Plural("player.receiversOnline", 1, ("total", 2)));
         Assert.Equal("2 of 2 online", l.Plural("player.receiversOnline", 2, ("total", 2)));
-        Assert.Equal("live (1 connection, 1,234 events)", l.Plural("diagnostics.liveUpdatesValue", 1, ("state", "live"), ("events", "1,234")));
-        Assert.Equal("live (0 connections, 0 events)", l.Plural("diagnostics.liveUpdatesValue", 0, ("state", "live"), ("events", "0")));
+        Assert.Equal("live (1 connection, events: 1,234)", l.Plural("diagnostics.liveUpdatesValue", 1, ("state", "live"), ("events", "1,234")));
+        Assert.Equal("live (0 connections, events: 0)", l.Plural("diagnostics.liveUpdatesValue", 0, ("state", "live"), ("events", "0")));
         Assert.Equal("1,234 more", l.Plural("diagnostics.more", 1234));
 
         l.SetLanguage("de");
         Assert.Equal("1 von 2 online", l.Plural("player.receiversOnline", 1, ("total", 2)));
-        Assert.Equal("live (1 Verbindung, 3 Ereignisse)", l.Plural("diagnostics.liveUpdatesValue", 1, ("state", "live"), ("events", "3")));
-        Assert.Equal("live (5 Verbindungen, 3 Ereignisse)", l.Plural("diagnostics.liveUpdatesValue", 5, ("state", "live"), ("events", "3")));
+        Assert.Equal("live (1 Verbindung, Ereignisse: 3)", l.Plural("diagnostics.liveUpdatesValue", 1, ("state", "live"), ("events", "3")));
+        Assert.Equal("live (5 Verbindungen, Ereignisse: 3)", l.Plural("diagnostics.liveUpdatesValue", 5, ("state", "live"), ("events", "3")));
         Assert.Equal("1.234 weitere", l.Plural("diagnostics.more", 1234));
         Assert.Equal("no.plural", l.Plural("no.plural", 3));
     }

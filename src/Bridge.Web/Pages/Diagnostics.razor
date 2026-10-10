@@ -45,8 +45,8 @@
                     <dt>@L["diagnostics.retransmits"]</dt><dd>@Format.Integer(d.RetransmitRequests)</dd>
                     <dt>@L["diagnostics.lateWakeups"]</dt><dd>@Format.Integer(d.LateWakeups)</dd>
                     <dt>@L["diagnostics.retransmitRatio"]</dt><dd class="retransmit-ratio">@RetransmitRatio(d)</dd>
-                    <dt>@L["diagnostics.localAddresses"]</dt>
-                    <dd class="addresses">
+                    <dt class="facts__wide">@L["diagnostics.localAddresses"]</dt>
+                    <dd class="addresses facts__wide">
                         @if (d.LocalAddresses.Count == 0)
                         {
                             @L["diagnostics.noneReported"]

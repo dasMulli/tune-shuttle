@@ -633,13 +633,13 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         state.Apply(new BridgeEvent.StatusChanged(Dto.Status()));
         var cut = ctx.Render<Diagnostics>();
 
-        Assert.Equal("offline (0 Verbindungen, 0 Ereignisse)", Fact(cut, "Live-Updates"));
+        Assert.Equal("offline (0 Verbindungen, Ereignisse: 0)", Fact(cut, "Live-Updates"));
         state.SetConnection(EventConnectionState.Connecting);
-        cut.WaitForAssertion(() => Assert.Equal("verbinde… (0 Verbindungen, 0 Ereignisse)", Fact(cut, "Live-Updates")));
+        cut.WaitForAssertion(() => Assert.Equal("verbinde… (0 Verbindungen, Ereignisse: 0)", Fact(cut, "Live-Updates")));
         state.SetConnection(EventConnectionState.Connected);
-        cut.WaitForAssertion(() => Assert.Equal("live (0 Verbindungen, 0 Ereignisse)", Fact(cut, "Live-Updates")));
+        cut.WaitForAssertion(() => Assert.Equal("live (0 Verbindungen, Ereignisse: 0)", Fact(cut, "Live-Updates")));
         state.SetConnection(EventConnectionState.Disconnected, "gone", DateTimeOffset.UnixEpoch);
-        cut.WaitForAssertion(() => Assert.Equal("pausiert (0 Verbindungen, 0 Ereignisse)", Fact(cut, "Live-Updates")));
+        cut.WaitForAssertion(() => Assert.Equal("pausiert (0 Verbindungen, Ereignisse: 0)", Fact(cut, "Live-Updates")));
 
         // The output fact names the active group, else the output receiver.
         state.ApplyReceiver(Dto.Receiver("r1", "Küche"));

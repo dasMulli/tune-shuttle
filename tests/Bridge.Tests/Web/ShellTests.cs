@@ -116,6 +116,8 @@ public sealed class ShellTests : ComponentTestBase
             Assert.Equal("dark", ThemeOf(cut));
             Assert.Equal("dark", Assert.Single(module.Invocations["setTheme"]).Arguments[0]);
             Assert.DoesNotContain("theme-picker--open", cut.Find(".theme-picker").ClassList);
+            // A pointer that can hover keeps the :hover unfold of the CSS: no touch class.
+            Assert.DoesNotContain("theme-picker--touch", cut.Find(".theme-picker").ClassList);
             // A pointer that can hover needs no outside-click listener (the pill unfolds on hover).
             Assert.Empty(module.Invocations["onOutsideClick"]);
         }
@@ -129,10 +131,14 @@ public sealed class ShellTests : ComponentTestBase
         {
             var cut = ctx.Render<ThemePicker>();
             cut.WaitForAssertion(() => Assert.Single(module.Invocations["onOutsideClick"]));
+            // A pointer that cannot hover: the CSS collapses the pill without :hover, which a tap leaves stuck on the
+            // tapped button (REVIEW-2 #1).
+            cut.WaitForAssertion(() => Assert.Contains("theme-picker--touch", cut.Find(".theme-picker").ClassList));
 
             // First tap on the collapsed pill (it shows only the active "system" button): opens, selects nothing.
             cut.Find(".theme-btn.is-active").Click(Pointer);
             Assert.Contains("theme-picker--open", cut.Find(".theme-picker").ClassList);
+            Assert.Contains("theme-picker--touch", cut.Find(".theme-picker").ClassList);
             Assert.Equal("system", ThemeOf(cut));
             Assert.Empty(module.Invocations["setTheme"]);
 
@@ -141,6 +147,7 @@ public sealed class ShellTests : ComponentTestBase
             Assert.Equal("dark", ThemeOf(cut));
             Assert.Equal("dark", Assert.Single(module.Invocations["setTheme"]).Arguments[0]);
             Assert.DoesNotContain("theme-picker--open", cut.Find(".theme-picker").ClassList);
+            Assert.Contains("theme-picker--touch", cut.Find(".theme-picker").ClassList);
         }
     }
 
@@ -406,8 +413,9 @@ public sealed class ShellTests : ComponentTestBase
     [Theory]
     [InlineData("en", EventConnectionState.Connecting, null, false, "status status--connecting", "connecting…", "Connecting to the bridge for live updates")]
     [InlineData("en", EventConnectionState.Connected, null, false, "status status--live", "live", "Live updates are on")]
-    [InlineData("en", EventConnectionState.Disconnected, "The socket closed.", true, "status status--paused", "paused", "Live updates paused: The socket closed. Retrying shortly.")]
-    [InlineData("en", EventConnectionState.Disconnected, "Stopped.", false, "status status--error", "offline", "No connection to the bridge: Stopped.")]
+    [InlineData("en", EventConnectionState.Disconnected, "The socket closed.", true, "status status--paused", "paused", "Live updates paused. Retrying shortly.")]
+    [InlineData("en", EventConnectionState.Disconnected, "Stopped.", false, "status status--error", "offline", "No connection to the bridge. The pages show the last known state.")]
+    [InlineData("en", EventConnectionState.Disconnected, "net_webstatus_ConnectFailure", true, "status status--paused", "paused", "Live updates paused. Retrying shortly.")]
     [InlineData("de", EventConnectionState.Connecting, null, false, "status status--connecting", "verbinde…", "Verbinde mit der Bridge für Live-Updates")]
     [InlineData("de", EventConnectionState.Connected, null, false, "status status--live", "live", "Live-Updates sind aktiv")]
     [InlineData("de", EventConnectionState.Disconnected, "The socket closed.", true, "status status--paused", "pausiert", "Live-Updates pausiert. Es wird gleich erneut versucht.")]
@@ -466,9 +474,9 @@ public sealed class ShellTests : ComponentTestBase
             Assert.Equal("Connecting to the bridge for live updates…", banner.TextContent.Trim());
             Assert.Empty(cut.FindAll("button"));
 
-            state.SetConnection(EventConnectionState.Disconnected, "The socket closed.", DateTimeOffset.UnixEpoch);
+            state.SetConnection(EventConnectionState.Disconnected, ConnectionError.ClosedByBridge, DateTimeOffset.UnixEpoch);
             cut.WaitForAssertion(() => Assert.Equal("banner banner--paused", cut.Find(".banner").ClassName));
-            Assert.Equal("Live updates paused: The socket closed. Retrying shortly.", cut.Find(".banner__text").TextContent);
+            Assert.Equal("Live updates paused: The bridge closed the connection. Retrying shortly.", cut.Find(".banner__text").TextContent);
             Assert.Empty(cut.FindAll("button"));
 
             state.SetConnection(EventConnectionState.Disconnected, null, DateTimeOffset.UnixEpoch);
@@ -510,21 +518,28 @@ public sealed class ShellTests : ComponentTestBase
         }
     }
 
-    [Fact]
-    public async Task Connection_banner_never_shows_the_clients_english_in_another_language()
+    [Theory]
+    [InlineData("de", "Live-Updates pausiert: Die Bridge hat die Verbindung geschlossen. Es wird gleich erneut versucht.", "Live-Updates pausiert. Es wird gleich erneut versucht.")]
+    [InlineData("en", "Live updates paused: The bridge closed the connection. Retrying shortly.", "Live updates paused. Retrying shortly.")]
+    public async Task Connection_banner_never_shows_the_clients_runtime_text(string lang, string closed, string other)
     {
-        var (ctx, state, _, _, _) = UiTest.Create("de");
+        var (ctx, state, _, _, _) = UiTest.Create(lang);
         await using (ctx)
         {
-            // The event client's own sentence comes from the catalog (UI-SPEC 3.5: only service text stays English).
+            // The event client's own sentence comes from the catalog (UI-SPEC 3.5: only service text stays as sent).
             state.SetConnection(EventConnectionState.Disconnected, ConnectionError.ClosedByBridge, DateTimeOffset.UnixEpoch);
             var cut = ctx.Render<ConnectionBanner>();
-            Assert.Equal("Live-Updates pausiert: Die Bridge hat die Verbindung geschlossen. Es wird gleich erneut versucht.", cut.Find(".banner__text").TextContent);
+            Assert.Equal(closed, cut.Find(".banner__text").TextContent);
 
-            // A runtime exception message is English that no catalog holds: left out, the error-free sentence stays.
-            state.SetConnection(EventConnectionState.Disconnected, "Unable to connect to the remote server.", DateTimeOffset.UnixEpoch);
-            cut.WaitForAssertion(() => Assert.Equal("Live-Updates pausiert. Es wird gleich erneut versucht.", cut.Find(".banner__text").TextContent));
-            Assert.DoesNotContain("Unable", cut.Markup, StringComparison.Ordinal);
+            // A runtime exception message is left out in every language, English included: the WASM runtime reports a
+            // resource key instead of a sentence (REVIEW-2 #2). The error-free sentence stays.
+            foreach (var runtime in new[] { "net_webstatus_ConnectFailure", "Unable to connect to the remote server." })
+            {
+                state.SetConnection(EventConnectionState.Disconnected, runtime, DateTimeOffset.UnixEpoch);
+                cut.WaitForAssertion(() => Assert.Equal(other, cut.Find(".banner__text").TextContent));
+                Assert.DoesNotContain("net_webstatus", cut.Markup, StringComparison.Ordinal);
+                Assert.DoesNotContain("Unable", cut.Markup, StringComparison.Ordinal);
+            }
         }
     }
 
@@ -556,7 +571,7 @@ public sealed class ShellTests : ComponentTestBase
         notices.Find(".toast__close").Click();
         Assert.Empty(notices.FindAll(".toast"));
         // The region stays (a live region must exist before its content arrives).
-        Assert.Equal("polite", notices.Find("aside.toasts").GetAttribute("aria-live"));
+        Assert.Equal("polite", notices.Find("div.toasts").GetAttribute("aria-live"));
     }
 
     [Fact]
@@ -681,7 +696,7 @@ public sealed class ShellTests : ComponentTestBase
             Assert.NotNull(cut.Find(".tools > .theme-picker"));
             Assert.NotNull(cut.Find(".tools > .status"));
             Assert.Equal("Body", cut.Find("main.main > h1").TextContent);
-            Assert.NotNull(cut.Find("aside.toasts"));
+            Assert.NotNull(cut.Find("div.toasts"));
             Assert.NotNull(cut.Find("nav.tabbar"));
             Assert.Empty(cut.FindAll(".live-dot, .sidebar, .notice"));
 

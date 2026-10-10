@@ -1,9 +1,11 @@
 @* The toasts (UI-SPEC 4.9): API errors and confirmations from BridgeCommands. A fixed region (top right under the
    bar on desktop, above the tab bar on phones); the region is always in the DOM so it is a live region before the
-   first toast arrives. Errors are role="alert" and stay until dismissed; success and info toasts go away by themselves. *@
+   first toast arrives. It is a plain div with aria-live, not an aside: an always-present complementary landmark without
+   a name would be noise in a screen reader's landmark list (REVIEW-2 #10). Errors are role="alert" and stay until
+   dismissed; success and info toasts (role="status") go away by themselves. *@
 @inherits BridgeComponentBase
 
-<aside class="toasts" aria-live="polite">
+<div class="toasts" aria-live="polite">
     @foreach (var notice in State.Notices)
     {
         <div @key="notice.Id" class="@ClassOf(notice.Kind)" role="@(notice.Kind == NoticeKind.Error ? "alert" : "status")">
@@ -11,7 +13,7 @@
             <button type="button" class="toast__close" aria-label="@L["common.dismiss"]" title="@L["common.dismiss"]" @onclick="() => State.Dismiss(notice.Id)"><span aria-hidden="true">×</span></button>
         </div>
     }
-</aside>
+</div>
 
 @code {
     /// <summary>How long success and info notices stay (the default of <see cref="DismissAfter"/>).</summary>

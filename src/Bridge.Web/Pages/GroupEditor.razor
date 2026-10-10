@@ -115,7 +115,7 @@
                 {
                     var receiver = State.Receiver(member.ReceiverId);
                     var name = receiver?.Name ?? member.Name;
-                    <div class="row" data-receiver-id="@member.ReceiverId" @key="member.ReceiverId">
+                    <div class="row row--member" data-receiver-id="@member.ReceiverId" @key="member.ReceiverId">
                         <span class="row__main">
                             <strong>@name</strong>
                             <span>

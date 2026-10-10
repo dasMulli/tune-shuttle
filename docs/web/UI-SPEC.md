@@ -127,7 +127,7 @@ visible for every state.
           gap: 12px; padding: .7rem 1.25rem; background: color-mix(in srgb, var(--surface) 88%, transparent);
           -webkit-backdrop-filter: saturate(1.2) blur(8px); backdrop-filter: saturate(1.2) blur(8px);
           border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.brand { display: flex; align-items: center; gap: .6rem; min-width: 0; flex-shrink: 3; }   /* 5.5 */
 .brand__tile { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none;
                background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #7b5cff));
                box-shadow: 0 2px 6px rgba(47,109,246,.35); }      /* dark: box-shadow 0 2px 6px rgba(0,0,0,.5) */
@@ -166,7 +166,7 @@ left: 50%; transform: translateX(-50%)`) so they never shift between pages.
 | `.theme-picker` | theme radio group | `display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface-2)` |
 | `.theme-btn` | one theme option | `display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 0; background: transparent; color: var(--muted); overflow: hidden; transition: width .15s ease, opacity .15s ease` (ButtonWeb's values; `overflow: hidden` is what makes the collapse rule of 2.4 visible) ; `.theme-btn .ico { width: 15px; height: 15px }` (the reference apps' 15px, not the mockup's 18px; 18px inside the 34px phone button, 5.2); hover `color: var(--accent-ink)` under `(hover: hover)` |
 | `.theme-btn.is-active` | chosen option | `background: var(--accent-soft); color: var(--accent)` (the mockup's colour; the icon is a glyph, not text: 3.8:1 light / 4.3:1 dark on `--accent-soft` over `--surface-2`, above the 3:1 floor for graphics; listed in 6.3) |
-| `.lang-select` | top-bar language select | `font-size: .85rem; padding: .35rem 1.6rem .35rem .7rem; min-height: 32px; min-width: 118px; max-width: 11rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--text); appearance: none; background: var(--surface) url(<chevron svg>) no-repeat right .55rem center; text-overflow: ellipsis` (the chevron colours are in 3.2); the Settings page uses the `Field` variant of the component with `.input` instead (4.6) |
+| `.lang-select` | top-bar language select | `font-size: .85rem; padding: .35rem 1.6rem .35rem .7rem; min-height: 32px; min-width: 4.5rem; flex-shrink: 3; max-width: 11rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--text); appearance: none; background: var(--surface) url(<chevron svg>) no-repeat right .55rem center; text-overflow: ellipsis` (the chevron colours are in 3.2; the shrink factor 3 lets it give way first in a tight tablet bar, down to the `4.5rem` floor that keeps one readable character plus the chevron; hidden below 760px, 5.5); the Settings page uses the `Field` variant of the component with `.input` instead (4.6) |
 | `.only-phone` / `.only-wide` | responsive toggles | `.only-phone { display: none }` at ≥ 700px, `.only-wide { display: none }` at ≤ 699px; used where the phone shows different text or actions than the desktop (4.3). Nothing else is hidden with these two classes |
 | `.btn` | button | `font-size: .85rem; font-weight: 600; padding: .45rem .9rem; min-height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); color: var(--text)`; hover `border-color: var(--accent)`; disabled `opacity: .5; cursor: default` |
 | `.btn--primary` | main action | `background: var(--accent); border-color: var(--accent); color: var(--accent-contrast)` |
@@ -191,7 +191,7 @@ left: 50%; transform: translateX(-50%)`) so they never shift between pages.
 | `.hint` | field hint | `.meta` + `margin: 0` |
 | `.validation-message` | DataAnnotations message | `color: var(--err-ink); font-size: .85rem` |
 | `.empty` | empty state | `.card` with `border-style: dashed; box-shadow: none; color: var(--muted); text-align: center; padding: 2rem 1rem` |
-| `.facts` | dl grid | `display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; margin: 0`; `dt { color: var(--muted) }`; `dd { margin: 0; overflow-wrap: anywhere }` |
+| `.facts` | dl grid | `display: grid; grid-template-columns: minmax(0, max-content) minmax(9rem, 1fr); gap: .25rem 1rem; margin: 0` (a long label wraps before a value does); `dt { color: var(--muted) }`; `dd { margin: 0; overflow-wrap: anywhere }`; `.facts__wide { grid-column: 1 / -1 }` on the `dt` and the `dd` of a fact whose value is a list (the Diagnostics addresses, 4.7), so the list gets the card's full width at every size |
 | `.log` | log box | `font-family: var(--font-mono); font-size: .78rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: .6rem; max-height: 28rem; overflow: auto; overflow-wrap: anywhere` ; `.log__line--warn { color: var(--warn-ink) }`, `--fail`/`--crit` `var(--err-ink)`, `--dbug`/`--trce` `var(--muted)` |
 
 ### 1.6 Sliders
@@ -307,7 +307,7 @@ packages can build on them. The theme and language components call it; the modul
 | `preventKeys(element, keys)` | a `keydown` listener on `element` that calls `preventDefault()` when `e.key` is one of `keys` (propagation untouched, so Blazor's handlers still run); returns `{ dispose() }`. The theme picker uses it so its arrows/Home/End do not also scroll the page |
 | `rememberActive()` | stores `document.activeElement` and returns `{ restore() }`, which focuses it again if it is still in the document (the pairing dialog, 4.11) |
 | `blur(element)` | blurs `document.activeElement` when it is inside `element` (nothing otherwise); the theme picker calls it after a pointer selection and after Escape (2.4), because Chromium focuses a clicked button and `:focus-within` would keep the pill unfolded. Chromium keeps the sequential focus starting point, so the next Tab continues after the picker |
-| `audit()` | the layout audit of 5.6; returns the JSON object described there |
+| `audit()` | the layout audit of 5.6; returns the JSON object described there (`overflow`, `small`, `unnamed`, `truncated`) |
 
 `BrowserBridge` wraps these as `Task<string> GetThemeAsync()`, `Task SetThemeAsync(string)`, `Task<bool>
 HoverCapableAsync()`, `Task<string> GetLangAsync()`, `Task SetLangAsync(string)`, `Task<IAsyncDisposable>
@@ -321,8 +321,16 @@ OnOutsideClickAsync(ElementReference, DotNetObjectReference<T>, string)`, `Task 
 Exactly the reference apps' control: a `role="radiogroup"` pill with three `role="radio"` buttons, light / dark /
 system, in that order, icons sun / moon / half-disc (the SVG paths of ButtonWeb's `_Layout`). Behaviour:
 
-- Collapsed it shows only the active option (`.theme-picker:not(:hover):not(:focus-within):not(.theme-picker--open)
-  .theme-btn:not(.is-active) { width: 0; opacity: 0; pointer-events: none }`); hover or focus-within unfolds it.
+- Collapsed it shows only the active option (`.theme-picker:not(.theme-picker--touch):not(:hover):not(:focus-within):not(.theme-picker--open)
+  .theme-btn:not(.is-active) { width: 0; opacity: 0; pointer-events: none }`, and `gap: 0` on the group); hover or
+  focus-within unfolds it. **Touch twin:** on a pointer that cannot hover (`hoverCapable() == false`) the group
+  carries `theme-picker--touch`, and the same declarations sit on `.theme-picker--touch:not(:focus-within):not(.theme-picker--open)`,
+  which has no `:hover` in it: mobile Chromium and iOS Safari leave `:hover` on the last tapped element until the next
+  tap elsewhere, and a `:not(:hover)` collapse would keep the pill unfolded after a choice (REVIEW-2 #1). The desktop
+  rules exclude the touch class, so exactly one of the two applies; the phone collapsed look of 5.2 uses the same two
+  selectors. `DesignTokenTests.Unguarded_not_hover_selectors_never_apply_on_touch` enforces this shape (the only
+  unguarded `:not(:hover)` is the desktop rule, and each such rule has its touch twin). Do not move the unfold into a
+  `:hover` rule inside `(hover: hover)`: the collapse selector's specificity (0,5,0) would beat it.
 - Touch (no hover, `hoverCapable() == false`): the first tap on the pill adds `theme-picker--open` instead of
   selecting (`e.detail !== 0` distinguishes pointer clicks from keyboard activation, which always selects); selecting
   collapses it; a click outside (`onOutsideClick`, a document `click` listener that ignores targets inside the
@@ -341,7 +349,8 @@ system, in that order, icons sun / moon / half-disc (the SVG paths of ButtonWeb'
 - Selecting calls `BrowserBridge.SetThemeAsync`; the component keeps `_theme` and re-renders. The initial value comes
   from `GetThemeAsync` in `OnAfterRenderAsync(firstRender)` (prerendering is not used, but the module is only there
   after the first render).
-- Size: 26px buttons in a 2px-padded pill at ≥ 700px; 34px buttons at ≤ 699px (5.2). The buttons are **not** grown
+- Size: 26px buttons in a 2px-padded pill at ≥ 700px with a fine pointer; 34px buttons (`.ico` 18px) on phones and on
+  every coarse pointer (the touch block of 5.4, so landscape phones and touch tablets get them too). The buttons are **not** grown
   to 44px and get **no** `::before` halo: `.theme-btn` has `overflow: hidden` (it drives the collapse animation) and
   would clip a halo, and three 44px buttons would not fit beside the status pill at 320px (ButtonWeb's site.css
   documents the same decision). 34px clears the 24px WCAG 2.5.8 floor; the audit's `small` list (5.6) allow-lists
@@ -478,9 +487,12 @@ case is `BridgeState.ConnectionError`, which the unchanged `BridgeEventClient` (
 "The bridge closed the connection." or the runtime's exception message. `Components/ConnectionError.cs`
 (`ConnectionError.Text(error, L)`) decides what the banner (banner.pausedError, 4.10) and the status pill's title
 (status.title.paused/offline, 7) embed: the known sentence → banner.closedByBridge in the current language; any other
-text → shown as is while the language is English, left out otherwise (the error-free sentences banner.paused,
-banner.offline and banner.retrying are used, without a dangling colon; the client logs the detail to the browser
-console). `ShellTests` asserts both cases in German and that the constant matches the client's literal.
+text → left out **in every language, English included** (the error-free sentences banner.paused, banner.offline and
+banner.retrying are used, without a dangling colon; `BridgeEventClient` logs the detail to the browser console). The
+WASM runtime ships without its exception message resources and reports a resource key such as
+`net_webstatus_ConnectFailure` as the message, so "shown as is in English" would put an identifier on screen in the most
+common case, an unreachable bridge (REVIEW-2 #2). `ShellTests.Connection_banner_never_shows_the_clients_runtime_text`
+asserts both cases in German and English, and a second test that the constant matches the client's literal.
 
 ### 3.6 The catalog
 
@@ -705,7 +717,7 @@ nav.groups for all three routes (4.1):
 - `.card` **Master**: `.label` groups.master "Master (G)", `LevelSlider Variant="Hero"` (`Label` = groups.master
   hidden, `ValueText` common.levelText) + `.big`; clamp hint groups.clampHint under it while previewing (existing
   behaviour).
-- `.card` **Members** (groups.members): one `.row` per member: name, pill, `LevelSlider Variant="Compact"`
+- `.card` **Members** (groups.members): one `.row.row--member` per member: name, pill, `LevelSlider Variant="Compact"`
   (`Label` = groups.memberLevel "{{name}}" hidden, `ValueText` common.levelText, disabled while the master is
   dragged, values from the preview; these rows are never `is-quiet`),
   `.btn.btn--icon` with an × (`aria-label` groups.remove "{{name}}"). Below: the add form (`<select class="input">`
@@ -794,7 +806,9 @@ no members → pills.empty (`.pill`); any member's receiver `PinRequired` and no
 
 ### 4.9 Notices → toasts (`Components/NoticeArea.razor`)
 
-A fixed `aside.toasts` (`aria-live="polite"`): desktop/tablet `top: calc(var(--topbar-h) + var(--banner-h, 0px) + .75rem); right: 1.25rem;
+A fixed `div.toasts` (`aria-live="polite"`; a plain `div`, not an `aside`: an always-present complementary landmark
+without a name is noise in a screen reader's landmark list, REVIEW-2 #10; the container keeps `aria-live` so the live
+region exists before its first toast): desktop/tablet `top: calc(var(--topbar-h) + var(--banner-h, 0px) + .75rem); right: 1.25rem;
 width: min(26rem, calc(100vw - 2rem))`; phone `left: .75rem; right: .75rem; bottom: calc(var(--tabbar-h) + .75rem);
 top: auto`. Each `.toast` = `.card` padding `.75rem 2.6rem .75rem 1rem`, with a
 kind class `.toast--ok` / `.toast--err` / `.toast--info` that sets border and background (`--ok-fill`/`--err-fill`/
@@ -836,6 +850,22 @@ layout viewport and ends up under the keyboard; a sheet at the top with the PIN 
 on every platform without a `visualViewport` listener. In addition the viewport meta carries
 `interactive-widget=resizes-content` (5.2) so Chrome/Android shrink the layout viewport with the keyboard. Headless
 screenshots cannot show the keyboard; review-2 lists the real-device check (WORK-PLAN).
+Landscape phones (the `(max-height: 500px)` block of 5.1) get the same top anchoring with a compacter dialog whose PIN
+field and Pair/Cancel row share one line (`.scrim { align-items: start; padding-top: max(.5rem,
+env(safe-area-inset-top)) }`; `.dialog { display: grid; grid-template-columns: minmax(7rem, 1fr) auto; align-items:
+end; gap: .6rem .75rem; width: min(32rem, 100%); padding: .8rem 1rem; max-height: calc(100dvh - 1rem) }`, every child
+`grid-column: 1 / -1` except `.field` (column 1, row 3) and `.dialog__actions` (column 2, row 3), the error line in row
+4). With a landscape keyboard the visible height is 150–200px: the PIN field and the actions must both be visible
+without scrolling, because a phone keyboard has no Escape key and the scrim does not cancel (REVIEW-2 #3; at 844×390
+with a 200px viewport the dialog is 8–192px, the field and the buttons end at 183px in de, ru and es and at 161px in en,
+and Enter in the field submits). The DOM, and so the Tab order, stays field → actions; only the error line, which is
+not focusable, is shown below the buttons.
+While the dialog is open the page behind it does not scroll: `:root:has(.scrim:not(.sg-frame .scrim)) { overflow:
+hidden }` (the styleguide's in-flow sample is excluded), and `.dialog` carries `overscroll-behavior: contain` against
+scroll chaining out of its own scroll (REVIEW-2 #7; the scrim is not a scroll container, so the property would be
+inert there). From 1024px `html { scrollbar-gutter: stable }` keeps the gutter of a classic (non-overlay) desktop
+scrollbar reserved, so locking the page does not shift the content and the sticky bar sideways; overlay scrollbars
+(phones, tablets) reserve nothing, and below 1024px the rule is not applied so narrow layouts keep their full width.
 
 Content: `<h2>` pairing.title "{{name}}"; `<p>` pairing.prompt (Service origin) or `prompt.Message` (User origin,
 muted); the PIN field: `<label for="pairing-pin" class="label">` pairing.pin, `<input id="pairing-pin" class="input
@@ -865,7 +895,7 @@ the same for `Shift+Tab` on the PIN input. "Focus returns on close" is asserted 
 | Name | Width | Shell | Content |
 |---|---|---|---|
 | phone | ≤ 699px | top bar: brand + theme + status (tabs and language hidden); **bottom tab bar** | one column, full-width cards, hero first, phone hero layout (centred artwork 120px) |
-| tablet | 700–1023px | tabs in the top bar (flow, not absolute), language select visible | one column, full-width cards; receivers/diagnostics grids auto-fill (two cards side by side from 700px if ≥ 320px each) |
+| tablet | 700–1023px | tabs in the top bar (flow, not absolute), language select visible from 760px (5.5) | one column, full-width cards; receivers/diagnostics grids auto-fill (two cards side by side from 700px if ≥ 320px each) |
 | desktop | ≥ 1024px | tabs absolutely centred | Player two columns; receivers grid; settings 44rem |
 | wide | ≥ 1280px | same | `main` max-width 1440px, three receiver cards per row |
 
@@ -876,8 +906,9 @@ of media queries `app.css` may contain (`DesignTokenTests` greps for it; anythin
 |---|---|
 | `(max-width: 699px)` | the phone shell and every phone override of 5.2/5.3, `.only-wide` |
 | `(min-width: 700px)` | `.only-phone { display: none }` |
-| `(min-width: 1024px)` | absolutely centred tabs, the Player's two columns, the two-column (2 × 2) Status facts |
-| `(max-width: 359px)` | hides `.brand__name` |
+| `(min-width: 1024px)` | absolutely centred tabs, the Player's two columns, the two-column (2 × 2) Status facts, `html { scrollbar-gutter: stable }` (4.11) |
+| `(max-width: 359px)` | hides `.brand__name`; `.tools { flex-shrink: 1 }` again (5.2) |
+| `(max-width: 759px)` | hides the top-bar `.lang-select` (5.5; the phone block hides it too) |
 | `(max-height: 500px)` | landscape phones: the compacter first screen listed under the table |
 | `(max-width: 699px), (pointer: coarse)` | the touch block of 5.4 (the width half makes it reproducible in headless Edge, which reports `pointer: coarse` as false, 5.6) |
 | `(hover: hover)` | every `:hover` rule is wrapped in it so touch devices do not get sticky hover states |
@@ -894,7 +925,7 @@ stays sticky there, since its tabs are the only navigation. A phone narrower tha
 shell (5.2). The `(max-height: 500px)` block compacts the first screen so the master volume row fits on it: hero
 artwork 96px, hero padding `.8rem` and gap `.6rem`, `.hero__title` 1.3rem, transport gap `.75rem`, `.play` 48px (still
 ≥ 44px), top-bar block padding 5px (plus the top safe-area inset), brand tile 28px with an 18px glyph, tab padding
-`.22rem .7rem`. The audit passes at 844×390 with touch emulated.
+`.22rem .7rem`, and the top-anchored compact pairing dialog of 4.11. The audit passes at 844×390 with touch emulated.
 
 ### 5.2 Phone shell (≤ 699px)
 
@@ -903,10 +934,17 @@ artwork 96px, hero padding `.8rem` and gap `.6rem`, `.hero__title` 1.3rem, trans
   landscape; the bottom tab bar is the fixed navigation); `.tabs { display: none }`; `.lang-select { display: none }`;
   `.brand__tile` 32px, glyph 20px; `.brand__name { font-size: 1rem }`, hidden below 360px (`@media (max-width: 359px)`).
   Because the bar is not sticky, the connection banner (4.10) is `top: 0` at ≤ 699px.
-- The theme picker buttons are 34px (`.ico` 18px) with `border: 1px solid var(--line-strong); background:
-  var(--surface)` in the collapsed state (the mockup's single round button); unfolding works as on desktop (first
-  tap opens; the open pill is 3 × 34px + gaps ≈ 110px wide). No halo, not 44px: see 2.4.
-- The status pill keeps its text (`.74rem`), `min-width: 0; overflow: hidden; text-overflow: ellipsis`.
+- The theme picker buttons are 34px (`.ico` 18px; the size rule sits in the touch block of 5.4, which covers phones
+  by width) with `border: 1px solid var(--line-strong); background: var(--surface)` in the collapsed state (the
+  mockup's single round button; selected with the two collapse selectors of 2.4, the touch twin included); unfolding
+  works as on desktop (first tap opens; the open pill is 3 × 34px + gaps ≈ 110px wide). No halo, not 44px: see 2.4.
+- The status pill keeps its text (`.74rem`), `min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow:
+  ellipsis` (from 700px it does not shrink at all, 5.5; the audit checks from 360px that the word is whole, 5.6). The
+  phone `.tools` cluster has `flex-shrink: 0`, so from 360px the brand name alone gives way and the status word stays
+  whole even with the theme pill open (es "en directo" at 390px was cut by 2px while the cluster shared the shrink;
+  ru "подключение…" with the open pill fits at 360px with a 40px name). Below 360px the name is hidden and
+  `.tools { flex-shrink: 1 }` lets the status ellipsize as a last resort (at 320px the open pill and the longest word
+  still fit whole).
 - `nav.tabbar` (`Components/TabBar.razor`): `position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex;
   border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter:
   blur(8px); padding: 6px 8px calc(6px + env(safe-area-inset-bottom))`; three `a` items `flex: 1; display: flex;
@@ -946,7 +984,7 @@ The phone keeps every desktop component value of 1.5–1.7 **except** the overri
 | `main` | `padding: 1rem .875rem calc(1rem + var(--tabbar-h))` |
 | `.cards` (Receivers), Diagnostics grid | one column (`grid-template-columns: 1fr`) |
 | `.level--compact` in Output rows | `display: none` |
-| `.row .level--compact` elsewhere (group editor members) | `width: 120px`, so a name like "Fake Receiver 1" keeps one line beside the slider and the 44px remove button |
+| `.row--member` (group editor members, 4.5) | `flex-wrap: wrap`; its `.row__main` gets `flex: 1 1 100%` (name and pill on the first line) and its `.level--compact` `flex: 1 1 auto; width: auto`: the slider and the 44px remove button share the second line, the slider spanning the card up to the button (about 240px of track at 390px instead of the 70px a 120px box left, REVIEW-2 #6). No `order`: the visual order is the DOM order name → slider → remove at every width, so Tab and a screen reader follow what is seen (WCAG 1.3.2 / 2.4.3; `DesignTokenTests` rejects any `order` declaration, `GroupsPairingTests` asserts the DOM order) |
 | `.facts` (Receivers details, Diagnostics) | one column, the label (`dt`, `.78rem`) over its value (`dd`, `margin-bottom: .5rem`), so long values (addresses, dates, "live (1 connection, 63 events)") get the card's full width |
 | `.btn--back` | `margin-inline-start: -.75rem` (1.5) |
 | `.toasts`, `.scrim`/`.dialog`, `.banner` | the phone positions of 4.9, 4.11, 4.10/5.2 |
@@ -964,7 +1002,8 @@ Order on `/`: hero card, Output card, Status card (single column).
   the height and the margin is inert, the button is simply centred). Card-head
   links (`.card__head a:not(.btn)`, `.card__actions a:not(.btn)`), the top-bar tabs (on touch tablets and landscape
   phones), the brand link (`margin-block: -6px`, so the bar keeps its height) and `summary` (`padding-block: 13px`) are
-  44px tall too. **Not grown**: `.theme-btn` (34px, 2.4) and the
+  44px tall too. `.theme-btn` is 34px (`.ico` 18px) in this block, on phones and every coarse pointer (REVIEW-2 #5).
+  **Not grown** to 44px: `.theme-btn` (34px, 2.4) and the
   top-bar `.lang-select` (hidden on phones anyway, 5.2; 32px on tablets with a coarse pointer, allow-listed in 5.6
   like the reference apps).
 - Range inputs: `height: 44px` (the track stays 6/10px); the thumb is **24px on every variant** (the hero's 24px
@@ -981,6 +1020,20 @@ Order on `/`: hero card, Output card, Status card (single column).
 Single column with full-width cards; the Player page stacks hero → Output → Status; the Receivers grid shows two
 cards per row from 700px (`minmax(320px, 1fr)` yields two at ≥ 680px of content width). Top bar as desktop (tabs in
 the flow between brand and tools; `gap: 12px`; the language select shows the native name).
+At 700–800px in the long languages (pt, ru, uk) the bar is tight, most of all with the theme pill open (112px with
+the 34px touch buttons) or a longer status word ("подключение…"). The connection word must stay whole: it is the only
+shell-wide connection state, and the dot colour alone does not carry it (WCAG 1.4.1). So `.status` has `flex-shrink: 0`
+(the phone shell sets 1 again, 5.2). The top-bar `.lang-select` has `min-width: 4.5rem; flex-shrink: 3`: it gives way
+within the tools cluster but keeps one readable character plus the chevron (Chromium does not ellipsize a `<select>`
+narrower than its padding plus one glyph, so a smaller select showed a clipped half letter). `.brand` has
+`flex-shrink: 3`, so the brand name gives way faster than the cluster and the cluster (`min-width: 0`) is not squeezed
+below its children; `.brand__name` shrinks with its ellipsis. Below 760px the select is hidden (` (max-width:
+759px)`, 5.1): at 700px in pt and ru with the pill open the cluster would overflow even with the select at its floor
+and the brand name at about 40px (measured: 6–9px). Settings has the full 44px language field (4.6), so the bar
+select is never the only path. Measured with the open pill, a coarse pointer and each language's "connecting…" word (the longest status) at 760 and
+768px: no overflow, the select keeps 87–120px (87px in ru, the worst case) and the brand name 30–64px; with the live
+word the select keeps 114–142px at 760px. The audit's `truncated` check and its open-pill probe (5.6, which also fails on a select
+narrower than 72px) guard it (REVIEW-2 #12).
 
 ### 5.6 Layout audit page (`/_audit`, used by `tools/web-audit.ps1`)
 
@@ -994,6 +1047,8 @@ a larger `--virtual-time-budget`, 2 s steps up to 30 s) until the `<pre>` is non
 `audit()` returns, written as JSON into `<pre id="audit-result">`:
 
 - `overflow`: `document.documentElement.scrollWidth - window.innerWidth` (must be 0);
+- `truncated`: texts that must never be cut by an ellipsis but are (`scrollWidth > clientWidth`), checked from
+  `innerWidth >= 360`; today that is the top bar's connection word `.status__text` (5.5, REVIEW-2 #12). Must be empty;
 - `small`: selectors of interactive elements (`a[href]`, `button`, `input`, `select`, `textarea`, `[role=radio]`,
   `[role=button]`, `summary`) whose `getBoundingClientRect()` is < 44 × 44 CSS px, computed **unconditionally when
   `innerWidth <= 699`** or when `(pointer: coarse)` matches (headless Edge reports `(pointer: coarse)` = false and
@@ -1013,8 +1068,15 @@ a larger `--virtual-time-budget`, 2 s steps up to 30 s) until the `<pre>` is non
   computation, chosen so that an icon-only button with `aria-label` is named, an icon-only button with only an SVG
   without `<title>` is unnamed, and a range input with a visually-hidden `<label for>` is named.
 
-The script dumps the DOM with headless Edge (`--dump-dom`) and fails when `overflow > 0`, `unnamed` is non-empty or
-`small` has entries outside the allow-list. Touch behaviour itself (the first-tap-opens picker, the 44px slider
+The script dumps the DOM with headless Edge (`--dump-dom`) and fails when `overflow > 0`, `unnamed` or `truncated` is
+non-empty or `small` has entries outside the allow-list. It also runs an **open-pill probe** on every page from 360px:
+it adds a temporary `<style>` that switches the transitions of the top-bar picker off (`.theme-btn` animates its width
+over .15s, so without it a synchronous measurement right after adding the class reads the collapsed pill, 0/0/34),
+adds `theme-picker--open` for one synchronous measurement (the widest the bar gets, the state after a first tap on
+touch), folds the pill back and lays it out before it removes the style, and fails when the page then overflows, the
+connection word is cut, any of the three `.theme-btn` widths is 0 (the probe did not really open the pill), or a
+visible top-bar `.lang-select` is narrower than 72px (its 4.5rem floor, 5.5). The log line shows the measured widths,
+for example `open pill 34/34/34 = 112px, lang 87px`. Touch behaviour itself (the first-tap-opens picker, the 44px slider
 band) cannot be seen here; it is covered by bUnit with `hoverCapable` mocked to `false` and by review-2's emulated
 run. The not-found content (4.1) is outside the audit's reach (`Audit.razor` resolves the page from the route table, and
 an unknown address has none); `ShellTests.Unknown_address_shows_the_not_found_text_in_the_shell` asserts its link is a
@@ -1114,7 +1176,7 @@ Mapped from `BridgeState.Connection`, `ConnectionError`, `NextAttemptAt`:
 `title` = status.title.* (the longer sentence, with `{{error}}` = `ConnectionError.Text` (3.5) for paused/offline; without one the banner's error-free sentences). `role="status"` so transitions
 are announced. Base rule: `.status { display: inline-flex; align-items: center; gap: .4rem; font-size: .78rem;
 font-weight: 600; padding: .3rem .7rem; border-radius: var(--radius-pill); border: 1px solid var(--line-strong);
-background: var(--surface); color: var(--muted) } .status::before { content: ""; width: 8px; height: 8px;
+background: var(--surface); color: var(--muted); flex-shrink: 0 } .status::before { content: ""; width: 8px; height: 8px;
 border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent) }`.
 
 `LiveIndicator.razor` is deleted; `StatusPill` replaces it.
@@ -1470,9 +1532,9 @@ actions.playback (→ the four actions.playback* keys).
 | settings.latencyHint | = {{ms}} ms bei 44,1 kHz ({{min}}–{{max}}). | = {{ms}} ms at 44.1 kHz ({{min}}–{{max}}). |
 | settings.latencyHint2 | Wie weit vor der Wiedergabe die Empfänger das Audio bekommen; der Standard 77175 Frames (1,75 s) passt für die meisten. Eine Änderung baut die Ausgabe neu auf. | How far ahead of playback the receivers get the audio; the default 77175 frames (1.75 s) fits most receivers. Changing it rebuilds the output. |
 | settings.stream | Stream-Typ | Stream type |
-| settings.streamRealtime | Realtime (RTP über UDP, NTP- oder PTP-Timing) | Realtime (RTP over UDP, NTP or PTP timing) |
-| settings.streamBuffered | Gepuffert (TCP, PTP-Timing) | Buffered (TCP, PTP timing) |
-| settings.streamHint | Realtime ist der zuerst gebaute und getestete Weg; Gepuffert wird nur für Empfänger genutzt, die es können. | Realtime is what the bridge was built and tested with first; Buffered is used only for receivers that support it. |
+| settings.streamRealtime | Realtime | Realtime |
+| settings.streamBuffered | Gepuffert | Buffered |
+| settings.streamHint | Realtime: RTP über UDP mit NTP- oder PTP-Timing, der zuerst gebaute und getestete Weg. Gepuffert: TCP mit PTP-Timing, nur für Empfänger, die es können. | Realtime: RTP over UDP with NTP or PTP timing, what the bridge was built and tested with first. Buffered: TCP with PTP timing, used only for receivers that support it. |
 | settings.poll | Empfänger-Lautstärke abfragen | Poll receiver volume |
 | settings.pollHint | Liest die Lautstärke alle paar Sekunden vom Empfänger zurück, für Geräte, deren Tasten keine Änderungen über den Ereigniskanal melden. | Reads the volume back from receivers every few seconds, for receivers whose own buttons do not report changes over the event channel. |
 | settings.save | Speichern | Save |
@@ -1513,8 +1575,8 @@ actions.playback (→ the four actions.playback* keys).
 | diagnostics.output | Ausgabe | Output |
 | diagnostics.receiversOnNetwork | Empfänger im Netz | Receivers on the network |
 | diagnostics.liveUpdates | Live-Updates | Live updates |
-| diagnostics.liveUpdatesValue_one | {{state}} ({{count}} Verbindung, {{events}} Ereignisse) | {{state}} ({{count}} connection, {{events}} events) |
-| diagnostics.liveUpdatesValue_other | {{state}} ({{count}} Verbindungen, {{events}} Ereignisse) | {{state}} ({{count}} connections, {{events}} events) |
+| diagnostics.liveUpdatesValue_one | {{state}} ({{count}} Verbindung, Ereignisse: {{events}}) | {{state}} ({{count}} connection, events: {{events}}) |
+| diagnostics.liveUpdatesValue_other | {{state}} ({{count}} Verbindungen, Ereignisse: {{events}}) | {{state}} ({{count}} connections, events: {{events}}) |
 | diagnostics.network | Netzwerk und Statistik | Network and statistics |
 | diagnostics.timingPort | Timing-Port (UDP) | Timing port (UDP) |
 | diagnostics.controlPort | Control-Port (UDP) | Control port (UDP) |

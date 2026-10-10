@@ -39,6 +39,7 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
         "(min-width: 700px)",
         "(min-width: 1024px)",
         "(max-width: 359px)",
+        "(max-width: 759px)",
         "(max-height: 500px)",
         "(max-width: 699px), (pointer: coarse)",
         "(hover: hover)",
@@ -122,6 +123,17 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void No_rule_reorders_flex_or_grid_children_so_the_tab_order_is_the_visual_order()
+    {
+        // WCAG 1.3.2 / 2.4.3: a visual order that differs from the DOM order makes Tab and a screen reader jump (the
+        // phone member rows of the group editor once moved the slider below the remove button with `order`).
+        var offenders = Css.Rules
+            .SelectMany(r => r.Declarations.Where(d => d.Name == "order").Select(d => $"{r.Selector} {{ order: {d.Value} }}"))
+            .ToList();
+        Assert.True(offenders.Count == 0, "order declarations: " + string.Join(" | ", offenders));
+    }
+
+    [Fact]
     public void Every_hover_rule_is_guarded_by_hover_hover()
     {
         var unguarded = Css.Rules
@@ -130,6 +142,24 @@ public sealed partial class DesignTokenTests(ITestOutputHelper output)
             .Select(r => r.Selector)
             .ToList();
         Assert.True(unguarded.Count == 0, "Hover rules outside @media (hover: hover): " + string.Join(" | ", unguarded));
+    }
+
+    [Fact]
+    public void Unguarded_not_hover_selectors_never_apply_on_touch()
+    {
+        // The one exemption of the hover guard above is the theme picker's desktop collapse rule, ":not(:hover)": it
+        // must never match on a touch screen, where a tap leaves :hover stuck (REVIEW-2 #1). Every selector that uses
+        // it therefore excludes the touch class, and each one has a touch twin without :hover in the same rule.
+        var rules = Css.Rules.Where(r => r.Selector.Contains(":not(:hover)", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(rules);
+        foreach (var rule in rules)
+        {
+            var selectors = rule.Selector.Split(',').Select(x => x.Trim()).ToList();
+            var desktop = selectors.Where(x => x.Contains(":not(:hover)", StringComparison.Ordinal)).ToList();
+            Assert.All(desktop, x => Assert.StartsWith(".theme-picker:not(.theme-picker--touch):not(:hover)", x, StringComparison.Ordinal));
+            Assert.Contains(selectors, x => x.StartsWith(".theme-picker--touch:not(:focus-within):not(.theme-picker--open)", StringComparison.Ordinal)
+                                            && !x.Contains("hover", StringComparison.Ordinal));
+        }
     }
 
     [Fact]
