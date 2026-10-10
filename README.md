@@ -150,6 +150,21 @@ layout audit below).
   browser's language until one is chosen.
 - `?theme=light|dark|system` and `?lang=<code>` on any URL apply once without being stored (used by the scripts below).
 
+**Adding a language** touches six places, all of them pinned by tests so nothing can be forgotten silently:
+
+1. Copy `src/Bridge.Web/Resources/i18n/de.json` to `<code>.json` and translate every key, including the plural
+   variants (`_one`, `_few`, `_many`, `_other`) the language's CLDR categories need. German is the source; a missing
+   key falls back to German, then English, then the key itself.
+2. Add the language to `I18n.Languages` (picker order, native name) and its culture to `State.For` in
+   `src/Bridge.Web/Localization/I18n.cs`.
+3. Add its CLDR plural rule to `src/Bridge.Web/Localization/PluralRules.cs`.
+4. Add the code to `SUPPORTED` in `src/Bridge.Web/wwwroot/index.html` and the four splash/error-strip strings to the
+   inline map `T` there (these show before Blazor has loaded).
+5. Add the code to `SUPPORTED_LANGS` in `src/Bridge.Web/wwwroot/js/app.js`.
+6. Update `Languages_are_the_seven_of_the_spec_in_picker_order` in `tests/Bridge.Tests/Web/I18nTests.cs`, then run
+   `dotnet test tests/Bridge.Tests --filter FullyQualifiedName~Bridge.Tests.Web` (the resource-parity and
+   plural-category tests catch missing keys) and `pwsh tools/web-screenshots.ps1 -Langs <code>` to see the result.
+
 Working on the web app needs no speaker and no Spotify account: run the bridge with the fake receivers (see above) and
 use the scripts in `tools/` (PowerShell 7, headless Microsoft Edge; both start the bridge with
 `--Bridge:FakeReceivers=2`, Spotify off and a throw-away data directory unless `-NoStart` points them at a running one):
