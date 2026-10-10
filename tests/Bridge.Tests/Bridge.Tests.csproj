@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <RootNamespace>Bridge.Tests</RootNamespace>
+    <!-- Intended for the whole test project (UI-SPEC 3.3): the web formatting tests need real culture data. Service and
+         live tests must therefore not depend on the invariant culture being the process culture. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>

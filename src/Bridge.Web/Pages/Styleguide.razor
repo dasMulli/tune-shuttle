@@ -1,0 +1,623 @@
+@page "/_styleguide"
+@layout Styleguide.BareLayout
+@using Bridge.Web.Localization
+@using Microsoft.AspNetCore.Components.Rendering
+@inject I18n L
+@* Developer page (UI-SPEC 4.1): every class of UI-SPEC 1.5-1.7, 4.9-4.11, 5.2 and 7 in every state, with placeholder
+   text, no BridgeState and only the catalog's title key, for the screenshot checks (tools/web-screenshots.ps1 -Routes /_styleguide).
+   It renders without MainLayout (BareLayout below) so its own top bar and tab bar are the only shell on the page and
+   the screenshots do not depend on live data. English placeholder text is allowed here (WORK-PLAN 1).
+   ?dialog=1 shows the pairing dialog sample as the real fixed overlay (phone: the top-anchored sheet). *@
+
+<PageTitle>@L.Format("app.pageTitle", ("page", L["styleguide.title"]))</PageTitle>
+
+<header class="topbar">
+    <a class="brand" href="_styleguide" aria-label="AirPlay Bridge">
+        <span class="brand__tile" aria-hidden="true">@BrandGlyph</span>
+        <span class="brand__name">AirPlay Bridge</span>
+    </a>
+    <nav class="tabs" aria-label="Sections">
+        <a href="_styleguide" class="active" aria-current="page">Player</a>
+        <a href="_styleguide#receivers">Receivers</a>
+        <a href="_styleguide#settings">Settings</a>
+    </nav>
+    <div class="tools">
+        <select class="lang-select" aria-label="Language" title="Language">
+            <option>English</option>
+            <option>Deutsch</option>
+            <option>Français</option>
+            <option>Español</option>
+            <option>Русский</option>
+            <option>Українська</option>
+            <option>Português (Brasil)</option>
+        </select>
+        @ThemePicker(open: false, active: "light")
+        <span class="status status--live" role="status" title="Live updates are on"><span class="status__text">live</span></span>
+    </div>
+</header>
+
+<div class="banner banner--connecting" role="status"><span class="banner__text">Connecting to the bridge for live updates…</span></div>
+
+<main class="main">
+    <div class="stack">
+        <h1>@L["styleguide.title"]</h1>
+        <p class="meta">Every component class in every state. Placeholder text; no live data.</p>
+
+        @* ── Shell ─────────────────────────────────────────────────────────────────────────────────── *@
+        <section class="card sg-section" aria-labelledby="sg-shell">
+            <div class="card__head"><h2 id="sg-shell">Shell</h2><span class="meta">topbar · tabs · tools · theme picker · status · banner</span></div>
+
+            <span class="label">Top bar over content (translucent, blurred)</span>
+            <div class="sg-frame sg-frame--behind">
+                <div class="sg-under" aria-hidden="true">
+                    <span class="art art--placeholder" style="width: 64px; height: 64px">@NoteGlyph</span>
+                    <span class="chip chip--accent">Spotify · martin</span>
+                    <strong class="hero__title">Content scrolled under the bar</strong>
+                    <span class="pill pill--ok">playing</span>
+                    <span class="pill pill--warn">PIN needed</span>
+                    <button type="button" class="btn btn--primary" tabindex="-1">Primary</button>
+                </div>
+                <div class="topbar">
+                    <span class="brand"><span class="brand__tile" aria-hidden="true">@BrandGlyph</span><span class="brand__name">AirPlay Bridge</span></span>
+                    <span class="tools">@ThemePicker(open: false, active: "dark") <span class="status status--live">live</span></span>
+                </div>
+            </div>
+
+            <span class="label">Theme picker</span>
+            <div class="sg-row">
+                <span class="meta">collapsed (light / dark / system):</span>
+                @ThemePicker(open: false, active: "light")
+                @ThemePicker(open: false, active: "dark")
+                @ThemePicker(open: false, active: "system")
+                <span class="meta">open:</span>
+                @ThemePicker(open: true, active: "dark")
+            </div>
+
+            <span class="label">Status pill</span>
+            <div class="sg-row">
+                <span class="status status--connecting" title="Connecting to the bridge for live updates">connecting…</span>
+                <span class="status status--live" title="Live updates are on">live</span>
+                <span class="status status--paused" title="Live updates paused">paused</span>
+                <span class="status status--error" title="No connection to the bridge">offline</span>
+            </div>
+
+            <span class="label">Connection banner</span>
+            <div class="sg-frame">
+                <div class="banner banner--connecting"><span class="banner__text">Connecting to the bridge for live updates…</span></div>
+                <div class="banner banner--paused"><span class="banner__text">Live updates paused: the socket closed. Retrying shortly.</span></div>
+                <div class="banner banner--offline">
+                    <span class="banner__text">No connection to the bridge. The pages show the last known state.</span>
+                    <button type="button" class="btn btn--sm">Reload</button>
+                </div>
+            </div>
+
+            <span class="label">Tabs (top bar, 700px and wider)</span>
+            <div class="sg-row">
+                <nav class="tabs" aria-label="Sample tabs">
+                    <a href="_styleguide" class="active">Player</a>
+                    <a href="_styleguide#receivers">Receivers</a>
+                    <a href="_styleguide#settings">Settings</a>
+                </nav>
+            </div>
+        </section>
+
+        @* ── Text ──────────────────────────────────────────────────────────────────────────────────── *@
+        <section class="card sg-section" aria-labelledby="sg-text">
+            <div class="card__head"><h2 id="sg-text">Text</h2><a href="_styleguide#sg-text">A link</a></div>
+            <span class="label">Label (small caps)</span>
+            <span class="meta">Meta: secondary line · 192.0.2.10 · Model name that is rather long and wraps anywhere-if-needed</span>
+            <p class="hint">Hint: the name shown in Spotify apps.</p>
+            <span class="validation-message">Validation message: the device name is empty.</span>
+            <div class="sg-row">
+                <span class="text-ok">ok ink</span>
+                <span class="text-warn">warn ink</span>
+                <span class="text-err">err ink</span>
+                <span class="text-accent">accent ink</span>
+                <span class="text-muted">muted</span>
+                <span class="big">32</span>
+                <span class="mono">02:FA:CE:00:00:01</span>
+            </div>
+        </section>
+
+        @* ── Pills, chips ──────────────────────────────────────────────────────────────────────────── *@
+        <section class="card sg-section" aria-labelledby="sg-pills">
+            <div class="card__head"><h2 id="sg-pills">Pills and chips</h2></div>
+            <div class="sg-row">
+                <span class="pill pill--ok">playing</span>
+                <span class="pill pill--ok">connected</span>
+                <span class="pill pill--ok">online</span>
+                <span class="pill pill--accent">connecting…</span>
+                <span class="pill pill--accent">active</span>
+                <span class="pill pill--warn">PIN needed</span>
+                <span class="pill pill--err">error</span>
+                <span class="pill">offline</span>
+                <span class="pill">HomeKit only</span>
+                <span class="pill">empty</span>
+            </div>
+            <div class="tags">
+                <span class="chip">AirPlay 2</span>
+                <span class="chip">PTP</span>
+                <span class="chip">Buffered</span>
+                <span class="chip chip--accent">paired</span>
+                <span class="chip chip--warn">PIN needed</span>
+                <span class="chip">no PIN needed</span>
+                <span class="chip">Group: Downstairs</span>
+                <span class="chip chip--accent">Output</span>
+                <span class="chip chip--accent">Spotify · martin</span>
+            </div>
+            <span class="chip chip--accent chip--members">Downstairs · Test Speaker ABCD 40 · Office 24 · Living room speaker with a long name 55</span>
+        </section>
+
+        @* ── Buttons ───────────────────────────────────────────────────────────────────────────────── *@
+        <section class="card sg-section" aria-labelledby="sg-buttons">
+            <div class="card__head"><h2 id="sg-buttons">Buttons</h2></div>
+            <div class="actions">
+                <button type="button" class="btn">Default</button>
+                <button type="button" class="btn btn--primary">Primary</button>
+                <button type="button" class="btn btn--ghost">Ghost</button>
+                <button type="button" class="btn btn--danger">Danger</button>
+                <a class="btn btn--ghost" href="_styleguide">← Back link</a>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn" disabled>Default</button>
+                <button type="button" class="btn btn--primary" disabled>Primary</button>
+                <button type="button" class="btn btn--ghost" disabled>Ghost</button>
+                <button type="button" class="btn btn--danger" disabled>Danger</button>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn is-focus-sample">Focus ring</button>
+                <button type="button" class="btn btn--primary is-focus-sample">Focus on primary</button>
+                <button type="button" class="btn btn--sm">Small</button>
+                <button type="button" class="btn btn--sm btn--ghost">Small ghost</button>
+                <button type="button" class="btn btn--sm" disabled>Small disabled</button>
+                <button type="button" class="btn btn--icon" aria-label="Remove">×</button>
+            </div>
+            <span class="label">Steppers and transport</span>
+            <div class="transport">
+                <button type="button" class="step step--lg" aria-label="Previous track">@PrevGlyph</button>
+                <button type="button" class="play" aria-label="Pause">@PauseGlyph</button>
+                <button type="button" class="step step--lg" aria-label="Next track">@NextGlyph</button>
+            </div>
+            <div class="sg-row">
+                <button type="button" class="play" aria-label="Play" disabled>@PlayGlyph</button>
+                <button type="button" class="step" aria-label="Quieter">−</button>
+                <button type="button" class="step" aria-label="Louder">+</button>
+                <button type="button" class="step" aria-label="Louder" disabled>+</button>
+            </div>
+        </section>
+
+        @* ── Player (hero, output, status) ─────────────────────────────────────────────────────────── *@
+        <div class="player">
+            <section class="card hero" aria-label="Now playing">
+                <div class="hero__top">
+                    <div class="art art--placeholder" aria-hidden="true">@NoteGlyph</div>
+                    <div class="hero__info">
+                        <span class="chip chip--accent">Spotify · martin</span>
+                        <strong class="hero__title">Strobeheart (a long title that is clamped to two lines when it does not fit)</strong>
+                        <span class="hero__artist">Niki &amp; The Dove</span>
+                        <span class="meta">Single · 3:34</span>
+                    </div>
+                </div>
+                <div class="hero__progress">
+                    <span class="meta">1:12</span>
+                    <div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="214" aria-valuenow="72" aria-valuetext="1:12 of 3:34"><div class="track__fill" style="width: 34%"></div></div>
+                    <span class="meta">−2:22</span>
+                </div>
+                <div class="transport">
+                    <button type="button" class="step step--lg" aria-label="Previous track">@PrevGlyph</button>
+                    <button type="button" class="play" aria-label="Pause">@PauseGlyph</button>
+                    <button type="button" class="step step--lg" aria-label="Next track">@NextGlyph</button>
+                </div>
+                <div class="master">
+                    <div class="master__head"><span class="label">Master volume · Downstairs</span><span class="meta">follows the Spotify slider</span></div>
+                    <LevelSlider @ref="_master" Variant="LevelSlider.LevelVariant.Hero" Label="Master volume · Downstairs" HideLabel="true"
+                                 Value="_masterValue" Send="SendMasterAsync" ValueText="LevelText">
+                        <Before><button type="button" class="step" aria-label="Quieter" @onclick="() => _master!.StepAsync(-5)">−</button></Before>
+                        <After><button type="button" class="step" aria-label="Louder" @onclick="() => _master!.StepAsync(5)">+</button></After>
+                    </LevelSlider>
+                    <div class="members only-wide">
+                        <div class="member"><span class="meta member__name">Test Speaker ABCD</span><div class="track"><div class="track__fill" style="width: 40%"></div></div><span class="meta member__level">40</span></div>
+                        <div class="member"><span class="meta member__name">Office</span><div class="track"><div class="track__fill" style="width: 24%"></div></div><span class="meta member__level">24</span></div>
+                    </div>
+                    <span class="chip chip--accent chip--members only-phone">Downstairs · Test Speaker ABCD 40 · Office 24</span>
+                </div>
+            </section>
+
+            <div class="player__side">
+                <section class="card output" aria-labelledby="sg-output">
+                    <div class="card__head">
+                        <h2 id="sg-output">Output</h2>
+                        <div class="card__actions">
+                            <a class="btn btn--ghost btn--sm only-wide" href="_styleguide">New group</a>
+                            <a class="only-phone" href="_styleguide">Edit groups</a>
+                            <button type="button" class="btn btn--sm">Stop output</button>
+                        </div>
+                    </div>
+                    <p class="meta output__none" role="status">Nothing selected: audio is discarded. Choose a receiver or a group.</p>
+                    <fieldset class="output__list">
+                        <legend class="visually-hidden">Choose the output</legend>
+                        <label class="row is-active">
+                            <input type="radio" name="sg-output" class="visually-hidden" checked />
+                            <span class="radio is-on" aria-hidden="true"></span>
+                            <span class="row__main"><strong>Downstairs</strong><span class="meta only-wide">Group · Test Speaker ABCD, Office</span><span class="meta only-phone">Test Speaker ABCD, Office</span></span>
+                            <span class="pill pill--ok">playing</span>
+                            <a class="btn btn--sm" href="_styleguide" aria-label="Edit group Downstairs">Edit</a>
+                        </label>
+                        <label class="row">
+                            <input type="radio" name="sg-output" class="visually-hidden" />
+                            <span class="radio" aria-hidden="true"></span>
+                            <span class="row__main"><strong>Upstairs</strong><span class="meta only-wide">Group · Living room TV</span><span class="meta only-phone">Living room TV</span></span>
+                            <span class="pill pill--warn">PIN needed</span>
+                            <a class="btn btn--sm" href="_styleguide" aria-label="Edit group Upstairs">Edit</a>
+                        </label>
+                        <label class="row is-quiet">
+                            <input type="radio" name="sg-output" class="visually-hidden" />
+                            <span class="radio" aria-hidden="true"></span>
+                            <span class="row__main"><strong>Test Speaker ABCD</strong><span class="meta only-wide">Speaker · 192.0.2.26</span><span class="meta only-phone">Speaker</span></span>
+                            <span class="pill pill--ok">online</span>
+                            <LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Volume of Test Speaker ABCD" HideLabel="true" Value="40" Send="SendAsync" />
+                        </label>
+                        <label class="row is-quiet">
+                            <input type="radio" name="sg-output" class="visually-hidden" disabled />
+                            <span class="radio" aria-hidden="true"></span>
+                            <span class="row__main"><strong>Kitchen (offline)</strong><span class="meta only-wide">Apple receiver · 192.0.2.98</span><span class="meta only-phone">Apple receiver</span></span>
+                            <span class="pill">offline</span>
+                            <LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Volume of Kitchen" HideLabel="true" Value="24" Disabled="true" Send="SendAsync" />
+                        </label>
+                        <label class="row">
+                            <input type="radio" name="sg-output" class="visually-hidden" disabled />
+                            <span class="radio" aria-hidden="true"></span>
+                            <span class="row__main"><strong>Living room TV</strong><span class="meta only-wide">LG TVMODEL0000 · 198.51.100.200</span><span class="meta only-phone">LG TVMODEL0000</span></span>
+                            <span class="pill pill--warn">PIN needed</span>
+                            <button type="button" class="btn btn--ghost btn--sm">Pair</button>
+                        </label>
+                    </fieldset>
+                </section>
+
+                <section class="card" aria-labelledby="sg-status">
+                    <div class="card__head"><h2 id="sg-status">Status</h2><a href="_styleguide">Diagnostics</a></div>
+                    <div class="fact-grid">
+                        <div class="fact"><span class="label">Spotify</span><span class="fact__value text-ok">connected · martin</span></div>
+                        <div class="fact"><span class="label">Output</span><span class="fact__value text-muted">none</span></div>
+                        <div class="fact"><span class="label">Receivers</span><span class="fact__value">1 of 2 online</span></div>
+                        <div class="fact"><span class="label">Live updates</span><span class="fact__value text-ok">live</span></div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        @* ── Artwork and hero states ──────────────────────────────────────────────────────────────── *@
+        <section class="card sg-section" aria-labelledby="sg-art">
+            <div class="card__head"><h2 id="sg-art">Artwork and hero states</h2><span class="meta">a real (4:3) image cropped by object-fit · placeholder · nothing playing</span></div>
+            <div class="sg-row">
+                <img class="art" src="@ArtworkSample" alt="Album cover sample" />
+                <div class="art art--placeholder" aria-hidden="true">@NoteGlyph</div>
+            </div>
+            <span class="label">Hero, nothing playing</span>
+            <div class="hero">
+                <div class="hero__top">
+                    <div class="art art--placeholder" aria-hidden="true">@NoteGlyph</div>
+                    <div class="hero__info">
+                        <strong class="hero__title text-muted">Nothing playing</strong>
+                        <span class="meta">Start playback in a Spotify app.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        @* ── Sliders ───────────────────────────────────────────────────────────────────────────────── *@
+        <section class="card sg-section" aria-labelledby="sg-sliders">
+            <div class="card__head"><h2 id="sg-sliders">Sliders</h2><span class="meta">LevelSlider variants; read-only tracks</span></div>
+            <LevelSlider Label="Default with label" Value="64" Send="SendAsync" />
+            <LevelSlider Label="Default disabled" Value="30" Disabled="true" Send="SendAsync" />
+            <span class="label">Hero (receiver card, no steppers)</span>
+            <LevelSlider Variant="LevelSlider.LevelVariant.Hero" Label="Volume of Fake Receiver 1" HideLabel="true" Value="73" Send="SendAsync" ValueText="LevelText" />
+            <span class="label">Compact (accent, quiet row, disabled)</span>
+            <div class="sg-row">
+                <LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Compact accent" HideLabel="true" Value="55" Send="SendAsync" />
+                <div class="row is-quiet"><LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Compact quiet" HideLabel="true" Value="55" Send="SendAsync" /></div>
+                <LevelSlider Variant="LevelSlider.LevelVariant.Compact" Label="Compact disabled" HideLabel="true" Value="55" Disabled="true" Send="SendAsync" />
+            </div>
+            <span class="label">Draft (static markup: the state while a drag is pending)</span>
+            <div class="level level--hero">
+                <input type="range" min="0" max="100" step="1" value="58" aria-label="Hero draft sample" aria-valuetext="58 of 100" style="--fill: 58%" />
+                <output class="big draft">58</output>
+            </div>
+            <div class="sg-row">
+                <div class="level level--compact">
+                    <input type="range" min="0" max="100" step="1" value="30" aria-label="Compact draft sample" style="--fill: 30%" />
+                    <output class="draft">30</output>
+                </div>
+                <div class="level">
+                    <label class="level__label" for="sg-draft-default">Default draft</label>
+                    <input id="sg-draft-default" type="range" min="0" max="100" step="1" value="81" style="--fill: 81%" />
+                    <output class="draft" for="sg-draft-default">81</output>
+                </div>
+            </div>
+            <span class="label">Track (members, progress)</span>
+            <div class="member"><span class="meta member__name">Test Speaker ABCD</span><div class="track"><div class="track__fill" style="width: 72%"></div></div><span class="meta member__level">72</span></div>
+        </section>
+
+        @* ── Receivers grid ─────────────────────────────────────────────────────────────────────────── *@
+        <h2 id="receivers">Receivers grid</h2>
+        <div class="cards">
+            <article class="card receiver">
+                <div class="card__head"><h2>Fake Receiver 1</h2><span class="pill pill--ok">connected</span></div>
+                <span class="meta">FakeModel · 127.0.0.1:7000</span>
+                <div class="field">
+                    <span class="label">Volume</span>
+                    <LevelSlider Variant="LevelSlider.LevelVariant.Hero" Label="Volume of Fake Receiver 1" HideLabel="true" Value="50" Send="SendAsync" ValueText="LevelText" />
+                </div>
+                <div class="tags"><span class="chip">AirPlay 2</span><span class="chip">PTP</span><span class="chip chip--accent">paired</span><span class="chip chip--accent">Output</span></div>
+                <div class="actions">
+                    <button type="button" class="btn">Disconnect</button>
+                    <button type="button" class="btn btn--ghost">Forget pairing</button>
+                </div>
+                <details class="details">
+                    <summary>Details</summary>
+                    <form class="offset" @onsubmit:preventDefault="true">
+                        <label for="sg-offset" class="label">Offset</label>
+                        <input id="sg-offset" type="number" class="input input--narrow" value="0" />
+                        <button type="submit" class="btn btn--sm">Apply</button>
+                    </form>
+                    <p class="hint">0 frames = 0 ms (latency trim, ±2 s)</p>
+                    <dl class="facts">
+                        <dt>Id</dt><dd class="mono">02:FA:CE:00:00:01</dd>
+                        <dt>Manufacturer</dt><dd>FakeMaker</dd>
+                        <dt>Features</dt><dd class="mono">0x1C340405D4A00</dd>
+                    </dl>
+                </details>
+            </article>
+            <article class="card receiver">
+                <div class="card__head"><h2>Living room TV with a long receiver name</h2><span class="pill pill--warn">PIN needed</span></div>
+                <span class="meta">LG TVMODEL0000 · 198.51.100.200:7000</span>
+                <div class="tags"><span class="chip">AirPlay 2</span><span class="chip chip--warn">PIN needed</span><span class="chip">Group: Upstairs</span></div>
+                <p class="meta text-err" role="alert">The last attempt failed: connection refused.</p>
+                <div class="actions">
+                    <button type="button" class="btn btn--primary" title="Play to this receiver alone">Connect</button>
+                    <button type="button" class="btn">Pair with PIN</button>
+                </div>
+            </article>
+            <div class="empty">
+                <strong>No AirPlay receivers found yet.</strong>
+                <span>Receivers appear here as soon as the bridge sees them on the network (mDNS).</span>
+            </div>
+        </div>
+
+        @* ── Forms ─────────────────────────────────────────────────────────────────────────────────── *@
+        <h2 id="settings">Forms</h2>
+        <div class="stack stack--narrow">
+            <section class="card" aria-labelledby="sg-form">
+                <div class="card__head"><h2 id="sg-form">Bridge</h2></div>
+                <div class="field">
+                    <label for="sg-name">Spotify device name</label>
+                    <input id="sg-name" class="input" value="AirPlay Bridge" />
+                    <p class="hint">The name shown in Spotify apps.</p>
+                </div>
+                <div class="field">
+                    <label for="sg-latency">Latency L (frames)</label>
+                    <input id="sg-latency" type="number" class="input invalid" aria-invalid="true" value="1" />
+                    <span class="validation-message">The latency must be between 22050 and 176400 frames.</span>
+                </div>
+                <div class="field">
+                    <label for="sg-stream">Stream type</label>
+                    <select id="sg-stream" class="input"><option>Realtime (RTP over UDP, NTP or PTP timing)</option><option>Buffered (TCP, PTP timing)</option></select>
+                </div>
+                <div class="field field--check">
+                    <input id="sg-poll" type="checkbox" checked />
+                    <label for="sg-poll">Poll receiver volume</label>
+                    <p class="hint">Reads the volume back from receivers every few seconds.</p>
+                </div>
+                <div class="actions">
+                    <button type="button" class="btn btn--primary">Save</button>
+                    <button type="button" class="btn btn--ghost">Reset</button>
+                </div>
+            </section>
+            <section class="card" aria-labelledby="sg-appearance">
+                <div class="card__head"><h2 id="sg-appearance">Appearance</h2></div>
+                <fieldset class="field">
+                    <legend>Theme</legend>
+                    <div class="field--check"><input id="sg-theme-light" type="radio" name="sg-theme" checked /><label for="sg-theme-light">Light</label></div>
+                    <div class="field--check"><input id="sg-theme-dark" type="radio" name="sg-theme" /><label for="sg-theme-dark">Dark</label></div>
+                    <div class="field--check"><input id="sg-theme-system" type="radio" name="sg-theme" /><label for="sg-theme-system">System (follows the operating system)</label></div>
+                </fieldset>
+                <div class="field">
+                    <label for="sg-language">Language</label>
+                    <select id="sg-language" class="input"><option>English</option><option>Deutsch</option><option>Português (Brasil)</option></select>
+                </div>
+            </section>
+            <section class="card" aria-labelledby="sg-link">
+                <a class="row" href="_styleguide">
+                    <span class="row__main"><strong id="sg-link">Diagnostics</strong><span class="meta">Status, network, statistics and the live log</span></span>
+                    <span class="row__chevron" aria-hidden="true">›</span>
+                </a>
+            </section>
+            <section class="card card--danger" aria-labelledby="sg-danger">
+                <div class="card__head"><h2 id="sg-danger">Delete group</h2></div>
+                <p class="meta">Deletes the group; the receivers stay.</p>
+                <div class="actions">
+                    <button type="button" class="btn btn--danger">Delete</button>
+                    <button type="button" class="btn">Keep</button>
+                </div>
+            </section>
+        </div>
+
+        @* ── Diagnostics ───────────────────────────────────────────────────────────────────────────── *@
+        <div class="cards">
+            <section class="card" aria-labelledby="sg-facts">
+                <div class="card__head"><h2 id="sg-facts">Status</h2></div>
+                <dl class="facts">
+                    <dt>Version</dt><dd>0.1.0</dd>
+                    <dt>Running since</dt><dd>10/10/2026 2:05:09 PM</dd>
+                    <dt>Spotify</dt><dd>connected as martin</dd>
+                    <dt>Local addresses</dt><dd class="mono">192.0.2.10, fe80::1c2b:3d4e:5f60:7182</dd>
+                </dl>
+            </section>
+            <section class="card card--wide" aria-labelledby="sg-log">
+                <div class="card__head">
+                    <h2 id="sg-log">Live log</h2>
+                    <div class="card__actions">
+                        <div class="field field--inline">
+                            <label for="sg-level">Level</label>
+                            <select id="sg-level" class="input"><option>All</option><option>Warning</option></select>
+                        </div>
+                        <button type="button" class="btn btn--ghost btn--sm">Pause</button>
+                        <button type="button" class="btn btn--ghost btn--sm">Clear</button>
+                    </div>
+                </div>
+                <div class="log">
+                    <p class="log__line log__line--trce">14:05:09.120 trce Airplay2.Rtp: packet 4711 queued</p>
+                    <p class="log__line log__line--dbug">14:05:09.121 dbug Airplay2.Rtp: pacer slept 7.9 ms</p>
+                    <p class="log__line">14:05:09.200 info Bridge.Service: Fake Receiver 1 connected</p>
+                    <p class="log__line log__line--warn">14:05:10.002 warn Airplay2.Ntp: clock offset 12 ms</p>
+                    <p class="log__line log__line--fail">14:05:11.500 fail Bridge.Service: connect failed: averyveryveryverylongtokenwithoutanyspacesthatmustwrapinsidethebox</p>
+                    <p class="log__line log__line--crit">14:05:12.000 crit Bridge.Service: output lost</p>
+                </div>
+            </section>
+        </div>
+
+        @* ── Toasts and dialog ─────────────────────────────────────────────────────────────────────── *@
+        <section class="card sg-section" aria-labelledby="sg-toasts">
+            <div class="card__head"><h2 id="sg-toasts">Toasts</h2></div>
+            <div class="sg-frame sg-frame--toasts">
+                <aside class="toasts" aria-label="Sample toasts">
+                    <div class="toast toast--ok" role="status">Settings saved.<button type="button" class="toast__close" aria-label="Dismiss">×</button></div>
+                    <div class="toast toast--info" role="status">Paired with Fake Receiver 1.<button type="button" class="toast__close" aria-label="Dismiss">×</button></div>
+                    <div class="toast toast--err" role="alert"><strong>Connecting Fake Receiver 2 failed.</strong><span class="meta">Not found: no receiver with this id.</span><button type="button" class="toast__close" aria-label="Dismiss">×</button></div>
+                </aside>
+            </div>
+        </section>
+
+        <section class="card sg-section" aria-labelledby="sg-dialog">
+            <div class="card__head"><h2 id="sg-dialog">Pairing dialog</h2><a href="_styleguide?dialog=1">Open as overlay</a></div>
+            @if (Dialog != 1)
+            {
+                <div class="sg-frame sg-frame--dialog">@DialogSample</div>
+            }
+        </section>
+    </div>
+</main>
+
+<nav class="tabbar" aria-label="Sections">
+    <a href="_styleguide" class="active" aria-current="page">@PlayGlyph<span>Player</span></a>
+    <a href="_styleguide#receivers">@ArcsGlyph<span>Receivers</span></a>
+    <a href="_styleguide#settings">@GearGlyph<span>Settings</span></a>
+</nav>
+
+@if (Dialog == 1)
+{
+    @DialogSample
+}
+
+@code {
+    private LevelSlider? _master;
+    private int _masterValue = 32;
+
+    /// <summary><c>?dialog=1</c> shows the dialog sample as the real fixed overlay.</summary>
+    [SupplyParameterFromQuery(Name = "dialog")]
+    public int? Dialog { get; set; }
+
+    private static string LevelText(int v) => v.ToString(System.Globalization.CultureInfo.CurrentCulture) + " of 100";
+
+    private static Task<bool> SendAsync(int level, CancellationToken cancellationToken) => Task.FromResult(true);
+
+    // A drag only re-renders the slider, so the page re-renders itself to pass the new value back as Value (otherwise
+    // the thumb snaps back once the slider settles). The sender may call in from outside the renderer's context.
+    private async Task<bool> SendMasterAsync(int level, CancellationToken cancellationToken)
+    {
+        _masterValue = level;
+        await InvokeAsync(StateHasChanged);
+        return true;
+    }
+
+    private static RenderFragment ThemePicker(bool open, string active) => __builder =>
+    {
+        <div class="@(open ? "theme-picker theme-picker--open" : "theme-picker")" role="radiogroup" aria-label="Theme">
+            <button type="button" class="@(active == "light" ? "theme-btn is-active" : "theme-btn")" role="radio" aria-checked="@(active == "light" ? "true" : "false")" tabindex="@(active == "light" ? 0 : -1)" aria-label="Light" title="Light">
+                <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2L19 19M19 5l-1.8 1.8M6.8 17.2L5 19" /></svg>
+            </button>
+            <button type="button" class="@(active == "dark" ? "theme-btn is-active" : "theme-btn")" role="radio" aria-checked="@(active == "dark" ? "true" : "false")" tabindex="@(active == "dark" ? 0 : -1)" aria-label="Dark" title="Dark">
+                <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" /></svg>
+            </button>
+            <button type="button" class="@(active == "system" ? "theme-btn is-active" : "theme-btn")" role="radio" aria-checked="@(active == "system" ? "true" : "false")" tabindex="@(active == "system" ? 0 : -1)" aria-label="System (follows the operating system)" title="System (follows the operating system)">
+                <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" /></svg>
+            </button>
+        </div>
+    };
+
+    private static readonly RenderFragment DialogSample = __builder =>
+    {
+        <div class="scrim">
+            <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="sg-dialog-title">
+                <h2 id="sg-dialog-title">Pair with Living room TV</h2>
+                <p>Living room TV needs a PIN pairing. Enter the PIN it shows now.</p>
+                <div class="field">
+                    <label for="sg-pin" class="label">PIN</label>
+                    <input id="sg-pin" class="input pin" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="0000" />
+                </div>
+                <p class="validation-message" role="alert">The receiver rejected the PIN. Start again; it then shows a new PIN.</p>
+                <div class="dialog__actions">
+                    <button type="button" class="btn btn--primary">Pair</button>
+                    <button type="button" class="btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    };
+
+    /// <summary>A 4:3 sample cover (sky, sun, hills), so the square <c>.art</c> box shows object-fit: cover cropping it.</summary>
+    private const string ArtworkSample = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E"
+        + "%3Crect width='400' height='300' fill='%23f59e0b'/%3E%3Ccircle cx='200' cy='130' r='70' fill='%23fde68a'/%3E"
+        + "%3Cpath d='M0 220 Q100 160 200 210 T400 200 V300 H0z' fill='%23065f46'/%3E"
+        + "%3Crect x='0' y='0' width='40' height='300' fill='%231e3a8a'/%3E%3Crect x='360' y='0' width='40' height='300' fill='%231e3a8a'/%3E%3C/svg%3E";
+
+    private static readonly RenderFragment BrandGlyph = __builder =>
+    {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a8 8 0 0 1 16 0" /><path d="M7 12.5a5 5 0 0 1 10 0" /><circle cx="12" cy="15" r="1.6" /><path d="m8.5 21 3.5-5 3.5 5z" /></svg>
+    };
+
+    private static readonly RenderFragment NoteGlyph = __builder =>
+    {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+    };
+
+    private static readonly RenderFragment PrevGlyph = __builder =>
+    {
+        <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
+    };
+
+    private static readonly RenderFragment NextGlyph = __builder =>
+    {
+        <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
+    };
+
+    private static readonly RenderFragment PauseGlyph = __builder =>
+    {
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+    };
+
+    private static readonly RenderFragment PlayGlyph = __builder =>
+    {
+        <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+    };
+
+    private static readonly RenderFragment ArcsGlyph = __builder =>
+    {
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10a8 8 0 0 1 16 0" /><path d="M7 12.5a5 5 0 0 1 10 0" /><circle cx="12" cy="15" r="1.6" /></svg>
+    };
+
+    private static readonly RenderFragment GearGlyph = __builder =>
+    {
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></svg>
+    };
+
+    /// <summary>The styleguide's layout: the page body alone, so the samples are the only shell on the page.</summary>
+    public sealed class BareLayout : LayoutComponentBase
+    {
+        /// <inheritdoc />
+        protected override void BuildRenderTree(RenderTreeBuilder builder)
+        {
+            ArgumentNullException.ThrowIfNull(builder);
+            builder.AddContent(0, Body);
+        }
+    }
+}

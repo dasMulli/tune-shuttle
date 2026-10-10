@@ -1,37 +1,105 @@
-@* A 0..100 level slider (r_i or G). While it is dragged, the latest position is sent through a CoalescingSender
-   (one request in flight, newest value wins) and the thumb shows the local value; once nothing is pending it shows
-   the value the bridge reports again. DraftChanged reports the dragged value (null when settled) for live previews.
-   Only "input" is bound: browsers fire it for every thumb move and keyboard step, and "change" would only repeat the
-   last value as a second request. *@
+@* A 0..100 level slider (r_i or G), UI-SPEC 1.6. While it is dragged, the latest position is sent through a
+   CoalescingSender (one request in flight, newest value wins) and the thumb shows the local value; once nothing is
+   pending it shows the value the bridge reports again. DraftChanged reports the dragged value (null when settled) for
+   live previews. Only "input" is bound: browsers fire it for every thumb move and keyboard step, and "change" would
+   only repeat the last value as a second request. StepAsync is the same path for the −/+ steppers of MasterVolume.
+
+   Markup, in this order: the visible <label for> (Default look; with HideLabel there is no <label> and the name is
+   aria-label on the input, so a slider inside a wrapping label.row of the Output list nests no label), Before, the
+   native range input, After, the value <output> (unless ShowValue is false). The CSS (.level, flex) lays out whichever
+   of them are present.
+   ValueText feeds aria-valuetext ("73 of 100"); the visible <output> shows OutputText, by default the number alone. *@
+@using System.Globalization
 @implements IDisposable
 
-<div class="level @(Disabled ? "disabled" : null)">
-    <label for="@_id">@Label</label>
+<div class="@CssClass">
+    @if (!HideLabel)
+    {
+        <label for="@_id" class="level__label">@Label</label>
+    }
+    @Before
     <input id="@_id" type="range" min="0" max="100" step="1"
            value="@Shown" disabled="@Disabled"
-           aria-valuetext="@($"{Shown} of 100")"
+           aria-label="@(HideLabel ? Label : null)"
+           aria-valuetext="@ShownText"
+           style="@FillStyle"
            @oninput="OnInputAsync" />
-    <output for="@_id" class="@(_draft is null ? null : "draft")">@Shown</output>
+    @After
+    @if (ShowValue)
+    {
+        <output for="@_id" class="@OutputClass">@ShownNumber</output>
+    }
 </div>
 
 @code {
     private static int s_next;
-    private readonly string _id = "level-" + Interlocked.Increment(ref s_next).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    private static readonly Func<int, string> s_number = v => v.ToString(CultureInfo.CurrentCulture);
+    private readonly string _id = "level-" + Interlocked.Increment(ref s_next).ToString(CultureInfo.InvariantCulture);
     private readonly CancellationTokenSource _lifetime = new();
     private CoalescingSender<int>? _sender;
     private int? _draft;
+
+    /// <summary>The look of a <see cref="LevelSlider"/> (UI-SPEC 1.6).</summary>
+    public enum LevelVariant
+    {
+        /// <summary>Label · track · value (the label shows unless <see cref="HideLabel"/>).</summary>
+        Default,
+
+        /// <summary>A 150px track and a small number, for list rows (Output rows, group members).</summary>
+        Compact,
+
+        /// <summary>The thick track with a 24px thumb and the large <c>.big</c> number (master volume, receiver cards).</summary>
+        Hero,
+    }
+
+    /// <summary>The look; <see cref="LevelVariant.Default"/> unless set.</summary>
+    [Parameter]
+    public LevelVariant Variant { get; set; }
+
+    /// <summary>The accessible name of the range input (catalog text from the caller).</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Shows no label: <see cref="Label"/> becomes the input's <c>aria-label</c> instead of a visually-hidden
+    /// <c>&lt;label&gt;</c>, which would be invalid (and would leak into the row's name) inside a wrapping <c>&lt;label&gt;</c>.
+    /// </summary>
+    [Parameter]
+    public bool HideLabel { get; set; }
 
     /// <summary>The level the bridge reports.</summary>
     [Parameter]
     public int Value { get; set; }
 
-    /// <summary>Label text.</summary>
-    [Parameter]
-    public string Label { get; set; } = "Volume";
-
     /// <summary>Disables the control.</summary>
     [Parameter]
     public bool Disabled { get; set; }
+
+    /// <summary>
+    /// Text of a level for <c>aria-valuetext</c> (what a screen reader announces). Default: the number alone in the
+    /// current culture (so the component holds no language); pages pass <c>common.levelText</c> ("{{value}} of 100").
+    /// </summary>
+    [Parameter]
+    public Func<int, string>? ValueText { get; set; }
+
+    /// <summary>
+    /// Text of the visible <c>&lt;output&gt;</c>. Default: the number alone in the current culture, as the mockups show
+    /// it (".big" number, compact "40"); e.g. <c>_ => "–"</c> while there is no output to control.
+    /// </summary>
+    [Parameter]
+    public Func<int, string>? OutputText { get; set; }
+
+    /// <summary>Shows the value <c>&lt;output&gt;</c> (default true).</summary>
+    [Parameter]
+    public bool ShowValue { get; set; } = true;
+
+    /// <summary>Rendered between the label and the track, e.g. the "−" stepper of the master volume.</summary>
+    [Parameter]
+    public RenderFragment? Before { get; set; }
+
+    /// <summary>Rendered between the track and the value, e.g. the "+" stepper of the master volume.</summary>
+    [Parameter]
+    public RenderFragment? After { get; set; }
 
     /// <summary>Sends a level; returns false on failure (the command layer shows the error).</summary>
     [Parameter, EditorRequired]
@@ -42,6 +110,43 @@
     public EventCallback<int?> DraftChanged { get; set; }
 
     private int Shown => _draft ?? Value;
+
+    private string ShownText => (ValueText ?? s_number)(Shown);
+
+    private string ShownNumber => (OutputText ?? s_number)(Shown);
+
+    private string FillStyle => "--fill: " + Math.Clamp(Shown, 0, 100).ToString(CultureInfo.InvariantCulture) + "%";
+
+    private string CssClass => Variant switch
+    {
+        LevelVariant.Compact => Disabled ? "level level--compact is-disabled" : "level level--compact",
+        LevelVariant.Hero => Disabled ? "level level--hero is-disabled" : "level level--hero",
+        _ => Disabled ? "level is-disabled" : "level",
+    };
+
+    private string? OutputClass => (Variant, _draft is null) switch
+    {
+        (LevelVariant.Hero, true) => "big",
+        (LevelVariant.Hero, false) => "big draft",
+        (_, true) => null,
+        (_, false) => "draft",
+    };
+
+    /// <summary>
+    /// Moves the level by <paramref name="delta"/> from what the slider shows (the draft while one is pending, else
+    /// <see cref="Value"/>), clamped to 0..100: updates the draft, raises <see cref="DraftChanged"/> and sends through
+    /// the same coalescing path as a drag. Does nothing while <see cref="Disabled"/>.
+    /// </summary>
+    public Task StepAsync(int delta) => InvokeAsync(async () =>
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        var level = Math.Clamp(Shown + delta, 0, 100);
+        await SubmitAsync(level, rerender: true);
+    });
 
     /// <inheritdoc />
     public void Dispose()
@@ -58,16 +163,26 @@
 
     private async Task OnInputAsync(ChangeEventArgs e)
     {
-        if (Disabled || !int.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var level))
+        if (Disabled || !int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var level))
         {
             return;
         }
 
-        level = Math.Clamp(level, 0, 100);
+        await SubmitAsync(Math.Clamp(level, 0, 100), rerender: false);
+    }
+
+    // rerender: the steppers call in from another component's event, so this one has to ask for its own render; an
+    // input event of this component re-renders it anyway.
+    private async Task SubmitAsync(int level, bool rerender)
+    {
         if (_draft != level)
         {
             _draft = level;
             await DraftChanged.InvokeAsync(level);
+            if (rerender)
+            {
+                StateHasChanged();
+            }
         }
 
         try
@@ -83,6 +198,10 @@
         {
             _draft = null;
             await DraftChanged.InvokeAsync(null);
+            if (rerender)
+            {
+                StateHasChanged();
+            }
         }
     }
 }

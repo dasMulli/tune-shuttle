@@ -1,0 +1,116 @@
+@* The state of a receiver or a group as a pill (UI-SPEC 4.8): exactly one of Receiver and Group is set. The text and
+   the title are catalog keys picked by a switch (never built from the state name). The parent re-renders the pill when
+   the state or the language changes (its parameters are records, so every parent render reaches it). *@
+@using Bridge.Web.Localization
+@inject BridgeState State
+@inject I18n L
+
+<span class="@_css" title="@_title">@_text</span>
+
+@code {
+    private string _css = "pill";
+    private string _text = string.Empty;
+    private string _title = string.Empty;
+
+    /// <summary>The receiver to show (or set <see cref="Group"/>).</summary>
+    [Parameter]
+    public ReceiverDto? Receiver { get; set; }
+
+    /// <summary>The group to show (or set <see cref="Receiver"/>).</summary>
+    [Parameter]
+    public GroupDto? Group { get; set; }
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if ((Receiver is null) == (Group is null))
+        {
+            throw new InvalidOperationException("StatePill needs exactly one of Receiver and Group.");
+        }
+
+        var kind = Receiver is not null ? ReceiverKind(Receiver) : GroupKind(Group!);
+        (_css, _text, _title) = kind switch
+        {
+            PillKind.Playing => ("pill pill--ok", L["pills.playing"], L["pills.title.playing"]),
+            PillKind.Connected => ("pill pill--ok", L["pills.connected"], L["pills.title.connected"]),
+            PillKind.Connecting => ("pill pill--accent", L["pills.connecting"], L["pills.title.connecting"]),
+            PillKind.Error => ("pill pill--err", L["pills.error"], L.Format("pills.title.error", ("error", Receiver?.Error ?? L["notices.connectFailedDefault"]))),
+            PillKind.PinNeeded => ("pill pill--warn", L["pills.pinNeeded"], L["pills.title.pinNeeded"]),
+            PillKind.HomekitOnly => ("pill", L["pills.homekitOnly"], L["pills.title.homekitOnly"]),
+            PillKind.Online => ("pill pill--ok", L["pills.online"], L["pills.title.online"]),
+            PillKind.Active => ("pill pill--accent", L["pills.active"], L["pills.title.active"]),
+            PillKind.Ready => ("pill pill--ok", L["pills.ready"], L["pills.title.ready"]),
+            PillKind.Empty => ("pill", L["pills.empty"], L["pills.title.empty"]),
+            _ => ("pill", L["pills.offline"], L["pills.title.offline"]),
+        };
+    }
+
+    /// <summary>The receiver mapping of UI-SPEC 4.8, first match wins.</summary>
+    private static PillKind ReceiverKind(ReceiverDto receiver)
+    {
+        if (!receiver.Online)
+        {
+            return PillKind.Offline;
+        }
+
+        return receiver.State switch
+        {
+            ReceiverConnectionState.Streaming => PillKind.Playing,
+            ReceiverConnectionState.Connected => PillKind.Connected,
+            ReceiverConnectionState.Connecting => PillKind.Connecting,
+            ReceiverConnectionState.Error => PillKind.Error,
+            _ => receiver.Pairing switch
+            {
+                PairingState.PinRequired => PillKind.PinNeeded,
+                PairingState.Disabled => PillKind.HomekitOnly,
+                _ => PillKind.Online,
+            },
+        };
+    }
+
+    /// <summary>
+    /// The group mapping of UI-SPEC 4.8, first match wins. Pairing and online come from the member's receiver in
+    /// <see cref="BridgeState"/>; a member whose receiver is unknown counts as online unless its own state is Offline.
+    /// </summary>
+    private PillKind GroupKind(GroupDto group)
+    {
+        if (group.Active && group.Members.Any(m => m.State == ReceiverConnectionState.Streaming))
+        {
+            return PillKind.Playing;
+        }
+
+        if (group.Active)
+        {
+            return PillKind.Active;
+        }
+
+        if (group.Members.Count == 0)
+        {
+            return PillKind.Empty;
+        }
+
+        if (group.Members.Any(m => State.Receiver(m.ReceiverId)?.Pairing == PairingState.PinRequired))
+        {
+            return PillKind.PinNeeded;
+        }
+
+        return group.Members.Any(m => State.Receiver(m.ReceiverId)?.Online ?? m.State != ReceiverConnectionState.Offline)
+            ? PillKind.Ready
+            : PillKind.Offline;
+    }
+
+    private enum PillKind
+    {
+        Offline,
+        Playing,
+        Connected,
+        Connecting,
+        Error,
+        PinNeeded,
+        HomekitOnly,
+        Online,
+        Active,
+        Ready,
+        Empty,
+    }
+}

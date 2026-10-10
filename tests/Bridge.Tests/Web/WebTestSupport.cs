@@ -1,13 +1,18 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
 using Bridge.Contracts;
 using Bridge.Tests.Service;
 using Bridge.Web;
+using Bridge.Web.Localization;
+using Bunit;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.JSInterop;
 using Xunit;
 
 namespace Bridge.Tests.Web;
@@ -103,4 +108,149 @@ internal static class WebClients
             await Task.Delay(25);
         }
     }
+}
+
+/// <summary>
+/// The bUnit setup of the redesigned components (WORK-PLAN 2.1): everything a component needs, with the browser module
+/// <c>./js/app.js</c> mocked so no component ever needs a real browser.
+/// </summary>
+internal static class UiTest
+{
+    /// <summary>
+    /// Registers everything a component needs: BridgeState, a stub API (StubHandler; without <paramref name="respond"/>
+    /// every request answers 404), an event client that never connects, BridgeCommands with I18n, I18n in
+    /// <paramref name="lang"/> (constructed in that language; the process cultures are not touched: a test that asserts
+    /// numbers formatted by the <see cref="Format"/> helpers opens a <see cref="CultureScope"/> for them), BrowserBridge
+    /// over a mocked <c>"./js/app.js"</c> module (<see cref="SetupModule"/>). The caller disposes the context.
+    /// </summary>
+    public static (BunitContext Ctx, BridgeState State, StubHandler Api, I18n L, BunitJSModuleInterop Module) Create(
+        string lang = "en",
+        bool hoverCapable = true,
+        Func<HttpRequestMessage, string?, Task<HttpResponseMessage>>? respond = null)
+    {
+        var ctx = new BunitContext();
+        ctx.JSInterop.Mode = JSRuntimeMode.Loose;
+        ctx.Services.AddLogging();
+        var state = new BridgeState();
+        ctx.Services.AddSingleton(state);
+        var l = new I18n(lang);
+        ctx.Services.AddSingleton(l);
+        var module = SetupModule(ctx, lang, hoverCapable);
+        ctx.Services.AddSingleton(sp => new BrowserBridge(sp.GetRequiredService<IJSRuntime>()));
+        var api = new StubHandler(respond ?? ((_, _) => Task.FromResult(StubHandler.Problem(HttpStatusCode.NotFound, "Not found", "No stub answers this request."))));
+        ctx.Services.AddSingleton(new BridgeApiClient(new HttpClient(api) { BaseAddress = new Uri("http://bridge.test/") }));
+        ctx.Services.AddSingleton(NeverConnectingEvents(state));
+        ctx.Services.AddSingleton<BridgeCommands>();
+        return (ctx, state, api, l, module);
+    }
+
+    /// <summary>
+    /// Mocks the <c>./js/app.js</c> module of <see cref="BrowserBridge"/>: <c>getTheme</c> answers "system",
+    /// <c>hoverCapable</c> <paramref name="hoverCapable"/>, <c>getLang</c> <paramref name="lang"/>, <c>audit</c> "{}";
+    /// <c>setTheme</c>, <c>setLang</c>, <c>setDocumentLang</c>, <c>measure</c> complete at once and are recorded; <c>onOutsideClick</c> and
+    /// <c>rememberActive</c> answer nested module mocks with <c>dispose</c> / <c>restore</c>. Also serves
+    /// <c>ElementReference.FocusAsync</c> (<c>Blazor._internal.domWrapper.focus</c>). Every call is recorded in the
+    /// returned module's <c>Invocations</c> (nested handles record in their own).
+    /// </summary>
+    public static BunitJSModuleInterop SetupModule(BunitContext ctx, string lang = "en", bool hoverCapable = true)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        var module = ctx.JSInterop.SetupModule(BrowserBridge.ModulePath);
+        module.SetupVoid("setTheme", _ => true).SetVoidResult();
+        module.Setup<string>("getTheme").SetResult("system");
+        module.Setup<bool>("hoverCapable").SetResult(hoverCapable);
+        module.Setup<string>("getLang").SetResult(lang);
+        module.SetupVoid("setLang", _ => true).SetVoidResult();
+        module.SetupVoid("setDocumentLang", _ => true).SetVoidResult();
+        module.SetupVoid("measure", _ => true).SetVoidResult();
+        module.SetupModule(invocation => invocation.Identifier == "onOutsideClick").SetupVoid("dispose").SetVoidResult();
+        module.SetupModule(invocation => invocation.Identifier == "rememberActive").SetupVoid("restore").SetVoidResult();
+        module.Setup<string>("audit").SetResult("{}");
+        ctx.JSInterop.SetupVoid("Blazor._internal.domWrapper.focus", _ => true).SetVoidResult();
+        return module;
+    }
+
+    /// <summary>An event client for component tests: registered so DI resolves, never started, would fail to connect.</summary>
+    public static BridgeEventClient NeverConnectingEvents(BridgeState state) => new(
+        state,
+        new Uri("ws://bridge.test/ws/events"),
+        NullLogger<BridgeEventClient>.Instance,
+        connect: (_, _) => Task.FromException<WebSocket>(new WebSocketException("not started in component tests")));
+}
+
+/// <summary>
+/// Switches the culture of the calling flow to the culture of an app language (<see cref="I18n.Culture"/>): sets the
+/// flow's own AsyncLocal <see cref="CultureInfo.CurrentCulture"/>/<see cref="CultureInfo.CurrentUICulture"/> only, so
+/// tests running in parallel are not affected, and restores them on dispose. <see cref="I18n.SetLanguage"/> sets the
+/// process-wide default-thread cultures instead (which this flow does not read inside the scope); the scope snapshots
+/// those too and restores them on dispose, so a test that calls SetLanguage leaves the process as it found it. Such a
+/// test belongs to <see cref="ProcessCultureCollection"/>. Usage: <c>using var _ = new CultureScope("de");</c>.
+/// </summary>
+internal sealed class CultureScope : IDisposable
+{
+    private readonly CultureInfo _culture = CultureInfo.CurrentCulture;
+    private readonly CultureInfo _uiCulture = CultureInfo.CurrentUICulture;
+    private readonly CultureInfo? _defaultCulture = CultureInfo.DefaultThreadCurrentCulture;
+    private readonly CultureInfo? _defaultUiCulture = CultureInfo.DefaultThreadCurrentUICulture;
+
+    public CultureScope(string code)
+    {
+        Culture = new I18n(code).Culture;
+        CultureInfo.CurrentCulture = Culture;
+        CultureInfo.CurrentUICulture = Culture;
+    }
+
+    /// <summary>The culture in force inside the scope (de-DE for "de", …).</summary>
+    public CultureInfo Culture { get; }
+
+    /// <summary>
+    /// Runs <paramref name="read"/> on a new thread that does not inherit the caller's ExecutionContext: a flow without an
+    /// AsyncLocal culture, like every flow of the app, so it reads the default-thread cultures that
+    /// <see cref="I18n.SetLanguage"/> sets.
+    /// </summary>
+    public static T InFreshFlow<T>(Func<T> read)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        T result = default!;
+        Exception? error = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                result = read();
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+            }
+        });
+        thread.UnsafeStart(); // no ExecutionContext capture: the thread has no AsyncLocal culture
+        thread.Join();
+        if (error is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
+        }
+
+        return result;
+    }
+
+    public void Dispose()
+    {
+        CultureInfo.DefaultThreadCurrentCulture = _defaultCulture;
+        CultureInfo.DefaultThreadCurrentUICulture = _defaultUiCulture;
+        CultureInfo.CurrentCulture = _culture;
+        CultureInfo.CurrentUICulture = _uiCulture;
+    }
+}
+
+/// <summary>
+/// The test classes that call <see cref="I18n.SetLanguage"/> (directly or through <c>LanguageSelect</c>), which changes
+/// the process-wide default-thread cultures: they run alone, after the parallel tests, so no other test reads a
+/// culture they set.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class ProcessCultureCollection
+{
+    /// <summary>The collection's name, for <c>[Collection(ProcessCultureCollection.Name)]</c>.</summary>
+    public const string Name = "Process culture";
 }

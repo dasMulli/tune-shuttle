@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The brand tile of the top bar (UI-SPEC 1.4 / 9): the accent gradient with the white AirPlay glyph. The colours are
+       the --accent / --brand-violet tokens of css/app.css (an SVG favicon cannot read the page's custom properties);
+       the dark-scheme accent applies where the browser renders favicons with prefers-color-scheme. -->
+  <style>
+    .a { stop-color: #2f6df6; }
+    .b { stop-color: #5165fa; }
+    @media (prefers-color-scheme: dark) {
+      .a { stop-color: #4c8dff; }
+      .b { stop-color: #6177ff; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" class="a" />
+      <stop offset="1" class="b" />
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="9" fill="url(#g)" />
+  <g transform="translate(4 4)" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 10a8 8 0 0 1 16 0" />
+    <path d="M7 12.5a5 5 0 0 1 10 0" />
+    <circle cx="12" cy="15" r="1.6" />
+    <path d="m8.5 21 3.5-5 3.5 5z" />
+  </g>
+</svg>

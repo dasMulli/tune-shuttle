@@ -1,0 +1,112 @@
+@* The language choice (UI-SPEC 3.2): a native <select> of I18n.Languages (native names, codes as values). Changing it
+   switches the catalog at once (every BridgeComponentBase re-renders on I18n.Changed) and stores the choice through
+   BrowserBridge, which also sets <html lang>. Variant "Bar" is the top-bar pill (named by aria-label/title); "Field" is
+   the full-width form control of the Settings page, named by the caller's <label for="@Id">. *@
+@using Bridge.Web.Localization
+@using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
+@implements IDisposable
+@inject I18n L
+@inject BrowserBridge Browser
+@inject ILogger<LanguageSelect> Logger
+
+@if (Variant == Field)
+{
+    <select id="@Id" class="input" value="@L.Code" @onchange="OnChangeAsync">
+        @Options()
+    </select>
+}
+else
+{
+    <select id="@Id" class="lang-select" value="@L.Code" aria-label="@L["language.label"]" title="@L["language.label"]" @onchange="OnChangeAsync">
+        @Options()
+    </select>
+}
+
+@code {
+    /// <summary>The top-bar look (the default).</summary>
+    public const string Bar = "Bar";
+
+    /// <summary>The form-field look (<c>.input</c>), labelled by the caller's <c>&lt;label for&gt;</c>.</summary>
+    public const string Field = "Field";
+
+    /// <summary><see cref="Bar"/> (default) or <see cref="Field"/>.</summary>
+    [Parameter]
+    public string Variant { get; set; } = Bar;
+
+    /// <summary>The select's id (the target of a <c>&lt;label for&gt;</c> in the Field variant).</summary>
+    [Parameter]
+    public string Id { get; set; } = "lang-select";
+
+    private bool _disposed;
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _disposed = true;
+        L.Changed -= OnLanguageChanged;
+    }
+
+    /// <inheritdoc />
+    protected override void OnInitialized() => L.Changed += OnLanguageChanged;
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (Variant is not (Bar or Field))
+        {
+            throw new InvalidOperationException($"LanguageSelect.Variant is \"{Bar}\" or \"{Field}\", not \"{Variant}\".");
+        }
+    }
+
+    private RenderFragment Options() => __builder =>
+    {
+        foreach (var language in I18n.Languages)
+        {
+            <option value="@language.Code" lang="@language.Code" selected="@(language.Code == L.Code)">@language.NativeName</option>
+        }
+    };
+
+    private async Task OnChangeAsync(ChangeEventArgs e)
+    {
+        L.SetLanguage(e.Value as string);
+        try
+        {
+            await Browser.SetLangAsync(L.Code);
+        }
+        catch (JSException)
+        {
+            // Storing the choice failed (blocked storage is already handled in app.js); the switch itself is done.
+        }
+    }
+
+    // Another LanguageSelect (top bar vs Settings) switched the language: show the new choice here too. Guarded and
+    // observed as in BridgeComponentBase: a component torn down between the event and the dispatch is not an error,
+    // anything else is logged instead of failing unobserved.
+    private void OnLanguageChanged()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var refresh = InvokeAsync(StateHasChanged);
+        if (refresh.IsCompletedSuccessfully)
+        {
+            return;
+        }
+
+        _ = refresh.ContinueWith(
+            static (t, state) =>
+            {
+                if (t.Exception?.GetBaseException() is { } ex and not (OperationCanceledException or ObjectDisposedException))
+                {
+                    ((ILogger)state!).LogError(ex, "Re-rendering the language select after a language switch failed");
+                }
+            },
+            Logger,
+            CancellationToken.None,
+            TaskContinuationOptions.NotOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+}

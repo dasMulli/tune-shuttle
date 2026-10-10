@@ -6,10 +6,25 @@
     <!-- Blazor WASM apps are not documented libraries; keep the doc-file requirement off here. -->
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <!-- Keep the defaults (no AOT, no native relinking, no SIMD override): any of those needs the wasm-tools workload. -->
+    <!-- Culture-aware formatting (UI-SPEC 3.3): Directory.Build.props turns globalization off for every project; the web
+         app needs ICU so 1234.5.ToString("N1") prints 1.234,5 in German. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- All ICU data (icudt.dat), not the shard picked from navigator.language at boot: the user switches to ru/uk at runtime. -->
+    <BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The message catalogs (i18next JSON), embedded so the first render and the bUnit tests have them without HTTP. -->
+    <EmbeddedResource Include="Resources\i18n\*.json" LogicalName="Bridge.Web.Resources.i18n.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Bridge.Contracts\Bridge.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The catalog's lookup tests build an I18n over hand-made catalogs (internal constructor). -->
+    <InternalsVisibleTo Include="Bridge.Tests" />
   </ItemGroup>
 
   <ItemGroup>

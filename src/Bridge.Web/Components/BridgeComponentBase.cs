@@ -1,11 +1,13 @@
+using Bridge.Web.Localization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
 
 namespace Bridge.Web.Components;
 
 /// <summary>
-/// Base of the pages and components that show <see cref="BridgeState"/>: re-renders on <see cref="BridgeState.Changed"/>,
-/// offers a <see cref="Lifetime"/> token that is cancelled when the component goes away, and <see cref="Observe"/> for
+/// Base of the pages and components that show <see cref="BridgeState"/>: re-renders on <see cref="BridgeState.Changed"/>
+/// and on <see cref="I18n.Changed"/> (a language switch re-renders the whole app without a reload), exposes the catalog as
+/// <see cref="L"/>, offers a <see cref="Lifetime"/> token that is cancelled when the component goes away, and <see cref="Observe"/> for
 /// work that is not awaited by a handler (timers), so no task fails unobserved.
 /// </summary>
 public abstract class BridgeComponentBase : ComponentBase, IDisposable
@@ -20,6 +22,10 @@ public abstract class BridgeComponentBase : ComponentBase, IDisposable
     /// <summary>The actions.</summary>
     [Inject]
     protected BridgeCommands Commands { get; set; } = default!;
+
+    /// <summary>The message catalog in the current language (<c>L["key"]</c>, <c>L.Format(…)</c>, <c>L.Plural(…)</c>).</summary>
+    [Inject]
+    protected I18n L { get; set; } = default!;
 
     /// <summary>Logger factory.</summary>
     [Inject]
@@ -38,6 +44,7 @@ public abstract class BridgeComponentBase : ComponentBase, IDisposable
 
         _disposed = true;
         State.Changed -= OnStateChanged;
+        L.Changed -= OnLanguageSwitched;
         _lifetime.Cancel();
         Dispose(true);
         _lifetime.Dispose();
@@ -48,10 +55,16 @@ public abstract class BridgeComponentBase : ComponentBase, IDisposable
     protected override void OnInitialized()
     {
         State.Changed += OnStateChanged;
+        L.Changed += OnLanguageSwitched;
     }
 
     /// <summary>Called on the renderer's context after the state changed, before the component re-renders.</summary>
     protected virtual void OnBridgeStateChanged()
+    {
+    }
+
+    /// <summary>Called on the renderer's context after the language changed, before the component re-renders.</summary>
+    protected virtual void OnLanguageChanged()
     {
     }
 
@@ -98,6 +111,18 @@ public abstract class BridgeComponentBase : ComponentBase, IDisposable
             Observe(InvokeAsync(() =>
             {
                 OnBridgeStateChanged();
+                StateHasChanged();
+            }));
+        }
+    }
+
+    private void OnLanguageSwitched()
+    {
+        if (!_disposed)
+        {
+            Observe(InvokeAsync(() =>
+            {
+                OnLanguageChanged();
                 StateHasChanged();
             }));
         }

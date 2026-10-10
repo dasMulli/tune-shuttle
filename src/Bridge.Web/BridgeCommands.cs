@@ -1,5 +1,6 @@
 using System.Net;
 using Bridge.Contracts;
+using Bridge.Web.Localization;
 using Microsoft.Extensions.Logging;
 
 namespace Bridge.Web;
@@ -7,23 +8,30 @@ namespace Bridge.Web;
 /// <summary>
 /// The actions the pages trigger: each calls <see cref="BridgeApiClient"/>, applies the answer to <see cref="BridgeState"/>
 /// at once (the matching WebSocket event arrives shortly after and carries the same data), and turns failures into a
-/// banner notice with the service's problem details. Methods return false (or null) on failure and never throw for API,
-/// network or timeout errors, so a click handler cannot crash the app; cancellation still propagates.
+/// notice with the service's problem details. Methods return false (or null) on failure and never throw for API,
+/// network or timeout errors, so a click handler cannot crash the app; cancellation still propagates. Notice texts come
+/// from the catalog (<c>notices.*</c> around an <c>actions.*</c> phrase, UI-SPEC 4.9) in the language current when the
+/// command runs; service-originated text (problem details) stays as the service sends it.
 /// </summary>
 public sealed class BridgeCommands
 {
     private readonly BridgeApiClient _api;
+    private static readonly Lazy<I18n> s_english = new(() => new I18n(I18n.DefaultCulture));
+
     private readonly BridgeState _state;
+    private readonly I18n _l;
     private readonly ILogger<BridgeCommands> _logger;
 
     /// <summary>Creates the commands.</summary>
-    public BridgeCommands(BridgeApiClient api, BridgeState state, ILogger<BridgeCommands> logger)
+    public BridgeCommands(BridgeApiClient api, BridgeState state, I18n i18n, ILogger<BridgeCommands> logger)
     {
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(i18n);
         ArgumentNullException.ThrowIfNull(logger);
         _api = api;
         _state = state;
+        _l = i18n;
         _logger = logger;
     }
 
@@ -31,7 +39,7 @@ public sealed class BridgeCommands
     public BridgeApiClient Api => _api;
 
     /// <summary>Loads everything over REST into the state (start-up; skipped by the state once the WebSocket snapshot is in).</summary>
-    public Task<bool> RefreshAsync(CancellationToken ct) => RunAsync("Loading the bridge state", async () =>
+    public Task<bool> RefreshAsync(CancellationToken ct) => RunAsync(_l["actions.refresh"], async () =>
     {
         _state.Load(await _api.GetSnapshotAsync(ct).ConfigureAwait(false));
     });
@@ -39,30 +47,30 @@ public sealed class BridgeCommands
     // ---- receivers -----------------------------------------------------------------------------------------------
 
     /// <summary>Connects a receiver as the single output.</summary>
-    public Task<bool> ConnectAsync(string receiverId, CancellationToken ct) => RunAsync($"Connecting {_state.NameOf(receiverId)}", async () =>
+    public Task<bool> ConnectAsync(string receiverId, CancellationToken ct) => RunAsync(_l.Format("actions.connect", ("name", _state.NameOf(receiverId))), async () =>
     {
         var receiver = await _api.ConnectAsync(receiverId, ct).ConfigureAwait(false);
         _state.ApplyReceiver(receiver);
         if (receiver.State == ReceiverConnectionState.Error && receiver.Pairing != PairingState.PinRequired)
         {
-            _state.Notify(NoticeKind.Error, $"{receiver.Name}: {receiver.Error ?? "the connection failed."}");
+            _state.Notify(NoticeKind.Error, _l.Format("notices.connectFailed", ("name", receiver.Name), ("error", receiver.Error ?? _l["notices.connectFailedDefault"])));
         }
     });
 
     /// <summary>Disconnects a receiver.</summary>
-    public Task<bool> DisconnectAsync(string receiverId, CancellationToken ct) => RunAsync($"Disconnecting {_state.NameOf(receiverId)}", async () =>
+    public Task<bool> DisconnectAsync(string receiverId, CancellationToken ct) => RunAsync(_l.Format("actions.disconnect", ("name", _state.NameOf(receiverId))), async () =>
         _state.ApplyReceiver(await _api.DisconnectAsync(receiverId, ct).ConfigureAwait(false)));
 
     /// <summary>Sets r_i of a receiver (its member level inside the active group).</summary>
-    public Task<bool> SetReceiverLevelAsync(string receiverId, int level, CancellationToken ct) => RunAsync($"Setting the volume of {_state.NameOf(receiverId)}", async () =>
+    public Task<bool> SetReceiverLevelAsync(string receiverId, int level, CancellationToken ct) => RunAsync(_l.Format("actions.setVolume", ("name", _state.NameOf(receiverId))), async () =>
         _state.ApplyReceiver(await _api.SetReceiverVolumeAsync(receiverId, Math.Clamp(level, 0, 100), ct).ConfigureAwait(false)));
 
     /// <summary>Sets a receiver's latency trim in frames (±2 s).</summary>
-    public Task<bool> SetOffsetAsync(string receiverId, int offsetFrames, CancellationToken ct) => RunAsync($"Setting the offset of {_state.NameOf(receiverId)}", async () =>
+    public Task<bool> SetOffsetAsync(string receiverId, int offsetFrames, CancellationToken ct) => RunAsync(_l.Format("actions.setOffset", ("name", _state.NameOf(receiverId))), async () =>
         _state.ApplyReceiver(await _api.SetReceiverOffsetAsync(receiverId, offsetFrames, ct).ConfigureAwait(false)));
 
     /// <summary>Starts a PIN pairing: the receiver shows its PIN and the dialog opens.</summary>
-    public Task<bool> StartPairingAsync(string receiverId, CancellationToken ct) => RunAsync($"Starting the pairing with {_state.NameOf(receiverId)}", async () =>
+    public Task<bool> StartPairingAsync(string receiverId, CancellationToken ct) => RunAsync(_l.Format("actions.startPairing", ("name", _state.NameOf(receiverId))), async () =>
     {
         var started = await _api.StartPairingAsync(receiverId, ct).ConfigureAwait(false);
         _state.OpenPairing(new PairingPrompt(receiverId, started.PairingToken, started.Message, PairingPromptOrigin.User));
@@ -77,7 +85,7 @@ public sealed class BridgeCommands
         ArgumentNullException.ThrowIfNull(prompt);
         if (string.IsNullOrWhiteSpace(pin))
         {
-            return new PinResult(PinOutcome.Invalid, "Enter the PIN the receiver shows.");
+            return new PinResult(PinOutcome.Invalid, _l["pairing.invalid"]);
         }
 
         try
@@ -85,7 +93,7 @@ public sealed class BridgeCommands
             var receiver = await _api.FinishPairingAsync(prompt.ReceiverId, new PairingPinRequest(prompt.Token, pin.Trim()), ct).ConfigureAwait(false);
             _state.ApplyReceiver(receiver);
             _state.ClosePairing(prompt.Token);
-            _state.Notify(NoticeKind.Success, $"Paired with {receiver.Name}.");
+            _state.Notify(NoticeKind.Success, _l.Format("notices.paired", ("name", receiver.Name)));
             return new PinResult(PinOutcome.Paired, null);
         }
         catch (BridgeApiException ex) when (ex.StatusCode == HttpStatusCode.UnprocessableEntity)
@@ -99,12 +107,12 @@ public sealed class BridgeCommands
         catch (Exception ex) when (IsFailure(ex, ct))
         {
             _logger.LogWarning("Pairing with {Receiver} failed: {Error}", prompt.ReceiverId, ex.Message);
-            return new PinResult(PinOutcome.Failed, Describe(ex));
+            return new PinResult(PinOutcome.Failed, Describe(ex, _l));
         }
     }
 
     /// <summary>Forgets a stored pairing.</summary>
-    public Task<bool> ForgetPairingAsync(string receiverId, CancellationToken ct) => RunAsync($"Forgetting the pairing of {_state.NameOf(receiverId)}", async () =>
+    public Task<bool> ForgetPairingAsync(string receiverId, CancellationToken ct) => RunAsync(_l.Format("actions.forgetPairing", ("name", _state.NameOf(receiverId))), async () =>
     {
         await _api.ForgetPairingAsync(receiverId, ct).ConfigureAwait(false);
         _state.ApplyReceiver(await _api.GetReceiverAsync(receiverId, ct).ConfigureAwait(false));
@@ -116,7 +124,7 @@ public sealed class BridgeCommands
     public async Task<GroupDto?> CreateGroupAsync(string name, CancellationToken ct)
     {
         GroupDto? created = null;
-        await RunAsync($"Creating the group {name}", async () =>
+        await RunAsync(_l.Format("actions.createGroup", ("name", name)), async () =>
         {
             created = await _api.CreateGroupAsync(name, ct).ConfigureAwait(false);
             _state.ApplyGroup(created);
@@ -125,29 +133,29 @@ public sealed class BridgeCommands
     }
 
     /// <summary>Renames a group.</summary>
-    public Task<bool> RenameGroupAsync(string groupId, string name, CancellationToken ct) => RunAsync("Renaming the group", async () =>
+    public Task<bool> RenameGroupAsync(string groupId, string name, CancellationToken ct) => RunAsync(_l["actions.renameGroup"], async () =>
         _state.ApplyGroup(await _api.RenameGroupAsync(groupId, name, ct).ConfigureAwait(false)));
 
     /// <summary>Deletes a group.</summary>
-    public Task<bool> DeleteGroupAsync(string groupId, CancellationToken ct) => RunAsync("Deleting the group", async () =>
+    public Task<bool> DeleteGroupAsync(string groupId, CancellationToken ct) => RunAsync(_l["actions.deleteGroup"], async () =>
     {
         await _api.DeleteGroupAsync(groupId, ct).ConfigureAwait(false);
         _state.RemoveGroup(groupId);
     });
 
     /// <summary>Adds a member (with the receiver's own level unless given).</summary>
-    public Task<bool> AddMemberAsync(string groupId, string receiverId, int? level, CancellationToken ct) => RunAsync($"Adding {_state.NameOf(receiverId)}", async () =>
+    public Task<bool> AddMemberAsync(string groupId, string receiverId, int? level, CancellationToken ct) => RunAsync(_l.Format("actions.addMember", ("name", _state.NameOf(receiverId))), async () =>
         _state.ApplyGroup(await _api.AddGroupMemberAsync(groupId, receiverId, level, ct).ConfigureAwait(false)));
 
     /// <summary>Removes a member.</summary>
-    public Task<bool> RemoveMemberAsync(string groupId, string receiverId, CancellationToken ct) => RunAsync($"Removing {_state.NameOf(receiverId)}", async () =>
+    public Task<bool> RemoveMemberAsync(string groupId, string receiverId, CancellationToken ct) => RunAsync(_l.Format("actions.removeMember", ("name", _state.NameOf(receiverId))), async () =>
         _state.ApplyGroup(await _api.RemoveGroupMemberAsync(groupId, receiverId, ct).ConfigureAwait(false)));
 
     /// <summary>
     /// Sets a member's r_i. In the active group this is the receiver's volume route (it reaches the receiver at once); in
     /// an inactive group the member is re-added with the new level (stored for the next activation).
     /// </summary>
-    public Task<bool> SetMemberLevelAsync(string groupId, string receiverId, int level, CancellationToken ct) => RunAsync($"Setting the volume of {_state.NameOf(receiverId)}", async () =>
+    public Task<bool> SetMemberLevelAsync(string groupId, string receiverId, int level, CancellationToken ct) => RunAsync(_l.Format("actions.setVolume", ("name", _state.NameOf(receiverId))), async () =>
     {
         level = Math.Clamp(level, 0, 100);
         if (_state.Output.GroupId == groupId)
@@ -163,31 +171,46 @@ public sealed class BridgeCommands
     });
 
     /// <summary>Sets G of a group; the service scales the members.</summary>
-    public Task<bool> SetGroupLevelAsync(string groupId, int level, CancellationToken ct) => RunAsync("Setting the group volume", async () =>
+    public Task<bool> SetGroupLevelAsync(string groupId, int level, CancellationToken ct) => RunAsync(_l["actions.setGroupVolume"], async () =>
         _state.ApplyGroup(await _api.SetGroupVolumeAsync(groupId, Math.Clamp(level, 0, 100), ct).ConfigureAwait(false)));
 
     /// <summary>Selects a group as the output.</summary>
-    public Task<bool> ActivateGroupAsync(string groupId, CancellationToken ct) => RunAsync("Activating the group", async () =>
+    public Task<bool> ActivateGroupAsync(string groupId, CancellationToken ct) => RunAsync(_l["actions.activateGroup"], async () =>
         _state.ApplyOutput(await _api.ActivateGroupAsync(groupId, ct).ConfigureAwait(false)));
 
     /// <summary>Deselects the output (audio is discarded until something is selected).</summary>
-    public Task<bool> ClearOutputAsync(CancellationToken ct) => RunAsync("Stopping the output", async () =>
+    public Task<bool> ClearOutputAsync(CancellationToken ct) => RunAsync(_l["actions.stopOutput"], async () =>
         _state.ApplyOutput(await _api.SetOutputAsync(new OutputRequest(null, null), ct).ConfigureAwait(false)));
 
     // ---- playback, settings --------------------------------------------------------------------------------------
 
-    /// <summary>Sends play, pause, next or prev to Spotify.</summary>
-    public Task<bool> PlaybackAsync(string command, CancellationToken ct) => RunAsync($"Sending {command}", async () =>
-        _state.ApplyPlayback(await _api.SendPlaybackCommandAsync(command, ct).ConfigureAwait(false)));
+    /// <summary>
+    /// Sends <c>"play"</c>, <c>"pause"</c>, <c>"next"</c> or <c>"prev"</c> to Spotify. Any other value throws
+    /// <see cref="ArgumentOutOfRangeException"/> (the four transport buttons are the only callers), so no raw command word
+    /// ends up in a notice sentence.
+    /// </summary>
+    public Task<bool> PlaybackAsync(string command, CancellationToken ct)
+    {
+        var what = command switch
+        {
+            "play" => _l["actions.playbackPlay"],
+            "pause" => _l["actions.playbackPause"],
+            "next" => _l["actions.playbackNext"],
+            "prev" => _l["actions.playbackPrevious"],
+            _ => throw new ArgumentOutOfRangeException(nameof(command), command, "Expected play, pause, next or prev."),
+        };
+        return RunAsync(what, async () =>
+            _state.ApplyPlayback(await _api.SendPlaybackCommandAsync(command, ct).ConfigureAwait(false)));
+    }
 
     /// <summary>Saves the settings; returns them as stored, or null on failure.</summary>
     public async Task<SettingsDto?> SaveSettingsAsync(SettingsDto settings, CancellationToken ct)
     {
         SettingsDto? saved = null;
-        var ok = await RunAsync("Saving the settings", async () => saved = await _api.SetSettingsAsync(settings, ct).ConfigureAwait(false)).ConfigureAwait(false);
+        var ok = await RunAsync(_l["actions.saveSettings"], async () => saved = await _api.SetSettingsAsync(settings, ct).ConfigureAwait(false)).ConfigureAwait(false);
         if (ok)
         {
-            _state.Notify(NoticeKind.Success, "Settings saved.");
+            _state.Notify(NoticeKind.Success, _l["notices.settingsSaved"]);
         }
 
         return saved;
@@ -196,23 +219,32 @@ public sealed class BridgeCommands
     /// <summary>Forgets the cached Spotify credentials.</summary>
     public async Task<bool> ForgetSpotifyAsync(CancellationToken ct)
     {
-        var ok = await RunAsync("Forgetting the Spotify login", () => _api.ForgetSpotifyAsync(ct)).ConfigureAwait(false);
+        var ok = await RunAsync(_l["actions.forgetSpotify"], () => _api.ForgetSpotifyAsync(ct)).ConfigureAwait(false);
         if (ok)
         {
-            _state.Notify(NoticeKind.Info, "The Spotify login is forgotten; select the bridge in a Spotify app to log in again.");
+            _state.Notify(NoticeKind.Info, _l["notices.spotifyForgotten"]);
         }
 
         return ok;
     }
 
-    /// <summary>A one-line description of a failure for a notice.</summary>
-    public static string Describe(Exception ex) => ex switch
+    /// <summary>
+    /// A one-line description of a failure for a notice or an inline error: the service's problem details as it sends
+    /// them (title and detail, untranslated, UI-SPEC 3.5), otherwise notices.unreachable / notices.timeout from
+    /// <paramref name="i18n"/> (pages pass their <c>L</c>; English when null).
+    /// </summary>
+    public static string Describe(Exception ex, I18n? i18n = null)
     {
-        BridgeApiException api => $"{api.Title}: {api.Detail}",
-        HttpRequestException => "The bridge is not reachable: " + ex.Message,
-        TaskCanceledException or TimeoutException => "The bridge did not answer in time.",
-        _ => ex.Message,
-    };
+        ArgumentNullException.ThrowIfNull(ex);
+        var l = i18n ?? s_english.Value;
+        return ex switch
+        {
+            BridgeApiException api => $"{api.Title}: {api.Detail}",
+            HttpRequestException => l.Format("notices.unreachable", ("error", ex.Message)),
+            TaskCanceledException or TimeoutException => l["notices.timeout"],
+            _ => ex.Message,
+        };
+    }
 
     private async Task<bool> RunAsync(string what, Func<Task> action)
     {
@@ -224,7 +256,7 @@ public sealed class BridgeCommands
         catch (Exception ex) when (IsFailure(ex, CancellationToken.None))
         {
             _logger.LogWarning("{What} failed: {Error}", what, ex.Message);
-            _state.Notify(NoticeKind.Error, $"{what} failed. {Describe(ex)}");
+            _state.Notify(NoticeKind.Error, _l.Format("notices.failed", ("what", what), ("detail", Describe(ex, _l))));
             return false;
         }
     }

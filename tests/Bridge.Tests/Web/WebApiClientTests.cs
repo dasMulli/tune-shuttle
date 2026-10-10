@@ -5,6 +5,7 @@ using Airplay2.FakeReceiver;
 using Bridge.Contracts;
 using Bridge.Tests.Service;
 using Bridge.Web;
+using Bridge.Web.Localization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -141,7 +142,7 @@ public sealed class WebApiClientTests
         Assert.Equal("AirPlay Bridge", state.Status!.DeviceName);
 
         // A change made by someone else (another tab, the API) arrives by itself.
-        var commands = new BridgeCommands(api, new BridgeState(), NullLogger<BridgeCommands>.Instance);
+        var commands = new BridgeCommands(api, new BridgeState(), new I18n(), NullLogger<BridgeCommands>.Instance);
         Assert.True(await commands.ConnectAsync(a.Id, CancellationToken.None));
         await WebClients.WaitUntilAsync(() => state.Receiver(a.Id)?.State == ReceiverConnectionState.Connected && state.Output.ReceiverId == a.Id, "receiverChanged + outputChanged");
         Assert.True(await commands.SetReceiverLevelAsync(a.Id, 33, CancellationToken.None));
@@ -291,7 +292,7 @@ public sealed class WebApiClientTests
         await using var factory = new BridgeFactory();
         factory.Browser.Add(pin.Describe());
         var state = new BridgeState();
-        var commands = new BridgeCommands(WebClients.Api(factory), state, NullLogger<BridgeCommands>.Instance);
+        var commands = new BridgeCommands(WebClients.Api(factory), state, new I18n(), NullLogger<BridgeCommands>.Instance);
         await using var events = WebClients.Events(factory, state);
         events.Start();
         await WebClients.WaitUntilAsync(() => state.Receiver(pin.Id)?.Pairing == PairingState.PinRequired, "the PIN receiver");
@@ -328,7 +329,7 @@ public sealed class WebApiClientTests
     {
         await using var factory = new BridgeFactory();
         var state = new BridgeState();
-        var commands = new BridgeCommands(WebClients.Api(factory), state, NullLogger<BridgeCommands>.Instance);
+        var commands = new BridgeCommands(WebClients.Api(factory), state, new I18n(), NullLogger<BridgeCommands>.Instance);
 
         Assert.False(await commands.ConnectAsync("no:such:id", CancellationToken.None));
         var notice = Assert.Single(state.Notices);
