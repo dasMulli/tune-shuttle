@@ -6,9 +6,9 @@
     <PackageVersion Include="Grpc.Tools" Version="2.84.0" />
 
     <!-- Logging: librespot's `log` crate maps to Microsoft.Extensions.Logging via Librespot.Core.Logging.LibrespotLog. -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.14" />
 
     <!-- Audio decoding (symphonia replacement): NVorbis for Ogg Vorbis, NLayer for MP3 (podcasts). -->
     <PackageVersion Include="NVorbis" Version="0.10.5" />
