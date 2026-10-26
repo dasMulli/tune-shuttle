@@ -112,6 +112,30 @@ public sealed class BridgeState
     /// <summary>When <see cref="Playback"/> arrived (the position is extrapolated from it while playing).</summary>
     public DateTimeOffset PlaybackReceivedAt { get; private set; }
 
+    /// <summary>The <see cref="PlaybackDto.Source"/> / <see cref="StatusDto.ActiveSource"/> value of the AirPlay receiver (SPEC-receiver.md 9.1).</summary>
+    public const string AirplaySource = "airplay";
+
+    /// <summary>
+    /// True while AirPlay owns the output (SPEC-receiver.md 8.2, 9.2): the playback's <see cref="PlaybackDto.Source"/>
+    /// decides (it is always the owner's view); without one the status's <see cref="StatusDto.ActiveSource"/>. False
+    /// for <c>"spotify"</c> and when neither says anything, so a service that predates the fields renders as Spotify.
+    /// </summary>
+    public bool AirplayOwnsOutput => Playback?.Source is { } source
+        ? source == AirplaySource
+        : Status?.ActiveSource == AirplaySource;
+
+    /// <summary>
+    /// The <c>src</c> of an artwork URL (SPEC-receiver.md 9.1-9.2): absolute URLs (Spotify's CDN) and protocol-relative
+    /// ones stay; a rooted path such as the AirPlay <c>/api/playback/artwork?v=…</c> loses its leading slash, so the
+    /// browser resolves it against the app's <c>&lt;base href&gt;</c> and the image also loads under a path base (as
+    /// <see cref="BridgeApiClient"/> sends its routes).
+    /// </summary>
+    public static string ArtworkSource(string url)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        return url.StartsWith('/') && !url.StartsWith("//", StringComparison.Ordinal) ? url[1..] : url;
+    }
+
     /// <summary>The event connection.</summary>
     public EventConnectionState Connection { get; private set; } = EventConnectionState.Disconnected;
 

@@ -781,6 +781,7 @@ select.input {
 .hero__progress .meta { font-variant-numeric: tabular-nums; flex: none; }
 .hero__progress .track { height: 8px; }
 .transport { display: flex; align-items: center; justify-content: center; gap: 1rem; }
+.transport__hint { margin: 0; text-align: center; } /* the AirPlay no-control hint (SPEC-receiver.md 9.2) */
 
 .master { display: flex; flex-direction: column; gap: .5rem; padding-top: .4rem; border-top: 1px solid var(--line); min-width: 0; }
 .master__head { display: flex; align-items: center; justify-content: space-between; gap: .25rem .75rem; flex-wrap: wrap; }

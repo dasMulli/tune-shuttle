@@ -209,6 +209,154 @@ public sealed class PlayerTests : ComponentTestBase
             TimeSpan.FromSeconds(5));
     }
 
+    // ---- AirPlay as the source (SPEC-receiver.md 9.2) -----------------------------------------------------------
+
+    [Fact]
+    public void Airplay_chip_names_the_sender_instead_of_the_spotify_chip()
+    {
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        _state.Apply(new BridgeEvent.StatusChanged(AirplayStatus("Test Phone")));
+        _state.Apply(new BridgeEvent.PlaybackChanged(AirplayPlayback()));
+        var cut = _ctx.Render<NowPlayingHero>();
+
+        var chip = Assert.Single(cut.FindAll(".hero .chip"));
+        Assert.Contains("chip--accent", chip.ClassList);
+        Assert.Equal("AirPlay · Test Phone", chip.TextContent);
+        Assert.Equal("Song", cut.Find(".hero__title").TextContent);
+        Assert.Equal("Artist", cut.Find(".hero__artist").TextContent);
+        Assert.Equal("Album · 3:20", cut.Find(".hero__info .meta").TextContent);
+    }
+
+    [Fact]
+    public async Task Airplay_chip_without_a_sender_name_says_airplay_only_in_english_and_german()
+    {
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        _state.Apply(new BridgeEvent.StatusChanged(AirplayStatus(null)));
+        _state.Apply(new BridgeEvent.PlaybackChanged(AirplayPlayback()));
+        var cut = _ctx.Render<NowPlayingHero>();
+
+        var chip = Assert.Single(cut.FindAll(".hero .chip"));
+        Assert.Contains("chip--accent", chip.ClassList);
+        Assert.Equal("AirPlay", chip.TextContent);
+
+        // Without any status yet the chip still follows the playback's source.
+        var (ctx, state, _, _, _) = UiTest.Create("de");
+        await using var context = ctx;
+        state.Apply(new BridgeEvent.PlaybackChanged(AirplayPlayback()));
+        var german = ctx.Render<NowPlayingHero>();
+        Assert.Equal("AirPlay", Assert.Single(german.FindAll(".hero .chip")).TextContent);
+        Assert.Equal("Steuerung am Apple-Gerät", german.Find(".transport__hint").TextContent);
+    }
+
+    [Fact]
+    public void Airplay_disables_the_transport_with_the_apple_device_hint()
+    {
+        var api = UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        _state.Apply(new BridgeEvent.StatusChanged(AirplayStatus("Test Phone")));
+        _state.Apply(new BridgeEvent.PlaybackChanged(AirplayPlayback()));
+        var cut = _ctx.Render<NowPlayingHero>();
+
+        var buttons = cut.FindAll(".transport button");
+        Assert.Equal(3, buttons.Count);
+        Assert.All(buttons, b =>
+        {
+            Assert.True(b.HasAttribute("disabled"));
+            Assert.Equal("hero-transport-hint", b.GetAttribute("aria-describedby"));
+        });
+        var hint = cut.Find(".transport__hint");
+        Assert.Contains("meta", hint.ClassList);
+        Assert.Equal("hero-transport-hint", hint.Id);
+        Assert.Equal("Control it on the Apple device", hint.TextContent);
+
+        cut.Find("button[aria-label=Pause]").Click(); // bUnit dispatches even to a disabled button: still no command
+        Assert.Empty(api.Requests);
+    }
+
+    [Fact]
+    public void Airplay_master_volume_follows_the_sender()
+    {
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        UseReceiverOutput(40);
+        _state.Apply(new BridgeEvent.StatusChanged(AirplayStatus("Test Phone")));
+        _state.Apply(new BridgeEvent.PlaybackChanged(AirplayPlayback()));
+        var cut = _ctx.Render<Player>();
+
+        Assert.Equal("follows the sender", cut.Find(".master__head .meta").TextContent);
+        Assert.False(cut.Find(".master input[type=range]").HasAttribute("disabled"));
+
+        // Spotify takes the output back: the Spotify texts return.
+        _state.Apply(new BridgeEvent.StatusChanged(Dto.Status(spotify: true) with { ActiveSource = "spotify" }));
+        _state.Apply(new BridgeEvent.PlaybackChanged(Dto.Playback(playing: true, position: 1000, duration: 200_000, title: "Song") with { Source = "spotify" }));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("follows the Spotify slider", cut.Find(".master__head .meta").TextContent);
+            Assert.Equal("Spotify · martin", Assert.Single(cut.FindAll(".hero .chip")).TextContent);
+            Assert.Empty(cut.FindAll(".transport__hint"));
+            Assert.All(cut.FindAll(".transport button"), b => Assert.False(b.HasAttribute("disabled")));
+        });
+    }
+
+    [Theory]
+    [InlineData("spotify")]
+    [InlineData(null)]
+    public void Spotify_or_unknown_source_renders_the_spotify_hero(string? source)
+    {
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        UseReceiverOutput(40);
+        _state.Apply(new BridgeEvent.StatusChanged(Dto.Status(spotify: true) with { ActiveSource = source }));
+        _state.Apply(new BridgeEvent.PlaybackChanged(Dto.Playback(playing: true, position: 61_000, duration: 200_000, title: "Song") with { Source = source }));
+        var cut = _ctx.Render<Player>();
+
+        var chip = Assert.Single(cut.FindAll(".hero .chip"));
+        Assert.Contains("chip--accent", chip.ClassList);
+        Assert.Equal("Spotify · martin", chip.TextContent);
+        Assert.Empty(cut.FindAll(".transport__hint"));
+        Assert.All(cut.FindAll(".transport button"), b =>
+        {
+            Assert.False(b.HasAttribute("disabled"));
+            Assert.False(b.HasAttribute("aria-describedby"));
+        });
+        Assert.Equal("follows the Spotify slider", cut.Find(".master__head .meta").TextContent);
+        Assert.DoesNotContain("AirPlay", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Airplay_artwork_with_a_relative_url_resolves_against_the_app_base()
+    {
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        _state.Apply(new BridgeEvent.PlaybackChanged(AirplayPlayback() with { ArtworkUrl = "/api/playback/artwork?v=12345" }));
+        var cut = _ctx.Render<NowPlayingHero>();
+
+        // The leading slash is dropped (as BridgeApiClient does for routes) so the image also loads under a path base.
+        var img = cut.Find("img.art");
+        Assert.Equal("api/playback/artwork?v=12345", img.GetAttribute("src"));
+        Assert.Equal("Cover of Album", img.GetAttribute("alt"));
+        Assert.Empty(cut.FindAll(".art--placeholder"));
+    }
+
+    [Theory]
+    [InlineData("https://i.scdn.co/image/abc", "https://i.scdn.co/image/abc")]
+    [InlineData("/api/playback/artwork?v=1", "api/playback/artwork?v=1")]
+    [InlineData("api/playback/artwork?v=1", "api/playback/artwork?v=1")]
+    [InlineData("//cdn.example/x.jpg", "//cdn.example/x.jpg")]
+    public void Artwork_source_keeps_absolute_urls_and_makes_rooted_paths_base_relative(string url, string expected) =>
+        Assert.Equal(expected, BridgeState.ArtworkSource(url));
+
+    [Fact]
+    public void Airplay_position_ticks_from_the_reported_position_while_playing()
+    {
+        var time = new ManualTime(DateTimeOffset.UnixEpoch.AddDays(1));
+        var state = new BridgeState(time);
+        _ctx.Services.AddSingleton(state); // the last registration wins over the fixture's state
+        UseApi((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound));
+        state.Apply(new BridgeEvent.PlaybackChanged(AirplayPlayback() with { PositionMs = 61_000 }));
+        var cut = _ctx.Render<NowPlayingHero>();
+        Assert.Equal("1:01", cut.Find(".hero__progress > .meta").TextContent);
+
+        time.Now += TimeSpan.FromSeconds(5); // no state change: only the 1 s timer re-renders
+        cut.WaitForAssertion(() => Assert.Equal("1:06", cut.Find(".hero__progress > .meta").TextContent), TimeSpan.FromSeconds(5));
+    }
+
     // ---- master volume -------------------------------------------------------------------------------------------
 
     [Fact]
@@ -953,6 +1101,12 @@ public sealed class PlayerTests : ComponentTestBase
     }
 
     // ---- helpers -------------------------------------------------------------------------------------------------
+
+    private static StatusDto AirplayStatus(string? sender) =>
+        Dto.Status(spotify: true) with { ActiveSource = "airplay", Airplay = new AirplayReceiverDto("streaming", "TuneShuttle", sender, null, true) };
+
+    private static PlaybackDto AirplayPlayback() =>
+        new(true, null, "Song", "Artist", "Album", 1000, 200_000, null, 0, "airplay");
 
     private static string[] Fills(IRenderedComponent<Player> cut) =>
         [.. cut.FindAll(".master .member .track__fill").Select(f => f.GetAttribute("style")!)];

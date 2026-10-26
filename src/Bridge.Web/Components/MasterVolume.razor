@@ -3,7 +3,8 @@
    with nothing selected the slider and the steppers are disabled and the number shows "–" (a glyph, not catalog text).
    The −/+ steppers call the slider's StepAsync(±5) through @ref (the contract with LevelSlider, 1.6), so a step goes
    through the same coalescing sender as a drag. For a group, the members' levels follow the dragged master live
-   (GroupVolumePreview): as .track bars on wide screens, as one wrapping members chip on phones. *@
+   (GroupVolumePreview): as .track bars on wide screens, as one wrapping members chip on phones. While AirPlay owns the
+   output the slider follows the sender's volume and the head says player.followsSender (SPEC-receiver.md 9.2). *@
 @inherits BridgeComponentBase
 
 @{
@@ -17,7 +18,7 @@
 <div class="master">
     <div class="master__head">
         <span class="label">@label</span>
-        <span class="meta">@L["player.followsSpotify"]</span>
+        <span class="meta">@(State.AirplayOwnsOutput ? L["player.followsSender"] : L["player.followsSpotify"])</span>
     </div>
     <div class="master__row">
         <LevelSlider @key="target.Key" @ref="_slider" Variant="LevelSlider.LevelVariant.Hero" Label="@label" HideLabel="true"

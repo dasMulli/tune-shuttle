@@ -128,8 +128,72 @@ public sealed partial class I18nTests
     [InlineData("uk", "nav.settings", "Параметри")]
     [InlineData("uk", "status.live", "в ефірі")]
     [InlineData("uk", "diagnostics.liveUpdatesValue_many", "{{state}} ({{count}} підключень, подій: {{events}})")]
+    [InlineData("fr", "settings.airplay", "Récepteur AirPlay")]
+    [InlineData("es", "settings.airplayEnabled", "Ofrecer como altavoz AirPlay")]
+    [InlineData("pt", "settings.airplayPassword", "Senha")]
+    [InlineData("ru", "diagnostics.airplayLate", "опозданий: {{late}} · пропусков: {{missing}} · дрейф: {{drift}}")]
+    [InlineData("uk", "diagnostics.airplayPtpNotBound", "Порт PTP не прив’язано (синхронізація лише за якорем)")]
     public void Translations_hold_their_own_language(string code, string key, string text) =>
         Assert.Equal(text, new I18n().Keys(code)[key]);
+
+    /// <summary>The catalog keys of the AirPlay receiver (SPEC-receiver.md 9.2), with the keys the wave 4 pages added.</summary>
+    private static readonly string[] AirplayKeys =
+    [
+        "player.airplayChip", "player.airplayOnly", "player.airplayNoControl", "player.followsSender",
+        "settings.airplay", "settings.airplayEnabled", "settings.airplayName", "settings.airplayNameHint",
+        "settings.airplayPassword", "settings.airplayPasswordHint", "settings.airplayPasswordSetHint",
+        "settings.airplayRemovePassword", "settings.airplayPasswordRemoved", "settings.validation.airplayNameEmpty",
+        "settings.validation.airplayNameTooLong", "settings.validation.airplayPasswordTooLong",
+        "diagnostics.airplay", "diagnostics.airplayState", "diagnostics.airplayStates.off",
+        "diagnostics.airplayStates.starting", "diagnostics.airplayStates.advertising", "diagnostics.airplayStates.connected",
+        "diagnostics.airplayStates.streaming", "diagnostics.airplayStates.error", "diagnostics.airplaySender",
+        "diagnostics.airplayStream", "diagnostics.airplayBuffer", "diagnostics.airplayLate", "diagnostics.airplayPtp",
+        "diagnostics.airplayPtpNotBound", "diagnostics.airplayDecoder",
+    ];
+
+    /// <summary>The AirPlay keys whose text is the same in every language (a brand name and placeholders only).</summary>
+    private static readonly string[] LanguageNeutralAirplayKeys = ["player.airplayChip", "player.airplayOnly", "diagnostics.airplayStream"];
+
+    /// <summary>Translations that are the English word because the language spells it the same (es "Error", as diagnostics.levels.error).</summary>
+    private static readonly string[] SameWordAsEnglish = ["es:diagnostics.airplayStates.error"];
+
+    [Theory]
+    [MemberData(nameof(Translations))]
+    public void Airplay_keys_are_translated_in_every_catalog_without_english_fallback(string code)
+    {
+        // SPEC-receiver.md 9.2, 11.1: every language has the receiver's keys, and outside en none of them is the English text.
+        var l = new I18n();
+        var en = l.Keys("en");
+        var catalog = l.Keys(code);
+        Assert.All(AirplayKeys, key =>
+        {
+            Assert.True(catalog.TryGetValue(key, out var text), $"{code}: {key} is missing");
+            if (code != "en" && !LanguageNeutralAirplayKeys.Contains(key) && !SameWordAsEnglish.Contains($"{code}:{key}"))
+            {
+                Assert.False(text == en[key], $"{code}: {key} is the English text \"{text}\"");
+            }
+        });
+        Assert.Empty(catalog.Keys.Where(k => k.Contains(".airplay", StringComparison.Ordinal) && k != "receivers.tags.airplay2").Except(AirplayKeys));
+    }
+
+    [Theory]
+    [InlineData("player.airplayChip", "AirPlay · {{sender}}", "AirPlay · {{sender}}")]
+    [InlineData("player.airplayNoControl", "Steuerung am Apple-Gerät", "Control it on the Apple device")]
+    [InlineData("player.followsSender", "folgt dem Sender", "follows the sender")]
+    [InlineData("settings.airplay", "AirPlay-Empfänger", "AirPlay receiver")]
+    [InlineData("settings.airplayEnabled", "Als AirPlay-Lautsprecher anbieten", "Offer as an AirPlay speaker")]
+    [InlineData("settings.airplayPasswordHint", "Apple-Geräte fragen danach; leer heißt: alle im Netzwerk", "Apple devices ask for it; empty means anyone on the network")]
+    [InlineData("diagnostics.airplayStates.advertising", "Sichtbar", "Advertising")]
+    [InlineData("diagnostics.airplayBuffer", "{{ms}} ms gepuffert · Versatz {{offset}} ms", "{{ms}} ms buffered · offset {{offset}} ms")]
+    [InlineData("diagnostics.airplayLate", "{{late}} verspätet · {{missing}} fehlend · {{drift}} Drift", "{{late}} late · {{missing}} missing · {{drift}} drift")]
+    [InlineData("diagnostics.airplayPtpNotBound", "PTP-Port nicht gebunden (Anker-Timing)", "PTP port not bound (anchor-only timing)")]
+    public void Airplay_catalogs_hold_the_texts_of_the_receiver_spec(string key, string de, string en)
+    {
+        // SPEC-receiver.md 9.2 table (de = source, en).
+        var l = new I18n();
+        Assert.Equal(de, l.Keys("de")[key]);
+        Assert.Equal(en, l.Keys("en")[key]);
+    }
 
     [Theory]
     [MemberData(nameof(Translations))]

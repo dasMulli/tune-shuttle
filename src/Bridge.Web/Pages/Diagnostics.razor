@@ -3,7 +3,7 @@
 @using Microsoft.Extensions.Logging
 @inject BridgeEventClient Events
 
-@* UI-SPEC 4.7: back link, then a grid of three fact cards and the full-width live log. Values that originate in the
+@* UI-SPEC 4.7: back link, then a grid of four fact cards (the fourth the AirPlay receiver, SPEC-receiver.md 9.2) and the full-width live log. Values that originate in the
    service (version, device and receiver names, addresses, probe names, log lines) are shown as sent (3.5). *@
 
 <PageTitle>@L.Format("app.pageTitle", ("page", L["nav.diagnostics"]))</PageTitle>
@@ -110,6 +110,42 @@
             else
             {
                 <p class="meta">@L["common.loading"]</p>
+            }
+        </section>
+
+        @* SPEC-receiver.md 9.2: the AirPlay receiver from StatusDto.Airplay (state, sender; live through the status events)
+           and DiagnosticsDto.Airplay (stream, buffer, counters, PTP, decoder; the 5 s refresh), in the spec's order: state,
+           sender, the four value lines (.meta, like the probes card), decoder. Loading until the status snapshot arrives (a
+           failed diagnostics request shows its error on the Network card); without the receiver part of the status it reads
+           as off, and without the diagnostics part the four lines are one dash instead of templates full of dashes. *@
+        <section class="card" aria-labelledby="diagnostics-airplay">
+            <div class="card__head"><h2 id="diagnostics-airplay">@L["diagnostics.airplay"]</h2></div>
+            @if (State.Status is not { } airplayStatus)
+            {
+                <p class="meta">@L["common.loading"]</p>
+            }
+            else
+            {
+                var receiver = airplayStatus.Airplay;
+                var airplay = _diagnostics?.Airplay;
+                <dl class="facts">
+                    <dt>@L["diagnostics.airplayState"]</dt><dd class="airplay-state">@AirplayStateWord(receiver?.State)</dd>
+                    <dt>@L["diagnostics.airplaySender"]</dt><dd class="airplay-sender">@OrDash(receiver?.SenderName)</dd>
+                </dl>
+                @if (airplay is not null)
+                {
+                    <p class="meta airplay-stream">@L.Format("diagnostics.airplayStream", ("type", OrDash(airplay.StreamType)), ("format", OrDash(airplay.Format)))</p>
+                    <p class="meta airplay-buffer">@L.Format("diagnostics.airplayBuffer", ("ms", Format.Integer(airplay.BufferedMs)), ("offset", Format.Integer(airplay.StreamOffsetMs)))</p>
+                    <p class="meta airplay-late">@L.Format("diagnostics.airplayLate", ("late", Format.Integer(airplay.LateFrames)), ("missing", Format.Integer(airplay.MissingFrames)), ("drift", Format.Integer(airplay.DriftCorrections)))</p>
+                    <p class="meta airplay-ptp">@PtpText(airplay)</p>
+                }
+                else
+                {
+                    <p class="meta airplay-none">@NoValue</p>
+                }
+                <dl class="facts">
+                    <dt>@L["diagnostics.airplayDecoder"]</dt><dd class="airplay-decoder">@OrDash(airplay?.DecoderStatus)</dd>
+                </dl>
             }
         </section>
 
@@ -311,6 +347,45 @@
             "diagnostics.retransmitRatioValue",
             ("percent", Format.Percent(d.RetransmitRequests / (double)d.PacketsSent, 1)),
             ("late", Format.Integer(d.LateWakeups)));
+
+    /// <summary>The digits of the PTP offset in milliseconds (SPEC-receiver.md 9.2: nanoseconds shown as ms, to the microsecond).</summary>
+    public const int PtpOffsetDigits = 3;
+
+    /// <summary>A service text, or <see cref="NoValue"/> when it is absent or empty (SPEC-receiver.md 9.2).</summary>
+    private static string OrDash(string? text) => string.IsNullOrEmpty(text) ? NoValue : text;
+
+    /// <summary>
+    /// The state word of the receiver (SPEC-receiver.md 9.1, 9.2: diagnostics.airplayStates.*): off without the status part,
+    /// a state this build does not know as sent (UI-SPEC 3.5).
+    /// </summary>
+    private string AirplayStateWord(string? state) => state switch
+    {
+        null or "off" => L["diagnostics.airplayStates.off"],
+        "starting" => L["diagnostics.airplayStates.starting"],
+        "advertising" => L["diagnostics.airplayStates.advertising"],
+        "connected" => L["diagnostics.airplayStates.connected"],
+        "streaming" => L["diagnostics.airplayStates.streaming"],
+        "error" => L["diagnostics.airplayStates.error"],
+        _ => state,
+    };
+
+    /// <summary>
+    /// The PTP line (SPEC-receiver.md 9.2, R5): diagnostics.airplayPtpNotBound in anchor-only timing, else the slave's offset
+    /// in milliseconds, a dash while there is no estimate.
+    /// </summary>
+    private string PtpText(AirplayDiagnosticsDto airplay) => airplay.PtpBound
+        ? L.Format("diagnostics.airplayPtp", ("ms", airplay.PtpOffsetNs is { } ns ? SignedMilliseconds(ns) : NoValue))
+        : L["diagnostics.airplayPtpNotBound"];
+
+    /// <summary>
+    /// Nanoseconds as milliseconds with <see cref="PtpOffsetDigits"/> digits in the culture, a negative value with
+    /// <see cref="Format.Minus"/> (U+2212, UI-SPEC 10) rather than the culture's hyphen (SPEC-receiver.md 9.2).
+    /// </summary>
+    internal static string SignedMilliseconds(long ns)
+    {
+        var magnitude = Format.Decimal(Math.Abs(ns / 1_000_000.0), PtpOffsetDigits);
+        return ns < 0 && magnitude.Any(c => c is >= '1' and <= '9') ? Format.Minus + magnitude : magnitude;
+    }
 
     private void Clear()
     {

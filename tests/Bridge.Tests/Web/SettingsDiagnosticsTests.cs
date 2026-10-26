@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using AngleSharp.Dom;
 using Bridge.Contracts;
 using Bridge.Web;
@@ -219,7 +220,7 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
 
         cut.Find("form .actions .btn--ghost").Click();
         cut.WaitForAssertion(() => Assert.StartsWith("The settings could not be loaded. Boom", cut.Find("form [role=alert]").TextContent, StringComparison.Ordinal));
-        Assert.Single(cut.FindAll("form")); // the values stay on screen
+        Assert.Equal("TuneShuttle", cut.Find("#device-name").GetAttribute("value")); // the values stay on screen
         Assert.Equal("Retry", cut.Find(".settings-retry").TextContent);
 
         cut.Find(".settings-retry").Click();
@@ -829,6 +830,299 @@ public sealed class SettingsDiagnosticsTests : ComponentTestBase
         // ... and the loop goes on: the third refresh brings new values and clears the error.
         cut.WaitForAssertion(() => Assert.Equal("5,678", Fact(cut, "Packets sent")), Diagnostics.RefreshInterval * 3);
         Assert.Empty(cut.FindAll("[role=alert]"));
+    }
+
+    private static SettingsDto AirplayAnswer(bool enabled = true, string name = "Wohnzimmer", bool passwordSet = false) =>
+        new("TuneShuttle", 77175, false, "Realtime", 3, enabled, name, null, passwordSet);
+
+    private static SettingsDto PutBody(StubHandler api) =>
+        JsonSerializer.Deserialize<SettingsDto>(Assert.Single(api.Requests, r => r.Method == HttpMethod.Put).Body!, BridgeApiClient.JsonOptions)!;
+
+    [Fact]
+    public void Airplay_card_sits_between_bridge_and_appearance_and_shows_the_loaded_values()
+    {
+        using var scope = new CultureScope("en");
+        UseApi((_, _) => StubHandler.Json(AirplayAnswer(enabled: true, name: "Wohnzimmer", passwordSet: true)));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => Assert.Equal("Wohnzimmer", cut.Find("#airplay-name").GetAttribute("value")));
+
+        // SPEC-receiver.md 9.2: the card comes between Bridge and Appearance.
+        Assert.Equal(
+            ["settings-bridge", "settings-airplay", "settings-appearance", "settings-spotify"],
+            cut.FindAll("h2[id]").Select(h => h.Id));
+        Assert.Equal("AirPlay receiver", cut.Find("#settings-airplay").TextContent);
+        var card = cut.Find("form.settings-airplay");
+        Assert.Contains("card", card.ClassList);
+        Assert.True(card.HasAttribute("novalidate"));
+
+        Assert.True(cut.Find("#airplay-enabled").HasAttribute("checked"));
+        Assert.Single(cut.FindAll("div.field > label.field--check[for=airplay-enabled] > input#airplay-enabled[type=checkbox]"));
+        Assert.Equal("Offer as an AirPlay speaker", cut.Find("label[for=airplay-enabled]").TextContent.Trim());
+
+        Assert.Equal("Name", cut.Find("label[for=airplay-name]").TextContent);
+        Assert.Equal("How the speaker appears on Apple devices", cut.Find("#airplay-name-hint").TextContent);
+        Assert.Equal("airplay-name-hint", cut.Find("#airplay-name").GetAttribute("aria-describedby"));
+        Assert.Equal("63", cut.Find("#airplay-name").GetAttribute("maxlength"));
+        Assert.Contains("input", cut.Find("#airplay-name").ClassList);
+
+        // The password never comes back: the field is empty and says that one is set, with a way to remove it.
+        Assert.Equal("Password", cut.Find("label[for=airplay-password]").TextContent);
+        Assert.Equal(string.Empty, cut.Find("#airplay-password").GetAttribute("value") ?? string.Empty);
+        Assert.Equal("63", cut.Find("#airplay-password").GetAttribute("maxlength"));
+        Assert.Equal("Apple devices ask for it; empty means anyone on the network", cut.Find("#airplay-password-hint").TextContent);
+        Assert.Equal("A password is set. Leave the field empty to keep it.", cut.Find("#airplay-password-state").TextContent);
+        Assert.Equal("airplay-password-hint airplay-password-state", cut.Find("#airplay-password").GetAttribute("aria-describedby"));
+        var remove = cut.Find("button.airplay-remove-password");
+        Assert.Equal("Remove password", remove.TextContent);
+        Assert.Contains("btn--ghost", remove.ClassList);
+        Assert.Equal("button", remove.GetAttribute("type"));
+
+        Assert.Equal("Save", cut.Find("form.settings-airplay button[type=submit]").TextContent);
+        Assert.Equal("Reset", cut.Find("form.settings-airplay > .actions .btn--ghost").TextContent);
+    }
+
+    [Fact]
+    public void Airplay_card_without_a_password_offers_no_remove()
+    {
+        using var scope = new CultureScope("en");
+        UseApi((_, _) => StubHandler.Json(AirplayAnswer(enabled: false, passwordSet: false)));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => cut.Find("#airplay-name"));
+        Assert.False(cut.Find("#airplay-enabled").HasAttribute("checked"));
+        Assert.Empty(cut.FindAll("#airplay-password-state"));
+        Assert.Empty(cut.FindAll("button.airplay-remove-password"));
+        Assert.Equal("airplay-password-hint", cut.Find("#airplay-password").GetAttribute("aria-describedby"));
+    }
+
+    [Fact]
+    public void Airplay_name_and_password_validate_through_the_catalog()
+    {
+        using var scope = new CultureScope("en");
+        var api = UseApi((_, _) => StubHandler.Json(AirplayAnswer()));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => cut.Find("#airplay-name"));
+
+        cut.Find("#airplay-name").Change("   ");
+        cut.Find("form.settings-airplay").Submit();
+        cut.WaitForAssertion(() => Assert.Equal("The AirPlay name is empty.", cut.Find("form.settings-airplay .validation-message").TextContent));
+        Assert.Equal("alert", cut.Find("form.settings-airplay .validation-message").GetAttribute("role"));
+        Assert.Equal("true", cut.Find("#airplay-name").GetAttribute("aria-invalid"));
+
+        cut.Find("#airplay-name").Change(new string('n', 64));
+        cut.Find("#airplay-password").Change(new string('p', 64));
+        cut.Find("form.settings-airplay").Submit();
+        cut.WaitForAssertion(() => Assert.Equal(
+            ["The AirPlay name is longer than 63 characters.", "The AirPlay password is longer than 63 characters."],
+            cut.FindAll("form.settings-airplay .validation-message").Select(m => m.TextContent)));
+        Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Put);
+
+        // 63 characters is the mDNS label limit and passes.
+        cut.Find("#airplay-name").Change(new string('n', 63));
+        cut.Find("#airplay-password").Change(new string('p', 63));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".validation-message")));
+    }
+
+    [Fact]
+    public async Task Airplay_validation_messages_come_from_the_catalog_in_german()
+    {
+        using var scope = new CultureScope("de");
+        var (ctx, _, api, _, _) = UiTest.Create("de", respond: (request, _) => Task.FromResult(
+            request.Method == HttpMethod.Get ? StubHandler.Json(AirplayAnswer(passwordSet: true)) : new HttpResponseMessage(HttpStatusCode.NotFound)));
+        await using var context = ctx;
+        var cut = ctx.Render<Settings>();
+        cut.WaitForAssertion(() => cut.Find("#airplay-name"));
+        Assert.Equal("AirPlay-Empfänger", cut.Find("#settings-airplay").TextContent);
+        Assert.Equal("Als AirPlay-Lautsprecher anbieten", cut.Find("label[for=airplay-enabled]").TextContent.Trim());
+        Assert.Equal("Passwort entfernen", cut.Find("button.airplay-remove-password").TextContent);
+
+        cut.Find("#airplay-name").Change("");
+        cut.Find("form.settings-airplay").Submit();
+        cut.WaitForAssertion(() => Assert.Equal("Der AirPlay-Name ist leer.", cut.Find(".validation-message").TextContent));
+        Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Put);
+    }
+
+    [Fact]
+    public void Untouched_password_saves_as_null_and_keeps_the_stored_one()
+    {
+        using var scope = new CultureScope("en");
+        var api = UseApi((request, _) => StubHandler.Json(request.Method == HttpMethod.Put
+            ? AirplayAnswer(name: "Küche", passwordSet: true)
+            : AirplayAnswer(passwordSet: true)));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => cut.Find("#airplay-name"));
+
+        cut.Find("#airplay-name").Change("  Küche ");
+        cut.Find("form.settings-airplay").Submit();
+        cut.WaitForAssertion(() => Assert.Single(api.Requests, r => r.Method == HttpMethod.Put));
+        var put = PutBody(api);
+        Assert.Null(put.AirplayPassword);
+        Assert.Contains("\"airplayPassword\":null", api.Requests.Single(r => r.Method == HttpMethod.Put).Body, StringComparison.Ordinal);
+        Assert.Equal("Küche", put.AirplayName);
+        Assert.True(put.AirplayEnabled);
+        Assert.Null(put.AirplayPasswordSet);
+
+        // The rest of the page's form travels in the same PUT.
+        Assert.Equal("TuneShuttle", put.DeviceName);
+        Assert.Equal(77175, put.LatencyFrames);
+
+        cut.WaitForAssertion(() => Assert.Equal("Küche", cut.Find("#airplay-name").GetAttribute("value")));
+        Assert.Single(cut.FindAll("#airplay-password-state"));
+        Assert.Contains(_state.Notices, n => n.Kind == NoticeKind.Success);
+    }
+
+    [Fact]
+    public void Remove_password_saves_an_empty_string()
+    {
+        using var scope = new CultureScope("en");
+        var api = UseApi((request, _) => StubHandler.Json(AirplayAnswer(passwordSet: request.Method != HttpMethod.Put)));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => cut.Find("button.airplay-remove-password"));
+
+        cut.Find("button.airplay-remove-password").Click();
+
+        // The pressed button goes away: the focus moves to the password field, and the line says what Save will do.
+        var password = cut.FindComponents<InputText>().Single(c => Equals(c.Instance.AdditionalAttributes?["id"], "airplay-password")).Instance;
+        cut.WaitForAssertion(() => Assert.Equal(password.Element!.Value.Id, LastFocusedId()));
+        Assert.Empty(cut.FindAll("button.airplay-remove-password"));
+        Assert.Equal("The password is removed when you save.", cut.Find("#airplay-password-state").TextContent);
+        Assert.DoesNotContain(api.Requests, r => r.Method == HttpMethod.Put);
+
+        cut.Find("form.settings-airplay").Submit();
+        cut.WaitForAssertion(() => Assert.Single(api.Requests, r => r.Method == HttpMethod.Put));
+        Assert.Equal(string.Empty, PutBody(api).AirplayPassword);
+
+        // The answer says no password is set: neither the state line nor the button remain.
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("#airplay-password-state")));
+        Assert.Empty(cut.FindAll("button.airplay-remove-password"));
+    }
+
+    [Fact]
+    public void Reset_after_remove_keeps_the_password_again()
+    {
+        using var scope = new CultureScope("en");
+        var api = UseApi((_, _) => StubHandler.Json(AirplayAnswer(passwordSet: true)));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => cut.Find("button.airplay-remove-password"));
+        cut.Find("button.airplay-remove-password").Click();
+        cut.Find("form.settings-airplay > .actions .btn--ghost").Click();
+        cut.WaitForAssertion(() => Assert.Equal("A password is set. Leave the field empty to keep it.", cut.Find("#airplay-password-state").TextContent));
+
+        cut.Find("form.settings-airplay").Submit();
+        cut.WaitForAssertion(() => Assert.Single(api.Requests, r => r.Method == HttpMethod.Put));
+        Assert.Null(PutBody(api).AirplayPassword);
+    }
+
+    [Fact]
+    public void Typed_password_saves_the_string_and_the_field_empties_afterwards()
+    {
+        using var scope = new CultureScope("en");
+        var api = UseApi((request, _) => StubHandler.Json(AirplayAnswer(passwordSet: request.Method == HttpMethod.Put)));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => cut.Find("#airplay-password"));
+        Assert.Equal("password", cut.Find("#airplay-password").GetAttribute("type"));
+        Assert.Equal("new-password", cut.Find("#airplay-password").GetAttribute("autocomplete"));
+
+        cut.Find("#airplay-password").Change("synthetic secret");
+        cut.Find("form.settings-airplay").Submit();
+        cut.WaitForAssertion(() => Assert.Single(api.Requests, r => r.Method == HttpMethod.Put));
+        Assert.Equal("synthetic secret", PutBody(api).AirplayPassword);
+
+        // The service never answers the password: the field empties and says that one is set now.
+        cut.WaitForAssertion(() => Assert.Equal("A password is set. Leave the field empty to keep it.", cut.Find("#airplay-password-state").TextContent));
+        Assert.Equal(string.Empty, cut.Find("#airplay-password").GetAttribute("value") ?? string.Empty);
+        Assert.DoesNotContain("synthetic secret", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Airplay_enabled_toggle_round_trips()
+    {
+        using var scope = new CultureScope("en");
+        var enabled = false;
+        var api = UseApi((request, body) =>
+        {
+            if (request.Method == HttpMethod.Put)
+            {
+                enabled = JsonSerializer.Deserialize<SettingsDto>(body!, BridgeApiClient.JsonOptions)!.AirplayEnabled!.Value;
+            }
+
+            return StubHandler.Json(AirplayAnswer(enabled: enabled));
+        });
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => Assert.False(cut.Find("#airplay-enabled").HasAttribute("checked")));
+
+        cut.Find("#airplay-enabled").Change(true);
+        cut.Find("form.settings-airplay").Submit();
+        cut.WaitForAssertion(() => Assert.Single(api.Requests, r => r.Method == HttpMethod.Put));
+        Assert.True(PutBody(api).AirplayEnabled);
+        cut.WaitForAssertion(() => Assert.True(cut.Find("#airplay-enabled").HasAttribute("checked")));
+
+        // Reset reloads the stored value.
+        cut.Find("form.settings-airplay > .actions .btn--ghost").Click();
+        cut.WaitForAssertion(() => Assert.Equal(2, api.Requests.Count(r => r.Method == HttpMethod.Get)));
+        Assert.True(cut.Find("#airplay-enabled").HasAttribute("checked"));
+
+        cut.Find("#airplay-enabled").Change(false);
+        cut.Find("form.settings-airplay").Submit();
+        cut.WaitForAssertion(() => Assert.Equal(2, api.Requests.Count(r => r.Method == HttpMethod.Put)));
+        Assert.False(enabled);
+        cut.WaitForAssertion(() => Assert.False(cut.Find("#airplay-enabled").HasAttribute("checked")));
+    }
+
+    [Fact]
+    public void A_service_without_the_receiver_fields_shows_no_airplay_card_and_saves_nulls()
+    {
+        using var scope = new CultureScope("en");
+        var api = UseApi((_, _) => StubHandler.Json(new SettingsDto("TuneShuttle", 77175, false, "Realtime")));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => cut.Find("#device-name"));
+        Assert.Empty(cut.FindAll("#settings-airplay"));
+
+        cut.Find("form").Submit();
+        cut.WaitForAssertion(() => Assert.Single(api.Requests, r => r.Method == HttpMethod.Put));
+        var put = PutBody(api);
+        Assert.Null(put.AirplayEnabled);
+        Assert.Null(put.AirplayName);
+        Assert.Null(put.AirplayPassword);
+    }
+
+    [Fact]
+    public void Airplay_card_waits_for_the_settings_and_is_absent_on_a_load_failure()
+    {
+        using var scope = new CultureScope("en");
+        var calls = 0;
+        UseApi((_, _) => ++calls == 1
+            ? StubHandler.Problem(HttpStatusCode.InternalServerError, "Boom", "Disk full.")
+            : StubHandler.Json(AirplayAnswer()));
+        var cut = _ctx.Render<Settings>();
+        cut.WaitForAssertion(() => Assert.StartsWith("The settings could not be loaded. Boom", cut.Find("[role=alert]").TextContent, StringComparison.Ordinal));
+        Assert.Empty(cut.FindAll("form"));
+        Assert.Empty(cut.FindAll("#settings-airplay"));
+
+        cut.Find(".card .btn").Click();
+        cut.WaitForAssertion(() => Assert.Equal("Wohnzimmer", cut.Find("#airplay-name").GetAttribute("value")));
+    }
+
+    [Fact]
+    public void Airplay_model_maps_the_password_rule()
+    {
+        var model = SettingsModel.From(AirplayAnswer(passwordSet: true));
+        Assert.True(model.AirplayPasswordSet);
+        Assert.Null(model.ToDto().AirplayPassword);
+
+        model.RemoveAirplayPassword();
+        Assert.Equal(string.Empty, model.ToDto().AirplayPassword);
+
+        model.AirplayPassword = "typed";
+        Assert.Equal("typed", model.ToDto().AirplayPassword);
+
+        // Clearing the typed text after a remove goes back to the remove, the last explicit choice.
+        model.AirplayPassword = string.Empty;
+        Assert.Equal(string.Empty, model.ToDto().AirplayPassword);
+
+        var fresh = SettingsModel.From(AirplayAnswer(passwordSet: true));
+        fresh.AirplayPassword = "typed";
+        fresh.AirplayPassword = string.Empty;
+        Assert.Null(fresh.ToDto().AirplayPassword);
     }
 
     private static IElement SpotifyCard(IRenderedComponent<Settings> cut) => cut.Find("#settings-spotify").ParentElement!.ParentElement!;

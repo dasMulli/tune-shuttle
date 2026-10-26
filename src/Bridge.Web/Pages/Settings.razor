@@ -3,7 +3,8 @@
 @using Microsoft.Extensions.Logging
 @inject BrowserBridge Browser
 
-@* UI-SPEC 4.6: one narrow column of four cards (Bridge form, Appearance, Spotify, Diagnostics link). *@
+@* UI-SPEC 4.6: one narrow column of cards (Bridge form, AirPlay receiver form (SPEC-receiver.md 9.2), Appearance, Spotify,
+   Diagnostics link). *@
 
 <PageTitle>@L.Format("app.pageTitle", ("page", L["nav.settings"]))</PageTitle>
 
@@ -111,6 +112,57 @@
                 <button type="button" class="btn btn--ghost" @onclick="ReloadAsync" aria-disabled="@Busy(_saving)">@L["settings.reset"]</button>
             </div>
         </EditForm>
+
+        @if (_model.AirplayOffered)
+        {
+            @* SPEC-receiver.md 9.2: the AirPlay receiver card. A second form on the same EditContext and model: the Bridge
+               form's validator checks both cards, and either Save sends the one PUT /api/settings with every field (the
+               password by the null-keeps rule of 9.1, SettingsModel.ToDto). No validator of its own here: a second one
+               would add every message twice. *@
+            <EditForm EditContext="_editContext" OnValidSubmit="SaveAsync" class="card settings-airplay" novalidate aria-labelledby="settings-airplay">
+                <div class="card__head"><h2 id="settings-airplay">@L["settings.airplay"]</h2></div>
+
+                <div class="field">
+                    <label class="field--check" for="airplay-enabled">
+                        <InputCheckbox id="airplay-enabled" @bind-Value="_model.AirplayEnabled" />
+                        <span>@L["settings.airplayEnabled"]</span>
+                    </label>
+                </div>
+
+                <div class="field">
+                    <label for="airplay-name">@L["settings.airplayName"]</label>
+                    <InputText id="airplay-name" class="input" @bind-Value="_model.AirplayName" maxlength="@SettingsModel.MaxAirplayNameLength" autocomplete="off" aria-describedby="airplay-name-hint" />
+                    <ValidationMessage For="() => _model.AirplayName" role="alert" />
+                    <p class="hint" id="airplay-name-hint">@L["settings.airplayNameHint"]</p>
+                </div>
+
+                <div class="field">
+                    <label for="airplay-password">@L["settings.airplayPassword"]</label>
+                    @* type=password with new-password: the browser neither shows the secret over a shoulder nor fills in a
+                       saved login; the service never answers the password, so the field starts empty. *@
+                    <InputText id="airplay-password" type="password" class="input" @bind-Value="_model.AirplayPassword" maxlength="@SettingsModel.MaxAirplayPasswordLength"
+                               autocomplete="new-password" aria-describedby="@AirplayPasswordDescribedBy" @ref="_airplayPassword" />
+                    <ValidationMessage For="() => _model.AirplayPassword" role="alert" />
+                    <p class="hint" id="airplay-password-hint">@L["settings.airplayPasswordHint"]</p>
+                    @if (_model.KeepsStoredAirplayPassword)
+                    {
+                        <p class="hint" id="airplay-password-state">@L["settings.airplayPasswordSetHint"]</p>
+                        <div class="actions">
+                            <button type="button" class="btn btn--ghost airplay-remove-password" @onclick="RemoveAirplayPassword" aria-disabled="@Busy(_saving)">@L["settings.airplayRemovePassword"]</button>
+                        </div>
+                    }
+                    else if (_model.AirplayPasswordRemoved && string.IsNullOrEmpty(_model.AirplayPassword))
+                    {
+                        <p class="hint" id="airplay-password-state">@L["settings.airplayPasswordRemoved"]</p>
+                    }
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="btn btn--primary" aria-disabled="@Busy(_saving)" aria-busy="@Busy(_saving)">@(_saving ? L["settings.saving"] : L["settings.save"])</button>
+                    <button type="button" class="btn btn--ghost" @onclick="ReloadAsync" aria-disabled="@Busy(_saving)">@L["settings.reset"]</button>
+                </div>
+            </EditForm>
+        }
     }
 
     <section class="card" aria-labelledby="settings-appearance">
@@ -194,6 +246,7 @@
     private Focus _focus;
     private ElementReference _retryButton;
     private InputText? _deviceName;
+    private InputText? _airplayPassword;
     private ElementReference _spotifyTitle;
     private ElementReference _forgetButton;
     private ElementReference _keepButton;
@@ -206,6 +259,7 @@
         None,
         Retry,
         DeviceName,
+        AirplayPassword,
         ForgetSpotify,
         Keep,
         SpotifyTitle,
@@ -279,6 +333,7 @@
         {
             Focus.Retry => _retryButton,
             Focus.DeviceName => _deviceName?.Element,
+            Focus.AirplayPassword => _airplayPassword?.Element,
             Focus.ForgetSpotify => _forgetButton,
             Focus.Keep => _keepButton,
             _ => _spotifyTitle,
@@ -382,6 +437,28 @@
         _focus = _editContext is not null ? Focus.DeviceName : Focus.Retry;
     }
 
+    /// <summary>The password field's hints: the state line joins the general hint while it is shown (SPEC-receiver.md 9.2).</summary>
+    private string AirplayPasswordDescribedBy =>
+        _model is { KeepsStoredAirplayPassword: true } or { AirplayPasswordRemoved: true, AirplayPassword: null or "" }
+            ? "airplay-password-hint airplay-password-state"
+            : "airplay-password-hint";
+
+    /// <summary>
+    /// The "remove password" ghost button (SPEC-receiver.md 9.1-9.2): the next save sends <c>""</c>. The button goes away
+    /// with the press, so the focus moves to the password field.
+    /// </summary>
+    private void RemoveAirplayPassword()
+    {
+        if (_model is null || _saving)
+        {
+            return;
+        }
+
+        _model.RemoveAirplayPassword();
+        _editContext?.NotifyFieldChanged(_editContext.Field(nameof(SettingsModel.AirplayPassword)));
+        _focus = Focus.AirplayPassword;
+    }
+
     private void ConfirmForget()
     {
         _confirmForget = true;
@@ -410,12 +487,9 @@
             if (await Commands.SaveSettingsAsync(_model.ToDto(), Lifetime) is { } saved && _editContext is not null)
             {
                 // Keep the EditContext (EditForm re-creates its inputs for a new one, which drops the focus): take the
-                // saved values into the same model and mark the form clean.
-                _model.DeviceName = saved.DeviceName;
-                _model.LatencyFrames = saved.LatencyFrames;
-                _model.PollReceiverVolume = saved.PollReceiverVolume;
-                _model.PreferredStream = saved.PreferredStream;
-                _model.ForgetOfflineAfterDays = saved.ForgetOfflineAfterDays ?? _model.ForgetOfflineAfterDays;
+                // saved values into the same model (the password field empties: the answer never carries it) and mark
+                // the form clean.
+                _model.Accept(saved);
                 _editContext.MarkAsUnmodified();
                 _editContext.NotifyValidationStateChanged();
             }

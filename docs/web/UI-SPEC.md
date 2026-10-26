@@ -820,8 +820,8 @@ All group commands and the busy/preview logic of today's `Groups.razor` move ove
 ### 4.7 Diagnostics (`Pages/Diagnostics.razor`, route `/settings/diagnostics`)
 
 Back link (`.btn.btn--ghost.btn--back`, 1.5) to `/settings` (nav.backToSettings), `<h1>` diagnostics.title, page title nav.diagnostics. Grid
-`repeat(auto-fill, minmax(320px, 1fr))` of three cards and the full-width log card; every card is a `.facts` list
-(`dt` = label, `dd` = value) and the values are today's values, formatted through the culture:
+`repeat(auto-fill, minmax(320px, 1fr))` of four cards and the full-width log card; every card is a `.facts` list
+(`dt` = label, `dd` = value; the AirPlay card adds `.meta` value lines) and the values are today's values, formatted through the culture:
 
 1. **Status** (`<h2>` diagnostics.status), from `StatusDto`:
    diagnostics.version → `Version`; diagnostics.runningSince → `Format.DateTime(StartedAt)`; diagnostics.spotify →
@@ -845,7 +845,16 @@ Back link (`.btn.btn--ghost.btn--back`, 1.5) to `/settings` (nav.backToSettings)
    values with the error line under them, and the 5 s refresh loop goes on).
 3. **Pending probes** (`<h2>` diagnostics.pendingProbes): the `OpenQuestionsPending` names as `.meta` lines (service
    text, 3.5); empty → `.meta` diagnostics.noneReported (replaces today's "None.").
-4. **Live log** (`<h2>` diagnostics.log): controls `.field` inline (label diagnostics.level, `<select class="input input--sm">`
+4. **AirPlay receiver** (`<h2>` diagnostics.airplay; SPEC-receiver.md 9.2), from `StatusDto.Airplay` (live through the
+   status events) and `DiagnosticsDto.Airplay` (the 5 s refresh), in this order: `.facts` diagnostics.airplayState →
+   diagnostics.airplayStates.* (diagnostics.airplayStates.off when the part is absent, an unknown state as sent, 3.5) and
+   diagnostics.airplaySender → `SenderName` or `–`; then four `.meta` lines diagnostics.airplayStream "{{type}} · {{format}}",
+   diagnostics.airplayBuffer "{{ms}} … {{offset}}", diagnostics.airplayLate "{{late}} · {{missing}} · {{drift}}" (counts via
+   `Format.Integer`) and diagnostics.airplayPtp "{{ms}}" (`PtpOffsetNs` as ms with three digits, a negative value with
+   `Format.Minus`; `–` without an estimate) or diagnostics.airplayPtpNotBound when the PTP port is not bound; then `.facts`
+   diagnostics.airplayDecoder → `DecoderStatus` or `–`. Without `DiagnosticsDto.Airplay` the four lines are a single `.meta`
+   `–`; common.loading until the status snapshot arrives (a failed diagnostics request shows its error on card 2 only).
+5. **Live log** (`<h2>` diagnostics.log): controls `.field` inline (label diagnostics.level, `<select class="input input--sm">`
    with diagnostics.levels.*), `.btn.btn--ghost.btn--sm` diagnostics.pause / diagnostics.resume, diagnostics.clear;
    lines in `.log` with the level classes of 1.5; diagnostics.noLines when empty.
 
@@ -1392,7 +1401,9 @@ forget-offline field's parse message (4.6); player.receiverMetaOffline → offli
 `Format.LastSeen` (4.4, also the Output rows). Removed from the first draft because nothing consumed
 them: app.loading, app.error (index.html carries its own inline texts, 8.1), common.close, common.save, common.working,
 common.yes, common.no, units.*, player.title, player.levelText and groups.masterText (both → common.levelText),
-actions.playback (→ the four actions.playback* keys).
+actions.playback (→ the four actions.playback* keys). The AirPlay receiver keys (player.airplay*, player.followsSender, settings.airplay*,
+settings.validation.airplay*, diagnostics.airplay*) are those of SPEC-receiver.md 9.2 plus the password-state and
+validation texts of the Settings card (4.6); every catalog carries them in its own language.
 
 ### app, nav, theme, language, common
 
@@ -1487,6 +1498,9 @@ actions.playback (→ the four actions.playback* keys).
 | player.bridgeFallback | die Bridge | the bridge |
 | player.spotifyChip | Spotify · {{user}} | Spotify · {{user}} |
 | player.spotifyOnly | Spotify | Spotify |
+| player.airplayChip | AirPlay · {{sender}} | AirPlay · {{sender}} |
+| player.airplayOnly | AirPlay | AirPlay |
+| player.airplayNoControl | Steuerung am Apple-Gerät | Control it on the Apple device |
 | player.artworkAlt | Cover von {{album}} | Cover of {{album}} |
 | player.albumMeta | {{album}} · {{duration}} | {{album}} · {{duration}} |
 | player.progressText | {{elapsed}} von {{total}} | {{elapsed}} of {{total}} |
@@ -1497,6 +1511,7 @@ actions.playback (→ the four actions.playback* keys).
 | player.masterVolume | Master-Lautstärke · {{output}} | Master volume · {{output}} |
 | player.masterVolumeNone | Master-Lautstärke · keine Ausgabe | Master volume · no output |
 | player.followsSpotify | folgt dem Spotify-Regler | follows the Spotify slider |
+| player.followsSender | folgt dem Sender | follows the sender |
 | player.quieter | Leiser | Quieter |
 | player.louder | Lauter | Louder |
 | player.membersChip | {{output}} · {{members}} | {{output}} · {{members}} |
@@ -1652,6 +1667,15 @@ actions.playback (→ the four actions.playback* keys).
 | settings.pollHint | Liest die Lautstärke alle paar Sekunden vom Empfänger zurück, für Geräte, deren Tasten keine Änderungen über den Ereigniskanal melden. | Reads the volume back from receivers every few seconds, for receivers whose own buttons do not report changes over the event channel. |
 | settings.forgetOfflineAfter | Offline-Empfänger vergessen nach (Tagen) | Forget offline receivers after (days) |
 | settings.forgetOfflineAfterHint | Empfänger ohne Kopplung, Gruppe und eigene Einstellungen werden entfernt, wenn sie so lange nicht im Netz waren. 0 = nie. | Receivers without a pairing, a group or settings of their own are removed once they have been off the network this long. 0 = never. |
+| settings.airplay | AirPlay-Empfänger | AirPlay receiver |
+| settings.airplayEnabled | Als AirPlay-Lautsprecher anbieten | Offer as an AirPlay speaker |
+| settings.airplayName | Name | Name |
+| settings.airplayNameHint | So erscheint der Lautsprecher auf Apple-Geräten | How the speaker appears on Apple devices |
+| settings.airplayPassword | Passwort | Password |
+| settings.airplayPasswordHint | Apple-Geräte fragen danach; leer heißt: alle im Netzwerk | Apple devices ask for it; empty means anyone on the network |
+| settings.airplayPasswordSetHint | Ein Passwort ist gesetzt. Lass das Feld leer, um es zu behalten. | A password is set. Leave the field empty to keep it. |
+| settings.airplayRemovePassword | Passwort entfernen | Remove password |
+| settings.airplayPasswordRemoved | Das Passwort wird beim Speichern entfernt. | The password is removed when you save. |
 | settings.save | Speichern | Save |
 | settings.saving | Speichere… | Saving… |
 | settings.reset | Zurücksetzen | Reset |
@@ -1663,6 +1687,9 @@ actions.playback (→ the four actions.playback* keys).
 | settings.validation.stream | Der Stream-Typ ist Realtime oder Gepuffert. | The stream type is Realtime or Buffered. |
 | settings.validation.forgetDaysRange | Gib 0 bis 3.650 Tage an (0 = nie). | Enter 0 to 3,650 days (0 = never). |
 | settings.validation.forgetDaysNumber | Gib die Anzahl der Tage als Zahl ein. | Enter the number of days as a number. |
+| settings.validation.airplayNameEmpty | Der AirPlay-Name ist leer. | The AirPlay name is empty. |
+| settings.validation.airplayNameTooLong | Der AirPlay-Name ist länger als 63 Zeichen. | The AirPlay name is longer than 63 characters. |
+| settings.validation.airplayPasswordTooLong | Das AirPlay-Passwort ist länger als 63 Zeichen. | The AirPlay password is longer than 63 characters. |
 | settings.appearance | Darstellung | Appearance |
 | settings.theme | Design | Theme |
 | settings.language | Sprache | Language |
@@ -1720,6 +1747,21 @@ actions.playback (→ the four actions.playback* keys).
 | diagnostics.resume | Weiter | Resume |
 | diagnostics.clear | Leeren | Clear |
 | diagnostics.noLines | Noch keine Log-Zeilen. | No log lines yet. |
+| diagnostics.airplay | AirPlay-Empfänger | AirPlay receiver |
+| diagnostics.airplayState | Zustand | State |
+| diagnostics.airplayStates.off | Aus | Off |
+| diagnostics.airplayStates.starting | Startet | Starting |
+| diagnostics.airplayStates.advertising | Sichtbar | Advertising |
+| diagnostics.airplayStates.connected | Verbunden | Connected |
+| diagnostics.airplayStates.streaming | Spielt | Streaming |
+| diagnostics.airplayStates.error | Fehler | Error |
+| diagnostics.airplaySender | Sender | Sender |
+| diagnostics.airplayStream | {{type}} · {{format}} | {{type}} · {{format}} |
+| diagnostics.airplayBuffer | {{ms}} ms gepuffert · Versatz {{offset}} ms | {{ms}} ms buffered · offset {{offset}} ms |
+| diagnostics.airplayLate | {{late}} verspätet · {{missing}} fehlend · {{drift}} Drift | {{late}} late · {{missing}} missing · {{drift}} drift |
+| diagnostics.airplayPtp | PTP-Versatz {{ms}} ms | PTP offset {{ms}} ms |
+| diagnostics.airplayPtpNotBound | PTP-Port nicht gebunden (Anker-Timing) | PTP port not bound (anchor-only timing) |
+| diagnostics.airplayDecoder | Decoder | Decoder |
 
 ### notices and actions (4.9; used by BridgeCommands)
 

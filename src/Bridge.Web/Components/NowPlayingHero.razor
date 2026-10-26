@@ -1,7 +1,10 @@
 @* The now-playing hero of the Player page (UI-SPEC 4.3, phone layout 5.3): artwork or the gradient placeholder, the
    Spotify chip, title / artist / album meta (or the nothing-playing texts), the read-only progress bar (no knob and
    no seeking: there is no seek API, 8.1), the transport and the master volume block. The Spotify volume meter of the
-   old NowPlaying page is gone (8.1): the master slider follows the Spotify slider. *@
+   old NowPlaying page is gone (8.1): the master slider follows the Spotify slider.
+   While AirPlay owns the output (SPEC-receiver.md 9.2) the chip is "AirPlay · {{sender}}" (player.airplayChip, or
+   player.airplayOnly without a sender name), the meta and progress come from PlaybackDto as for Spotify, and the
+   transport is disabled with the player.airplayNoControl hint (the service answers 409 to commands meanwhile, N2). *@
 @inherits BridgeComponentBase
 
 @{
@@ -9,9 +12,11 @@
     var status = State.Status;
     var spotifyConnected = status?.SpotifyConnected == true;
     var playing = playback?.Playing == true;
+    var airplay = State.AirplayOwnsOutput;
     // Disabled only for the static reason (Spotify not connected). While a command runs the buttons are aria-disabled
     // instead: Chromium blurs a focused button that becomes disabled, so the keyboard focus would fall to <body>.
-    var transportDisabled = !spotifyConnected;
+    var transportDisabled = !spotifyConnected || airplay;
+    var transportHint = airplay ? TransportHintId : null;
     var busy = _busy ? "true" : null;
 }
 
@@ -19,7 +24,7 @@
     <div class="hero__top">
         @if (playback?.ArtworkUrl is { Length: > 0 } artwork)
         {
-            <img class="art" src="@artwork" alt="@L.Format("player.artworkAlt", ("album", playback.Album ?? playback.Title ?? string.Empty))" />
+            <img class="art" src="@BridgeState.ArtworkSource(artwork)" alt="@L.Format("player.artworkAlt", ("album", playback.Album ?? playback.Title ?? string.Empty))" />
         }
         else
         {
@@ -28,7 +33,11 @@
             </div>
         }
         <div class="hero__info">
-            @if (spotifyConnected)
+            @if (airplay)
+            {
+                <span class="chip chip--accent">@(status?.Airplay?.SenderName is { Length: > 0 } sender ? L.Format("player.airplayChip", ("sender", sender)) : L["player.airplayOnly"])</span>
+            }
+            else if (spotifyConnected)
             {
                 <span class="chip chip--accent">@(status!.SpotifyUser is { Length: > 0 } user ? L.Format("player.spotifyChip", ("user", user)) : L["player.spotifyOnly"])</span>
             }
@@ -52,9 +61,13 @@
             else
             {
                 <strong id="hero-title" class="hero__title text-muted">@L["player.nothingPlaying"]</strong>
-                <span class="meta">@(spotifyConnected
-                    ? L["player.startInSpotify"]
-                    : L.Format("player.selectDevice", ("device", status?.DeviceName is { Length: > 0 } device ? device : L["player.bridgeFallback"])))</span>
+                @* While AirPlay owns the output the Spotify hints would mislead: the transport hint says where to act. *@
+                @if (!airplay)
+                {
+                    <span class="meta">@(spotifyConnected
+                        ? L["player.startInSpotify"]
+                        : L.Format("player.selectDevice", ("device", status?.DeviceName is { Length: > 0 } device ? device : L["player.bridgeFallback"])))</span>
+                }
             }
         </div>
     </div>
@@ -77,20 +90,27 @@
 
     <div class="transport">
         <button type="button" class="step step--lg" aria-label="@L["player.previous"]" disabled="@transportDisabled"
+                aria-describedby="@transportHint"
                 aria-disabled="@busy" aria-busy="@busy" @onclick='() => CommandAsync("prev")'>
             <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
         </button>
         @* One element for play and pause: two elements in an @if would be swapped by the diff when playbackChanged flips
            the state right after a key press, and the focused one would be destroyed. Only the label and icon change. *@
         <button type="button" class="play" aria-label="@(playing ? L["player.pause"] : L["player.play"])" disabled="@transportDisabled"
+                aria-describedby="@transportHint"
                 aria-disabled="@busy" aria-busy="@busy" @onclick='() => CommandAsync(playing ? "pause" : "play")' @ref="_playButton">
             @(playing ? PauseIcon : PlayIcon)
         </button>
         <button type="button" class="step step--lg" aria-label="@L["player.next"]" disabled="@transportDisabled"
+                aria-describedby="@transportHint"
                 aria-disabled="@busy" aria-busy="@busy" @onclick='() => CommandAsync("next")'>
             <svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
         </button>
     </div>
+    @if (airplay)
+    {
+        <p id="@TransportHintId" class="meta transport__hint">@L["player.airplayNoControl"]</p>
+    }
 
     <MasterVolume />
 </section>
@@ -105,6 +125,8 @@
     {
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
     };
+
+    private const string TransportHintId = "hero-transport-hint";
 
     private bool _busy;
 
@@ -137,9 +159,9 @@
 
     private async Task CommandAsync(string command)
     {
-        if (_busy)
+        if (_busy || State.AirplayOwnsOutput)
         {
-            return; // one command at a time (the buttons are only aria-disabled meanwhile)
+            return; // one command at a time (the buttons are only aria-disabled meanwhile); none while AirPlay owns (N2)
         }
 
         _busy = true;

@@ -34,7 +34,7 @@
     sizes too), Page.navigate, then it polls the text of #audit-result until it is non-empty (at most -Budget ms, one
     reload half-way; this poll replaces growing --virtual-time-budget retries), parses it and checks it.
 
-    The service only ever runs with --Bridge:FakeReceivers=2, Spotify off, file logging off and a fresh temporary data
+    The service only ever runs with --Bridge:FakeReceivers=2, Spotify off, the AirPlay receiver off, file logging off and a fresh temporary data
     directory, so it never contacts real receivers.
 
 .EXAMPLE
@@ -321,7 +321,7 @@ try {
         $dataDir = Join-Path $work 'data'
         $serviceArgs = @(
             'run', '--project', (Join-Path $repo 'src/Bridge.Service'), '--',
-            '--Bridge:FakeReceivers=2', '--Bridge:EnableSpotify=false', '--Bridge:FileLogging=false',
+            '--Bridge:FakeReceivers=2', '--Bridge:EnableSpotify=false', '--Bridge:Airplay:Enabled=false', '--Bridge:FileLogging=false',
             "--DataDirectory=$dataDir", "--Kestrel:Endpoints:Http:Url=$baseUrl"
         )
         Write-Host "Starting the bridge on $baseUrl (fake receivers, data in $dataDir)"

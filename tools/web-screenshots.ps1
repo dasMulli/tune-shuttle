@@ -24,7 +24,7 @@
     (at most -Budget ms) plus -Settle ms for the REST and WebSocket data, and calls Page.captureScreenshot.
     After each capture the script prints the horizontal overflow (scrollWidth - innerWidth) when it is not 0.
 
-    The service only ever runs with --Bridge:FakeReceivers=2, Spotify off and mDNS browsing off (the fakes replace
+    The service only ever runs with --Bridge:FakeReceivers=2, Spotify off, the AirPlay receiver off and mDNS browsing off (the fakes replace
     it), file logging off and a fresh temporary data directory, so it never contacts real receivers and every run starts
     from the same state. Owned by the design-system package; other packages add tools/screenshot-setups/<package>.ps1
     instead of editing this file.
@@ -307,7 +307,7 @@ try {
         $dataDir = Join-Path $work 'data'
         $serviceArgs = @(
             'run', '--project', (Join-Path $repo 'src/Bridge.Service'), '--',
-            '--Bridge:FakeReceivers=2', '--Bridge:EnableSpotify=false', '--Bridge:FileLogging=false',
+            '--Bridge:FakeReceivers=2', '--Bridge:EnableSpotify=false', '--Bridge:Airplay:Enabled=false', '--Bridge:FileLogging=false',
             "--DataDirectory=$dataDir", "--Kestrel:Endpoints:Http:Url=$baseUrl"
         )
         Write-Host "Starting the bridge on $baseUrl (fake receivers, data in $dataDir)"
