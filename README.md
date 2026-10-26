@@ -1,8 +1,10 @@
 # TuneShuttle
 
 TuneShuttle is a Spotify Connect to AirPlay 2 bridge. It shows up in the Spotify app as a Connect device and plays
-what you send it on one AirPlay 2 speaker or on a group of them in sync. Everything else (finding speakers, pairing,
-building groups, volumes) happens in a web app that TuneShuttle serves itself. It is written in C# (.NET 10) and runs
+what you send it on one AirPlay 2 speaker or on a group of them in sync. It is also an AirPlay 2 speaker itself: an
+iPhone, iPad or Mac can pick "TuneShuttle" in its AirPlay menu, and what it plays comes out of the same speakers (see
+"AirPlay receiver"). Everything else (finding speakers, pairing, building groups, volumes) happens in a web app that
+TuneShuttle serves itself. It is written in C# (.NET 10) and runs
 as a Windows Service, under systemd on Linux, or in a container on Kubernetes.
 
 Before 2026-10-10 the product was called "AirPlay Bridge" (Windows service `AirplayBridge`, container image
@@ -13,9 +15,10 @@ is built from, usable on their own:
 
 | Part | Where | What it is |
 |---|---|---|
+| AirPlay 2 receiver library | [`src/Airplay2.Receiver`](src/Airplay2.Receiver) | Advertising, HomeKit pairing as an accessory (transient and password), the receiver's control plane, the realtime and buffered streams, ALAC and AAC-LC decoding, the PTP slave and the playout buffer. No Spotify or ASP.NET code. |
 | AirPlay 2 sender library | [`src/Airplay2.Sender`](src/Airplay2.Sender) | Discovery, HomeKit pairing (transient and PIN), the encrypted control channel, the realtime stream (ALAC over RTP, NTP or PTP timing), the buffered stream, synchronized group playback and the group volume model. No Spotify or ASP.NET code. |
 | `airplay2` CLI | [`src/Airplay2.Sender.Cli`](src/Airplay2.Sender.Cli) | Discover receivers, pair, play a WAV file to one receiver or a group, set the volume, run protocol probes. |
-| Bridge and web app | [`src/Bridge.Service`](src/Bridge.Service), [`src/Bridge.Web`](src/Bridge.Web) | The `bridge` service: Spotify Connect, the AirPlay output, a SQLite store, a REST/WebSocket API and the web app. |
+| Bridge and web app | [`src/Bridge.Service`](src/Bridge.Service), [`src/Bridge.Web`](src/Bridge.Web) | The `bridge` service: Spotify Connect, the AirPlay receiver, the AirPlay output, a SQLite store, a REST/WebSocket API and the web app. |
 | librespot-dotnet | [`librespot-dotnet/`](librespot-dotnet) | A C# port of librespot, the Spotify Connect client library ([its README](librespot-dotnet/README.md)). |
 
 How it fits together: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Working on the code:
@@ -29,6 +32,8 @@ How it fits together: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Working on
   allowed through its firewall (see "Firewall and network"). Windows (x64) or Linux (x64 or arm64).
 - To build: the .NET SDK 10.0. To run a framework-dependent build: the ASP.NET Core 10 runtime (a self-contained
   build needs nothing). Docker for the container image.
+- Optional, for AAC from Apple devices: the FFmpeg 7.1 libraries (see "The ffmpeg libraries"). Without them the
+  AirPlay receiver still works, with ALAC only.
 
 ## Installing and running
 
@@ -51,7 +56,10 @@ Then open `http://<host>:8080` in a browser. To just try it from a checkout: `do
 
 The script registers the service `TuneShuttle` (automatic start) from `artifacts/bridge` (`-PublishDir` to change),
 passes the data directory and the web port on its command line, and adds inbound firewall rules for the Private and
-Domain profiles: one for `bridge.exe` (it covers the ports chosen at run time), UDP 5353 for mDNS, and the web port.
+Domain profiles: one for `bridge.exe` (it covers the ports chosen at run time), UDP 5353 for mDNS, the web port, and
+for the AirPlay receiver "TuneShuttle AirPlay RTSP" (TCP 7000) and "TuneShuttle PTP" (UDP 319-320). A reinstall
+replaces the rules instead of adding duplicates. The ffmpeg DLLs that `build.ps1` puts into `artifacts/bridge` are
+installed with the rest.
 
 An install from before the rename is removed with its firewall rules. Its data stays in
 `%ProgramData%\AirplayBridge`: pass that folder as `-DataDir` (or move it) to keep receivers, groups, pairings and the
@@ -69,8 +77,10 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tune-shuttle
 ```
 
 The unit ([`install/linux/tune-shuttle.service`](install/linux/tune-shuttle.service)) runs `/opt/tune-shuttle/bridge` as
-the user `tune-shuttle` with `Type=notify`, keeps the data in `/var/lib/tune-shuttle` and listens on port 8080. Logs go
-to the journal (`journalctl -u tune-shuttle`).
+the user `tune-shuttle` with `Type=notify`, keeps the data in `/var/lib/tune-shuttle` and listens on port 8080. It
+grants `CAP_SYS_NICE` (the pacer's priority) and `CAP_NET_BIND_SERVICE` (UDP 319/320 for PTP are privileged ports).
+For AAC install the FFmpeg 7.1 libraries (see "The ffmpeg libraries"). Logs go to the journal
+(`journalctl -u tune-shuttle`).
 
 ### In a container (Kubernetes)
 
@@ -80,14 +90,15 @@ docker network create -d macvlan --subnet=192.0.2.0/24 --gateway=192.0.2.1 -o pa
 docker run -d --network lan --ip 192.0.2.60 -v bridge-data:/data tune-shuttle
 ```
 
-The image runs `bridge.dll` on the ASP.NET Core 10 runtime, keeps its data in `/data` (mount a volume there) and
-listens on 8080. It builds for `amd64` and `arm64` (`docker buildx build --platform linux/arm64 ...`, see
+The image runs `bridge.dll` on the ASP.NET Core 10 runtime on Debian 13 (trixie) with the FFmpeg 7.1 libraries for
+AAC, keeps its data in `/data` (mount a volume there) and listens on 8080 (web) and on TCP 7000 and UDP 319/320 (the
+AirPlay receiver). It builds for `amd64` and `arm64` (`docker buildx build --platform linux/arm64 ...`, see
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#container-image)).
 
 **The container needs its own address on the receivers' LAN.** Give it a macvlan interface (in Kubernetes for
 example with Multus); that makes mDNS and inbound UDP work without host networking. A NAT-ed bridge network does not
-work, because receivers send UDP back to the bridge (NTP timing requests, retransmit requests, PTP) and Spotify must
-reach the Zeroconf port.
+work, because receivers send UDP back to the bridge (NTP timing requests, retransmit requests, PTP), Spotify must
+reach the Zeroconf port, and Apple devices must reach the AirPlay receiver.
 
 ## Using the web app
 
@@ -129,7 +140,49 @@ Changing a member's level, in the web app or on the speaker itself, changes only
 poll, the "forget offline receivers after" days, and **Appearance**: the theme (light, dark or system) and the language
 (Deutsch, English, Français, Español, Русский, Українська, Português (Brasil); the browser's language until you choose
 one). The theme and the language are stored in the browser; the top bar has a theme picker and, on wider screens, a
-language select. **Diagnostics** shows the status, the bridge's addresses and ports, packet statistics and a live log.
+language select. The **AirPlay receiver** card turns the receiver on or off and sets its name and password (see
+"AirPlay receiver"). **Diagnostics** shows the status, the bridge's addresses and ports, packet statistics and a live log.
+
+## AirPlay receiver
+
+TuneShuttle advertises itself on the network as one AirPlay 2 speaker. On an iPhone or iPad (iOS 17 or later) or a
+Mac (macOS 14 or later) on the same network, pick "TuneShuttle" in Control Center's AirPlay menu or behind an app's
+AirPlay button: what the device plays comes out of the output selected on the Player page (one receiver or a
+synchronized group), as with Spotify.
+
+- **Volume, pause, seek and track changes** are made on the Apple device; its volume drives the master level of the
+  output. The Player page shows the title, artist, album, artwork and progress the device sends, with the chip
+  "AirPlay · *device name*". Its transport buttons are disabled while AirPlay plays: the Apple device is the remote.
+- **The newest source wins.** When an Apple device starts streaming, Spotify is paused and AirPlay takes the speakers.
+  When someone then presses play in Spotify, the AirPlay session ends (the Apple device shows the speaker as
+  disconnected). A second Apple device replaces the first one the same way. Spotify paused by AirPlay stays paused
+  until someone presses play.
+- **Settings > AirPlay receiver**: turn the receiver on or off, set its name (by default the Spotify device name) and
+  a password. Without a password anyone on the network can play; with one, Apple devices ask for it once and remember
+  the pairing. A name or password change reaches the AirPlay menu within seconds and does not interrupt a session.
+- **Diagnostics > AirPlay receiver** shows the state, the connected device, the stream type and format, the buffer,
+  late and missing frames, the PTP offset and whether the AAC decoder loaded.
+- **Not supported:** AirPlay 1 (iTunes for Windows), screen mirroring and video, 48 kHz or surround formats (the
+  Apple device converts), controlling the Apple device from the web app or a speaker's buttons, and playing in step
+  with other speakers of an iOS multi-speaker selection (TuneShuttle plays, but a fraction of a second behind them).
+
+**One AirPlay receiver per machine.** The receiver uses TCP 7000 and UDP 319/320, and Apple devices are confused by two
+AirPlay 2 receivers at one address; do not run another AirPlay receiver (shairport-sync, for example) on the same
+host. TuneShuttle's own sender shares the PTP ports with the receiver.
+
+### The ffmpeg libraries
+
+Apple devices usually send AAC, which .NET cannot decode. TuneShuttle loads FFmpeg's `avcodec`, `avutil` and
+`swresample` libraries of FFmpeg **7.1** (the major the FFmpeg.AutoGen 7.1.1 binding targets) at run time, first from
+the folder of the bridge, then from the system's library path (or only from `Bridge:Airplay:FfmpegPath` when that is
+set). Without them the receiver starts anyway, offers ALAC only and logs the reason once (Diagnostics: *Decoder*).
+
+| Platform | How to get them |
+|---|---|
+| Windows | `./build.ps1` runs `tools/get-ffmpeg.ps1`, which downloads one pinned LGPL shared build, verifies its published checksum and copies `avcodec-61.dll`, `avutil-59.dll` and `swresample-5.dll` next to `bridge.exe` (`-SkipFfmpeg` leaves them out); the install script installs them with the rest. By hand: `./tools/get-ffmpeg.ps1 -Destination artifacts/bridge`. |
+| Debian 13 (trixie), Ubuntu 25.04 or later | `sudo apt-get install --no-install-recommends libavcodec61 libavutil59 libswresample5`. Ubuntu 24.04 ships only FFmpeg 6.1 (`libavcodec60`), which does not fit; there the receiver runs ALAC-only unless you provide an FFmpeg 7.1 build. |
+| Container | Already in the image (the Debian 13 packages). |
+| Elsewhere | Any FFmpeg 7.1 shared build; set `Bridge:Airplay:FfmpegPath` to the directory that holds the libraries. |
 
 ## The CLI
 
@@ -178,7 +231,7 @@ Kitchen`). What you change in the web app is stored in the database and wins ove
 | `Bridge:PollReceiverVolumeSeconds` | `3` | Seconds between `GET_PARAMETER volume` polls while playing, which pick up level changes made on a speaker; 0 turns the poll off. Settings switches the poll on or off (at least every second) |
 | `Bridge:ForgetOfflineAfter` | `3.00:00:00` | Offline receivers without user state (no pairing, no group, not the selected output, default level and offset) are forgotten once not seen for this long; checked a minute after start-up, then hourly; `00:00:00` never forgets. Settings overrides it (in days) |
 | `Bridge:ZeroconfPort` | `0` (any free port) | TCP port of the Spotify Connect Zeroconf server; set it to open a fixed port in a firewall |
-| `Bridge:LocalAddress` | empty (all interfaces) | Local address the sender's UDP sockets bind to, for machines with several networks |
+| `Bridge:LocalAddress` | empty (all interfaces) | Local address the sender's UDP sockets, the AirPlay receiver's RTSP listener and the PTP port bind to, for machines with several networks |
 | `Bridge:ConnectTimeout` | `00:01:00` | Upper bound for connecting one receiver |
 | `Bridge:ReconnectDelay` | `00:00:05` | First delay before a lost receiver is connected again; doubles per failure |
 | `Bridge:MaxReconnectDelay` | `00:05:00` | Longest delay between two reconnect attempts |
@@ -188,6 +241,12 @@ Kitchen`). What you change in the web app is stored in the database and wins ove
 | `Bridge:SenderPorts:Timing`, `Bridge:SenderPorts:Control` | `0` | Reserved: the sender chooses its UDP ports itself, and a non-zero value only logs a warning |
 | `Bridge:EnableSpotify` | `true` | `false` runs without Spotify Connect (API and receivers only) |
 | `Bridge:BrowseReceivers` | `true` | `false` turns off receiver discovery |
+| `Bridge:Airplay:Enabled` | `true` | Start the AirPlay receiver. Settings overrides it |
+| `Bridge:Airplay:RtspPort` | `7000` | TCP port of the AirPlay receiver (the Apple device's control connection) |
+| `Bridge:Airplay:PtpEventPort`, `Bridge:Airplay:PtpGeneralPort` | `319`, `320` | UDP ports of the PTP clock, shared by the receiver and the sender; when they cannot be bound the receiver plays with anchor-only timing |
+| `Bridge:Airplay:FfmpegPath` | empty (the bridge's folder, then the library path) | Directory of the FFmpeg 7.1 libraries for AAC (see "The ffmpeg libraries") |
+| `Bridge:Airplay:AnchorLeadMs` | `300` | Without PTP: how far ahead the receiver schedules the first audio of a stream |
+| `Bridge:Airplay:SessionTimeoutSeconds` | `30` | An Apple device silent this long during a stream is considered gone and the speakers are released |
 | `Bridge:FakeReceivers` | `0` | Development only: N in-process fake receivers instead of the network (Debug builds from the repository) |
 
 ## API
@@ -202,8 +261,8 @@ them too. Requests and answers are JSON; errors are RFC 9457 problem details. Th
 | Receivers | `GET /api/receivers`, `GET /api/receivers/{id}`, `POST .../connect`, `POST .../disconnect`, `PUT .../volume`, `PUT .../offset`, `DELETE /api/receivers/{id}`, `DELETE /api/receivers?offline=true` |
 | Pairing | `POST /api/receivers/{id}/pair` (the receiver shows its PIN), `POST .../pair/pin`, `DELETE .../pairing` |
 | Groups | `GET`/`POST /api/groups`, `GET`/`PUT`/`DELETE /api/groups/{id}`, `POST .../members`, `DELETE .../members/{receiverId}`, `PUT .../volume`, `POST .../activate` |
-| Output and playback | `GET`/`PUT /api/output`, `GET /api/playback`, `POST /api/playback` (`play`, `pause`, `next`, `prev`) |
-| Settings and status | `GET`/`PUT /api/settings`, `GET /api/status`, `GET /api/diagnostics`, `DELETE /api/spotify` (forget the Spotify login) |
+| Output and playback | `GET`/`PUT /api/output`, `GET /api/playback`, `POST /api/playback` (`play`, `pause`, `next`, `prev`; `409` while AirPlay plays), `GET /api/playback/artwork` (the AirPlay sender's artwork) |
+| Settings and status | `GET`/`PUT /api/settings` (with the AirPlay receiver's settings; the password is never returned), `GET /api/status` (with the active source and the receiver's state), `GET /api/diagnostics`, `DELETE /api/spotify` (forget the Spotify login) |
 
 The WebSocket sends a snapshot on connect (status, receivers, groups, output, playback) and then one JSON event per
 change (`receiverChanged`, `receiverRemoved`, `groupChanged`, `groupRemoved`, `outputChanged`, `playbackChanged`,
@@ -212,6 +271,15 @@ change (`receiverChanged`, `receiverRemoved`, `groupChanged`, `groupRemoved`, `o
 
 ## Firewall and network
 
+| Port | For |
+|---|---|
+| UDP 5353 (multicast) | mDNS: Spotify and Apple devices find the bridge, the bridge finds the receivers |
+| TCP 8080 (`Kestrel:Endpoints:Http:Url`) | The web app and the API |
+| TCP, any free port (`Bridge:ZeroconfPort`) | Spotify Connect's Zeroconf handoff |
+| TCP 7000 (`Bridge:Airplay:RtspPort`) | The AirPlay receiver: Apple devices connect here |
+| UDP 319/320 (`Bridge:Airplay:PtpEventPort`, `PtpGeneralPort`) | PTP: the clock of Apple senders (receiver role) and of PTP receivers (sender role) |
+| UDP and TCP, chosen at run time | The sender's timing, control and RTP ports; the receiver's per-session audio, control and event ports |
+
 - **Same network.** Spotify finds the bridge, and the bridge finds the receivers, by mDNS (UDP 5353, multicast). Both
   need the same LAN or an mDNS reflector between VLANs. A receiver the bridge has seen before is reached at its last
   address even when mDNS is blocked.
@@ -219,6 +287,10 @@ change (`receiverChanged`, `receiverRemoved`, `groupChanged`, `groupRemoved`, `o
   run time, and PTP receivers talk to its PTP clock on UDP 319/320. If the timing requests are blocked, an NTP
   receiver such as a third-party AirPlay 2 speaker (srcvers 366.0, features 0x445F8A00,0x1C340) answers the stream setup with `400` after about 30 s. The Windows install script adds a
   rule for `bridge.exe` that covers these ports; on Linux, allow the bridge's inbound UDP from the LAN.
+- **The AirPlay receiver** needs TCP 7000 and UDP 319/320 reachable from the Apple devices, plus its per-session
+  ports. The Windows install script adds "TuneShuttle AirPlay RTSP" and "TuneShuttle PTP" (the program rule covers
+  the per-session ports); on Linux allow them from the LAN. If UDP 319/320 cannot be bound (another PTP daemon, or no
+  `CAP_NET_BIND_SERVICE`), the receiver still plays, with anchor-only timing.
 - **Spotify Zeroconf** needs its HTTP port reachable from the phones: any free port by default, fixed with
   `Bridge:ZeroconfPort`.
 - **The web port** (8080 by default) for the browser.
@@ -268,6 +340,10 @@ How each of these was found: [`docs/airplay2/SPEC.md`](docs/airplay2/SPEC.md) se
 | No title on the receiver | It rejects DMAP text (receiver A does); artwork and progress still go out. |
 | Nothing plays with the Buffered stream type | Switch Settings back to Realtime; not every receiver plays the buffered stream. |
 | The rooms of a group are out of step | Set a per-receiver offset under Receivers > Details. |
+| TuneShuttle is not in the AirPlay menu | The Apple device is on the same network; Settings > AirPlay receiver is on; UDP 5353 and TCP 7000 inbound are allowed. State *Error* in Diagnostics: the log says why, usually TCP 7000 taken by another AirPlay receiver on the same machine (only one per host). |
+| The Apple device connects, but nothing plays | Diagnostics > AirPlay receiver > *Decoder*: without the FFmpeg 7.1 libraries the receiver is ALAC-only, and the log names the library that did not load. Install them (see "The ffmpeg libraries") and restart. |
+| Diagnostics shows "PTP port not bound (anchor-only timing)" | UDP 319/320 are taken (another PTP daemon such as nqptp, or another AirPlay receiver) or may not be bound (systemd without `CAP_NET_BIND_SERVICE`). AirPlay still plays with anchor-only timing; free the ports for exact timing. |
+| AirPlay stops when someone presses play in Spotify | The "newest source wins" rule (see "AirPlay receiver"). |
 | "Bridge:FakeReceivers is set, but this build has no fake receiver" in the log | Fake receivers exist only in Debug builds from the repository. |
 
 The logs: the Diagnostics page (live), `<DataDirectory>/logs` on Windows, `journalctl -u tune-shuttle` under systemd,
@@ -278,5 +354,7 @@ The logs: the Diagnostics page (live), `<DataDirectory>/logs` on Windows, `journ
 There is no licence file at the repository root yet. [`librespot-dotnet/`](librespot-dotnet) is a port of librespot
 and carries its MIT licence ([`librespot-dotnet/LICENSE`](librespot-dotnet/LICENSE)). The ALAC codec in
 `src/Airplay2.Sender/Alac` is a port of Apple's ALAC (Apache-2.0), and the ported files keep that notice.
-owntone-server (GPL-2.0) was read only to understand how it synchronizes receivers; none of its code was copied. The
+owntone-server (GPL-2.0) was read only to understand how it synchronizes receivers; none of its code was copied.
+The AAC decoder loads FFmpeg's libraries (LGPL-2.1 or later) dynamically through the FFmpeg.AutoGen 7.x bindings
+(LGPL-3.0); no FFmpeg code is compiled in and no GPL components are used. The
 reference checkouts and their licences are listed in [`docs/REFERENCE-SOURCES.md`](docs/REFERENCE-SOURCES.md).

@@ -31,6 +31,13 @@ namespace Bridge.Service.Output;
 /// (<c>Player.Drop</c>), at every shutdown and after a crash, so it gets <see cref="LibrespotSink"/>, a view whose
 /// <c>Dispose</c> only pauses; the sink itself is disposed by the host.
 /// </para>
+/// <para>
+/// Source switch (SPEC-receiver.md 8.2): with <see cref="Sources"/> set, <see cref="Write"/> passes only while Spotify owns
+/// the output (the first write while nobody owns it claims it); a non-owner's frames are counted
+/// (<see cref="FramesDropped"/>), logged once per episode and paced at real time so librespot's position does not run
+/// ahead. The queued start and pause run only while Spotify may command the player; a dropped start is remembered by the
+/// switch and replayed through <see cref="StartIfRunning"/> once Spotify owns the output.
+/// </para>
 /// </remarks>
 public sealed class AirplaySink : ISink, IAsyncDisposable
 {
@@ -41,7 +48,11 @@ public sealed class AirplaySink : ISink, IAsyncDisposable
     private volatile bool _running;
     private long _framesWritten;
     private long _framesDiscarded;
+    private long _framesDropped;
+    private long _droppedInEpisode;
     private int _disposed;
+    private volatile Task _lastPause = Task.CompletedTask;
+    private volatile TaskCompletionSource _stopped = CompletedSignal();
 
     /// <summary>Creates the sink; <paramref name="format"/> must be S16 (the ALAC input format).</summary>
     public AirplaySink(AudioFormat format, ILogger<AirplaySink> logger)
@@ -85,6 +96,60 @@ public sealed class AirplaySink : ISink, IAsyncDisposable
     /// <summary>How long <see cref="Start"/> waits for a queued pause (its FLUSH) and the player's start.</summary>
     public TimeSpan StartWait { get; init; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>The ownership gate (SPEC-receiver.md 8.2), or null for an ungated sink (every write and command passes).</summary>
+    public SourceSwitch? Sources { get; init; }
+
+    /// <summary>True (default) to pace dropped frames at real time on librespot's thread, as the player's backpressure would (SPEC-receiver.md 8.2).</summary>
+    public bool PaceDroppedFrames { get; init; } = true;
+
+    /// <summary>Frames dropped because Spotify did not own the output (SPEC-receiver.md 8.2).</summary>
+    public long FramesDropped => Interlocked.Read(ref _framesDropped);
+
+    /// <summary>
+    /// Completes when the pause queued by the last <see cref="Stop"/> has run on the player (SPEC-receiver.md 8.2: the
+    /// <c>Command.Done</c> of the last pause); completed when none was queued.
+    /// </summary>
+    public Task LastPauseCompleted => _lastPause;
+
+    /// <summary>
+    /// Evicts Spotify for the source switch (SPEC-receiver.md 8.2): while the sink runs, asks for a pause
+    /// (<paramref name="requestPause"/>, <c>SpotifyHost.TryCommand("pause")</c>; when it returns false, Spotify is gone and
+    /// the sink stops itself), waits for librespot's <see cref="Stop"/> and then for the pause it queued
+    /// (<see cref="LastPauseCompleted"/>). The caller bounds the wait.
+    /// </summary>
+    public async Task EvictAsync(Func<bool> requestPause, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(requestPause);
+        if (_running)
+        {
+            var stopped = _stopped.Task;
+            if (!requestPause())
+            {
+                Stop();
+            }
+
+            await stopped.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await _lastPause.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Replays the start the switch dropped while another source owned the output (SPEC-receiver.md 8.2): while Spotify is
+    /// playing, queues the player's start behind any queued pause; completes when it ran (at once when nothing was started).
+    /// </summary>
+    public Task StartIfRunning()
+    {
+        var player = _player;
+        if (!_running || player is null || Volatile.Read(ref _disposed) != 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var command = new Command(CommandKind.Start, player);
+        return _commands.Writer.TryWrite(command) ? command.Done.Task : Task.CompletedTask;
+    }
+
     /// <summary>
     /// Points the sink at another player (or none) and, while Spotify is playing, starts it after any pause or start still
     /// queued for the previous one. The caller owns both players.
@@ -107,6 +172,11 @@ public sealed class AirplaySink : ISink, IAsyncDisposable
     /// <remarks>librespot calls this on play and resume (Player.cs:1858-1876) before writing.</remarks>
     public void Start()
     {
+        if (_stopped.Task.IsCompleted)
+        {
+            _stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
         _running = true;
         var player = _player;
         if (player is null || Volatile.Read(ref _disposed) != 0)
@@ -134,12 +204,16 @@ public sealed class AirplaySink : ISink, IAsyncDisposable
     {
         _running = false;
         var player = _player;
-        if (player is null || Volatile.Read(ref _disposed) != 0)
+        if (player is not null && Volatile.Read(ref _disposed) == 0)
         {
-            return;
+            var command = new Command(CommandKind.Pause, player);
+            if (_commands.Writer.TryWrite(command))
+            {
+                _lastPause = command.Done.Task;
+            }
         }
 
-        _commands.Writer.TryWrite(new Command(CommandKind.Pause, player));
+        _stopped.TrySetResult();
     }
 
     /// <inheritdoc />
@@ -153,6 +227,12 @@ public sealed class AirplaySink : ISink, IAsyncDisposable
 
         var pcm = converter.F64ToS16(samples.Data);
         var frames = pcm.Length / 2;
+        if (!MayWrite())
+        {
+            Drop(frames);
+            return;
+        }
+
         var player = _player;
         if (player is null)
         {
@@ -175,6 +255,7 @@ public sealed class AirplaySink : ISink, IAsyncDisposable
 
         _player = null;
         _running = false;
+        _stopped.TrySetResult();
         _commands.Writer.TryComplete();
     }
 
@@ -191,11 +272,16 @@ public sealed class AirplaySink : ISink, IAsyncDisposable
         {
             try
             {
+                // SPEC-receiver.md 8.2: the player is commanded only by its owner; a dropped start is remembered by the switch.
+                var sources = Sources;
                 if (command.Kind == CommandKind.Start)
                 {
-                    await command.Player.StartAsync(CancellationToken.None).ConfigureAwait(false);
+                    if (sources is null || sources.AdmitStart(AudioSource.Spotify))
+                    {
+                        await command.Player.StartAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
                 }
-                else
+                else if (sources is null || sources.Admit(AudioSource.Spotify, "Pause"))
                 {
                     await command.Player.PauseAsync(CancellationToken.None).ConfigureAwait(false);
                 }
@@ -229,6 +315,47 @@ public sealed class AirplaySink : ISink, IAsyncDisposable
             {
                 command.Signal.Set();
             }
+        }
+    }
+
+    private static TaskCompletionSource CompletedSignal()
+    {
+        var signal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        signal.SetResult();
+        return signal;
+    }
+
+    /// <summary>The write gate of SPEC-receiver.md 8.2: Spotify owns the output, or claims it with its first write while nobody does.</summary>
+    private bool MayWrite()
+    {
+        var sources = Sources;
+        if (sources is null || sources.MayWrite(AudioSource.Spotify) || sources.TryClaimUnowned(AudioSource.Spotify))
+        {
+            var dropped = Interlocked.Exchange(ref _droppedInEpisode, 0);
+            if (dropped > 0)
+            {
+                _logger.LogInformation("Spotify owns the output again; {Frames} frames were dropped meanwhile", dropped);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private void Drop(int frames)
+    {
+        Interlocked.Add(ref _framesDropped, frames);
+        if (Interlocked.Add(ref _droppedInEpisode, frames) == frames)
+        {
+            _logger.LogInformation("Spotify audio dropped: the output belongs to {Owner}", Sources?.Owner);
+        }
+
+        if (PaceDroppedFrames)
+        {
+            // librespot's player thread (the documented blocking exception, SPEC-audio.md 8.1): without the ring's
+            // backpressure it would race through the track while it waits for its claim.
+            Thread.Sleep(TimeSpan.FromSeconds(frames / 44100.0));
         }
     }
 

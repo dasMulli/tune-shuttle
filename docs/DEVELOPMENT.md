@@ -28,6 +28,7 @@ tests/
   Airplay2.Sender.Tests/        unit, fake-receiver, loopback and live tests of the sender and the CLI
   Bridge.Tests/                 store, API, sink, deployment and release tests; Web/ holds the web app tests (bUnit)
 tools/
+  get-ffmpeg.ps1                fetches the pinned LGPL FFmpeg 7.1 DLLs for the AAC decoder (see "The AAC decoder")
   web-screenshots.ps1           screenshots of the web app in headless Edge
   web-audit.ps1                 layout audit of the web app in headless Edge
   privacy-scan.ps1              fails on personal or household data in the tracked files (see "Privacy scan")
@@ -88,21 +89,60 @@ The CI script runs the whole sequence:
 
 Parameters: `-Configuration Debug|Release` (default Release), `-Output` (default `artifacts`), `-Runtime` (default
 `win-x64`), `-SelfContained`, `-ImageTag` (default `tune-shuttle:dev`), `-SkipBuild`, `-SkipPrivacyScan`, `-SkipTests`, `-SkipPublish`,
-`-SkipContainer`, `-RequireContainer` (fail instead of warn without Docker), `-ExcludeTimingTests`. The test step
+`-SkipContainer`, `-RequireContainer` (fail instead of warn without Docker), `-ExcludeTimingTests`, `-SkipFfmpeg` (no
+ffmpeg DLLs: the AAC decode tests report "skipped" and the bundle is ALAC-only). The test step
 clears `AIRPLAY_LIVE` as a second guard. Before the tests it runs the privacy scan (below).
 
 | Output | Path |
 |---|---|
-| Bridge (`bridge.exe` + web app) | `artifacts/bridge/` (what `install/windows/install-service.ps1` reads by default) |
+| Bridge (`bridge.exe` + web app + the ffmpeg DLLs) | `artifacts/bridge/` (what `install/windows/install-service.ps1` reads by default) |
+| FFmpeg DLLs for the tests | `artifacts/ffmpeg/` (`tools/get-ffmpeg.ps1`; the download is cached in `artifacts/ffmpeg-cache/`) |
 | CLI (`airplay2.exe`) | `artifacts/airplay2/` |
 | Test results (TRX) | `artifacts/test-results/` |
 | Container image | `tune-shuttle:dev` |
 
 `artifacts/` is git-ignored. Two test classes pin the release plumbing: `ReleaseConsistencyTests` (`appsettings.json`
 equals the `BridgeOptions` defaults; publish folder and web port agree between `build.ps1`, the install script and the
-Dockerfile) and `DeploymentTests` (the endpoint key in the install script, the Dockerfile and the systemd unit).
+Dockerfile; the FFmpeg majors of `tools/get-ffmpeg.ps1` are the packages of the Dockerfile and the systemd notes; the
+AirPlay receiver's ports in the install script, the Dockerfile, README.md and ARCHITECTURE.md are the
+`AirplayOptions` defaults) and `DeploymentTests` (the endpoint key in the install script, the Dockerfile and the
+systemd unit; the receiver's firewall rules, `CAP_NET_BIND_SERVICE`, `EXPOSE` lines and FFmpeg packages).
 `QuirkDefaultsTests` pins the receiver defaults of `SPEC.md` section 4.2, and a test checks that every relative link
 in `README.md` points to a file that exists.
+
+### The AAC decoder
+
+The AirPlay receiver decodes AAC-LC with FFmpeg's libavcodec through FFmpeg.AutoGen (docs/airplay2/SPEC-receiver.md
+R4, 7.2). The binding is pinned in `Directory.Packages.props` (7.1.1, which binds FFmpeg 7.1: `avcodec-61`,
+`avutil-59`, `swresample-5`); the native libraries are not a NuGet dependency. On Windows get them with:
+
+```powershell
+./tools/get-ffmpeg.ps1                                  # into artifacts/ffmpeg, where the tests look
+./tools/get-ffmpeg.ps1 -Destination artifacts/bridge    # next to bridge.exe (build.ps1 does this after publish)
+```
+
+The script downloads one pinned LGPL shared win64 build, checks it against the release's published checksum and a hash
+pinned in the script, and extracts only the three DLLs and the licence; reruns are no-ops. On Linux install
+`libavcodec61 libavutil59 libswresample5` (Debian 13, Ubuntu 25.04 or later); the container image has them.
+
+**The AAC test gate.** `FfmpegAacDecoderTests` and the buffered AAC loopback test in `tests/Airplay2.Receiver.Tests`
+load the libraries from `AIRPLAY_FFMPEG_PATH` when it is set, else from `artifacts/ffmpeg`. When they do not load, the
+tests pass with the output "skipped: libavcodec not found" (the gate pattern of "Live tests": xunit 2.9 has no dynamic
+skip), so check the test output to see whether AAC was really decoded. `./build.ps1` runs `get-ffmpeg.ps1` before the
+tests and sets `AIRPLAY_FFMPEG_PATH`, so a CI run decodes AAC unless `-SkipFfmpeg`. The vector is
+`docs/airplay2/test-vectors/aac-44100-stereo-1024.json`, made by `gen_aac_vectors.py` next to it (the ffmpeg command is
+recorded there); AAC is compared by RMS and frequency, not bit-exact.
+
+Running the bridge from the repository with the DLLs: `dotnet run --project src/Bridge.Service -- --Bridge:Airplay:FfmpegPath
+artifacts/ffmpeg`. Without them the receiver starts ALAC-only and logs the reason once.
+
+### AirPlay receiver ports in development
+
+The product receiver binds TCP 7000 and the shared `PtpPort` UDP 319/320 (`Bridge:Airplay:*`). Offline tests never bind those
+ports: they use port 0 and loopback only, and run our own sender against the product receiver
+(`Airplay2.Receiver.Tests`) or the fake receiver. A `dotnet run` of the bridge advertises a real AirPlay receiver on the
+LAN; turn it off with `--Bridge:Airplay:Enabled=false` when another receiver (e.g. the shairport-sync container,
+docs/airplay2/TEST-RECEIVER.md) runs on the same host (SPEC-receiver.md R13).
 
 ### Privacy scan
 
@@ -398,6 +438,13 @@ docker buildx build --platform linux/arm64 -f docker/Dockerfile -t <registry>/tu
 The SDK stage runs natively on the build host and cross-compiles for `TARGETARCH`; only the runtime stage is pulled
 for the target platform, so an arm64 image (e.g. for a Raspberry Pi) builds without QEMU. The header of
 `docker/Dockerfile` has the command with a placeholder registry. `./build.ps1` builds `tune-shuttle:dev` for the host.
+
+The runtime stage is `debian:trixie-slim` with the .NET runtime copied from `mcr.microsoft.com/dotnet/aspnet:10.0`,
+not that image itself: the aspnet 10.0 image is Ubuntu 24.04, which has only FFmpeg 6.1, while Debian 13 has the FFmpeg
+7.1 packages (`libavcodec61`, `libavutil59`, `libswresample5`) the pinned binding needs. The Dockerfile comment records
+the check (`cat /etc/os-release`, `apt-cache policy`); repeat it whenever the FFmpeg.AutoGen pin changes. The build
+context is limited by `.dockerignore`; the one file of `docs/` it lets in is `info-response.bplist`, which
+`Airplay2.Receiver` embeds.
 
 ## Manual tests
 

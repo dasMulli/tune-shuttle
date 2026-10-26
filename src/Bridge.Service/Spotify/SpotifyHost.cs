@@ -188,7 +188,7 @@ public sealed class SpotifyHost : BackgroundService
         var session = new Session(sessionConfig, cache: null);
         var player = Player.Create(new PlayerConfig { Bitrate = Bitrate.Bitrate320, Gapless = true }, session, new NoOpVolume(), () => Sink.LibrespotSink);
         var events = player.GetPlayerEventChannel();
-        var mapper = new PlayerEventMapper(_output, _artwork, _runtime, _hub, Logger);
+        var mapper = new PlayerEventMapper(_output, _artwork, _runtime, _hub, Logger, sources: Sink.Sources); // SPEC-receiver.md 8.2
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         var mapping = mapper.RunAsync(events.Reader, lifetime.Token);
         var remote = PumpRemoteCommandsAsync(lifetime.Token);

@@ -40,6 +40,8 @@ public sealed class RuntimeState
     private volatile OutputSelection _selection = OutputSelection.None;
     private volatile SpotifyStatus _spotify = new(false, null, string.Empty);
     private volatile PlaybackDto _playback = new(false, null, null, null, null, 0, 0, null, 0);
+    private volatile PlaybackDto _spotifyPlayback = new(false, null, null, null, null, 0, 0, null, 0, OutputManager.SourceSpotify);
+    private volatile PlaybackDto _airplayPlayback = new(false, null, null, null, null, 0, 0, null, 0, OutputManager.SourceAirplay);
     private volatile GroupPlayerEvent.Statistics? _statistics;
 
     /// <summary>The selected output.</summary>
@@ -56,11 +58,35 @@ public sealed class RuntimeState
         set => _spotify = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    /// <summary>The playback view (mirrors librespot's player events).</summary>
+    /// <summary>
+    /// The playback view of the output's owner (SPEC-receiver.md 8.2: <c>GET /api/playback</c> and <c>playbackChanged</c>):
+    /// written by <see cref="SourceSwitch"/> for the owner only, from <see cref="SpotifyPlayback"/> or
+    /// <see cref="AirplayPlayback"/>, or an empty view while nobody owns the output.
+    /// </summary>
     public PlaybackDto Playback
     {
         get => _playback;
         set => _playback = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <summary>
+    /// Spotify's own playback view (SPEC-receiver.md 8.2), kept by <c>PlayerEventMapper</c> whoever owns the output; it
+    /// becomes <see cref="Playback"/> while the owner is not AirPlay.
+    /// </summary>
+    public PlaybackDto SpotifyPlayback
+    {
+        get => _spotifyPlayback;
+        set => _spotifyPlayback = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <summary>
+    /// The AirPlay sender's playback view (SPEC-receiver.md 8.2, 8.3), kept by <c>AirplaySource</c>; it becomes
+    /// <see cref="Playback"/> only while AirPlay owns the output.
+    /// </summary>
+    public PlaybackDto AirplayPlayback
+    {
+        get => _airplayPlayback;
+        set => _airplayPlayback = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     /// <summary>The last pacer statistics of the active group player, or null.</summary>

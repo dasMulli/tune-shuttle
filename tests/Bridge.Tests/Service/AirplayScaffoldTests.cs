@@ -159,7 +159,7 @@ public class AirplayScaffoldTests
         Assert.Equal("spotify", SourceSwitch.ToApiName(AudioSource.Spotify));
         Assert.Equal("airplay", SourceSwitch.ToApiName(AudioSource.Airplay));
         Assert.Equal(OutputManager.SourceAirplay, SourceSwitch.ToApiName(AudioSource.Airplay));
-        Assert.Equal("SPEC-receiver.md 8.2, wave 3", Assert.Throws<NotImplementedException>(() => sources.MayWrite(AudioSource.Spotify)).Message);
+        Assert.False(sources.MayWrite(AudioSource.Spotify)); // nobody owns the output at start (SPEC-receiver.md 8.2)
     }
 
     [Fact]
@@ -180,6 +180,6 @@ public class AirplayScaffoldTests
 
         var status = await client.GetFromJsonAsync<StatusDto>(ApiRoutes.Status);
         Assert.Null(status!.ActiveSource);
-        Assert.Null(status.Airplay);
+        Assert.Equal("off", status.Airplay?.State); // wave 3 api: the receiver's state is always reported (SPEC-receiver.md 9.1)
     }
 }

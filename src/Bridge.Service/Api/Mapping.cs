@@ -1,7 +1,11 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using Airplay2.Receiver;
+using Airplay2.Receiver.Playout;
+using Airplay2.Receiver.Timing;
 using Airplay2.Sender.Discovery;
+using Airplay2.Sender.Session;
 using Bridge.Contracts;
 using Bridge.Service.Store;
 
@@ -236,6 +240,70 @@ public static class Mapping
     /// <summary>Parses a stored timestamp (<see cref="FormatTimestamp"/>, or any ISO-8601 form, UTC when unmarked); null when absent or unreadable.</summary>
     public static DateTimeOffset? ParseTimestamp(string? value) =>
         DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed) ? parsed : null;
+
+    /// <summary>The API name of a receiver state (SPEC-receiver.md 9.1): <c>off</c>, <c>starting</c>, <c>advertising</c>, <c>connected</c>, <c>streaming</c>, <c>error</c>.</summary>
+    public static string ToApiName(ReceiverStatus status) => status switch
+    {
+        ReceiverStatus.Off => "off",
+        ReceiverStatus.Starting => "starting",
+        ReceiverStatus.Advertising => "advertising",
+        ReceiverStatus.Connected => "connected",
+        ReceiverStatus.Streaming => "streaming",
+        _ => "error",
+    };
+
+    /// <summary>The API name of a stream type (SPEC-receiver.md 9.1 <c>AirplayDiagnosticsDto.StreamType</c>): <c>realtime</c> or <c>buffered</c>, null without a stream.</summary>
+    public static string? ToApiName(StreamType? type) => type switch
+    {
+        StreamType.Realtime => "realtime",
+        StreamType.Buffered => "buffered",
+        _ => null,
+    };
+
+    /// <summary>The artwork URL of an AirPlay track (SPEC-receiver.md 9.1): <c>/api/playback/artwork?v=&lt;rtptime&gt;</c>.</summary>
+    public static string AirplayArtworkUrl(uint key) => ApiRoutes.PlaybackArtwork + "?v=" + key.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The receiver as the status reports it (SPEC-receiver.md 9.1 <c>StatusDto.Airplay</c>).</summary>
+    public static AirplayReceiverDto ToAirplayReceiverDto(ReceiverStatus status, string name, SenderInfo? sender, bool aacAvailable) =>
+        new(ToApiName(status), name, sender?.Name, sender?.Model, aacAvailable);
+
+    /// <summary>
+    /// The receiver's diagnostics (SPEC-receiver.md 9.1 <c>DiagnosticsDto.Airplay</c>) from the playout statistics (5.3)
+    /// and the PTP slave statistics (6.2); without a stream the counters are 0 and the stream fields null.
+    /// </summary>
+    public static AirplayDiagnosticsDto ToAirplayDiagnosticsDto(int rtspPort, bool ptpBound, PlayoutStatistics? playout, PtpSlaveStatistics? ptp, string? decoderStatus)
+    {
+        var p = playout ?? PlayoutStatistics.Empty;
+        return new AirplayDiagnosticsDto(
+            rtspPort,
+            ptpBound,
+            ptp?.OffsetNanos,
+            ToApiName(p.StreamType),
+            p.Decoder,
+            p.BufferedMs,
+            (int)Math.Round(p.StreamOffset.TotalMilliseconds, MidpointRounding.AwayFromZero),
+            p.LateFrames,
+            p.MissingFrames,
+            p.DriftCorrections,
+            decoderStatus);
+    }
+
+    /// <summary>
+    /// The AirPlay playback view (SPEC-receiver.md 8.3, 9.1): the sender's metadata, <paramref name="elapsed"/> as the
+    /// position, <c>TrackId</c> null, <c>Source = "airplay"</c> and the artwork URL of <paramref name="artworkKey"/>.
+    /// </summary>
+    public static PlaybackDto ToAirplayPlaybackDto(TrackMetadata? metadata, bool playing, TimeSpan elapsed, uint? artworkKey, int level) =>
+        new(
+            playing,
+            null,
+            metadata?.Title,
+            metadata?.Artist,
+            metadata?.Album,
+            Math.Max(0, (long)elapsed.TotalMilliseconds),
+            Math.Max(0, (long)(metadata?.Duration?.TotalMilliseconds ?? 0)),
+            artworkKey is { } key ? AirplayArtworkUrl(key) : null,
+            level,
+            Output.OutputManager.SourceAirplay);
 
     /// <summary>The address the bridge shows and stores for a receiver: its IPv4 address if it has one, else the first.</summary>
     private static IPAddress? PreferredAddress(DiscoveredReceiver discovered) =>

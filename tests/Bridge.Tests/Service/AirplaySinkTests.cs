@@ -92,6 +92,124 @@ public sealed class AirplaySinkTests
         Assert.Throws<Librespot.Playback.AudioBackend.SinkException>(() => new AirplaySink(AudioFormat.F32, NullLogger<AirplaySink>.Instance));
     }
 
+    [Fact]
+    public async Task Frames_of_a_non_owner_are_dropped_and_after_a_release_the_next_write_claims()
+    {
+        // SPEC-receiver.md 8.2: the per-write gate; the first Spotify write while nobody owns the output claims it.
+        var sources = new SourceSwitch();
+        var player = new StubPlayer();
+        await using var sink = new AirplaySink(AudioFormat.S16, NullLogger<AirplaySink>.Instance) { Sources = sources, PaceDroppedFrames = false, Player = player };
+        var converter = new Converter(null);
+        await sources.ClaimAsync(AudioSource.Airplay, null, CancellationToken.None);
+
+        sink.Write(Synthetic(0), converter);
+        sink.Write(Synthetic(1), converter);
+        Assert.Equal(2 * PacketFrames, sink.FramesDropped);
+        Assert.Equal(0, sink.FramesWritten);
+        Assert.Equal(0, player.FramesWritten);
+        Assert.Equal(AudioSource.Airplay, sources.Owner);
+
+        sources.Release(AudioSource.Airplay);
+        Assert.Equal(AudioSource.None, sources.Owner);
+        sink.Write(Synthetic(2), converter);
+        Assert.Equal(AudioSource.Spotify, sources.Owner);
+        Assert.Equal(PacketFrames, sink.FramesWritten);
+        Assert.Equal(PacketFrames, player.FramesWritten);
+        Assert.Equal(2 * PacketFrames, sink.FramesDropped);
+    }
+
+    [Fact]
+    [Trait("Category", "Timing")]
+    public async Task Dropped_frames_are_paced_at_real_time()
+    {
+        var sources = new SourceSwitch();
+        await using var sink = new AirplaySink(AudioFormat.S16, NullLogger<AirplaySink>.Instance) { Sources = sources, Player = new StubPlayer() };
+        var converter = new Converter(null);
+        await sources.ClaimAsync(AudioSource.Airplay, null, CancellationToken.None);
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < 10; i++)
+        {
+            sink.Write(Synthetic(i), converter); // 10 x 1024 frames = 232 ms of audio
+        }
+
+        Assert.True(watch.Elapsed >= TimeSpan.FromMilliseconds(200), $"dropping took {watch.Elapsed}");
+    }
+
+    [Fact]
+    public async Task A_start_while_airplay_owns_is_dropped_and_replayed_when_spotify_claims()
+    {
+        var player = new StubPlayer();
+        AirplaySink? sinkRef = null;
+        var sources = new SourceSwitch(new RuntimeState(), null, NullLogger<SourceSwitch>.Instance, new SourceSwitchHooks
+        {
+            StartSpotifyIfRunningAsync = ct => sinkRef!.StartIfRunning().WaitAsync(ct),
+        });
+        await using var sink = new AirplaySink(AudioFormat.S16, NullLogger<AirplaySink>.Instance) { Sources = sources, Player = player, PaceDroppedFrames = false };
+        sinkRef = sink;
+        await sources.ClaimAsync(AudioSource.Airplay, null, CancellationToken.None);
+
+        sink.Start(); // waits for its command: the start was handled (dropped) when it returns
+        Assert.Equal(0, player.Starts);
+        sink.Stop();
+        await sink.LastPauseCompleted.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, player.Pauses); // AirPlay's player is not paused by Spotify
+        sink.Start();
+        Assert.Equal(0, player.Starts);
+
+        await sources.ClaimAsync(AudioSource.Spotify, null, CancellationToken.None);
+        Assert.Equal(1, player.Starts); // replayed once, by the new owner
+        Assert.Equal(AudioSource.Spotify, sources.Owner);
+    }
+
+    [Fact]
+    public async Task Eviction_pauses_spotify_and_completes_after_the_players_pause()
+    {
+        // SPEC-receiver.md 8.2: TryCommand("pause") → librespot's Stop() → the queued PauseAsync; the claim awaits it.
+        var pause = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var player = new StubPlayer { PauseGate = pause.Task };
+        await using var sink = new AirplaySink(AudioFormat.S16, NullLogger<AirplaySink>.Instance) { Player = player };
+        sink.Start();
+        Assert.Equal(1, player.Starts);
+
+        var requested = 0;
+        var eviction = sink.EvictAsync(
+            () =>
+            {
+                Interlocked.Increment(ref requested);
+                ThreadPool.QueueUserWorkItem(_ => sink.Stop()); // Spirc pauses the player thread a moment later
+                return true;
+            },
+            CancellationToken.None);
+        await Task.Delay(100);
+        Assert.Equal(1, requested);
+        Assert.False(eviction.IsCompleted);
+        Assert.False(sink.IsRunning);
+
+        pause.SetResult();
+        await eviction.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, player.Pauses);
+        Assert.True(sink.LastPauseCompleted.IsCompleted);
+
+        // Not running: nothing to request, completes at once.
+        await sink.EvictAsync(() => throw new InvalidOperationException("not called"), CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Eviction_without_spotify_stops_the_sink_itself()
+    {
+        var player = new StubPlayer();
+        await using var sink = new AirplaySink(AudioFormat.S16, NullLogger<AirplaySink>.Instance) { Player = player };
+        sink.Start();
+
+        await sink.EvictAsync(() => false, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(sink.IsRunning);
+        Assert.Equal(1, player.Pauses);
+        await sink.StartIfRunning().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, player.Starts); // not running: StartIfRunning starts nothing
+    }
+
     /// <summary>A 1024-frame stereo packet of two different tones, distinct per index.</summary>
     private static AudioPacket.Samples Synthetic(int index)
     {
@@ -104,6 +222,58 @@ public sealed class AirplaySinkTests
         }
 
         return new AudioPacket.Samples(samples);
+    }
+
+    /// <summary>A player that counts what the sink asks of it.</summary>
+    private sealed class StubPlayer : IGroupPlayer
+    {
+        private int _starts;
+        private int _pauses;
+        private long _frames;
+
+        public Task PauseGate { get; init; } = Task.CompletedTask;
+
+        public int Starts => Volatile.Read(ref _starts);
+
+        public int Pauses => Volatile.Read(ref _pauses);
+
+        public long FramesWritten => Interlocked.Read(ref _frames);
+
+        public System.Threading.Channels.ChannelReader<GroupPlayerEvent> Events { get; } = System.Threading.Channels.Channel.CreateUnbounded<GroupPlayerEvent>().Reader;
+
+        public GroupVolumeModel Volume => throw new NotSupportedException();
+
+        public IReadOnlyDictionary<string, GroupMemberState> Members { get; } = new Dictionary<string, GroupMemberState>();
+
+        public int QueuedFrames => 0;
+
+        public Task AddReceiverAsync(Airplay2.Sender.Discovery.DiscoveredReceiver receiver, int level, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task RemoveReceiverAsync(string receiverId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public void Write(ReadOnlySpan<short> interleavedPcm) => Interlocked.Add(ref _frames, interleavedPcm.Length / 2);
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _starts);
+            return Task.CompletedTask;
+        }
+
+        public async Task PauseAsync(CancellationToken cancellationToken)
+        {
+            await PauseGate;
+            Interlocked.Increment(ref _pauses);
+        }
+
+        public Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task SetMasterLevelAsync(int level, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task SetReceiverLevelAsync(string receiverId, int level, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task SetNowPlayingAsync(Airplay2.Sender.Session.TrackMetadata metadata, ReadOnlyMemory<byte>? artwork, string? artworkContentType, TimeSpan elapsed, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private static async Task<List<FakeReceiverEvent.AudioPacket>> CollectAsync(RecordedFake fake, int frames)

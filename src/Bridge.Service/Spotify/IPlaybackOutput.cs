@@ -26,6 +26,18 @@ public interface IPlaybackOutput
     Task SetNowPlayingAsync(NowPlaying nowPlaying, CancellationToken cancellationToken);
 
     /// <summary>
+    /// A source's flush (SPEC-receiver.md 8.2): applied only while <paramref name="source"/> may command the output. The
+    /// default forwards to <see cref="FlushAsync(CancellationToken)"/> (stubs without a source switch).
+    /// </summary>
+    Task FlushAsync(Output.AudioSource source, CancellationToken cancellationToken) => FlushAsync(cancellationToken);
+
+    /// <summary>
+    /// A source's now-playing (SPEC-receiver.md 8.2): applied only while <paramref name="source"/> may command the output.
+    /// The default forwards to <see cref="SetNowPlayingAsync(NowPlaying, CancellationToken)"/> (stubs without a source switch).
+    /// </summary>
+    Task SetNowPlayingAsync(Output.AudioSource source, NowPlaying nowPlaying, CancellationToken cancellationToken) => SetNowPlayingAsync(nowPlaying, cancellationToken);
+
+    /// <summary>
     /// A source's volume moved: applies it as G of the output (a single receiver's r_i) with the level's source tag,
     /// <see cref="Output.OutputManager.SourceSpotify"/> or <see cref="Output.OutputManager.SourceAirplay"/> (SPEC-receiver.md R9, 8.6).
     /// </summary>

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using Bridge.Contracts;
 using Bridge.Service.Output;
 using Bridge.Service.Spotify;
 using Librespot.Core;
@@ -20,6 +21,85 @@ public sealed class PlayerEventMapperTests
 {
     private static readonly SpotifyUri TrackA = SpotifyUri.FromUri("spotify:track:4uLU6hMCjMI75M1A2tKUQC");
     private static readonly SpotifyUri TrackB = SpotifyUri.FromUri("spotify:track:7GhIk7Il098yCjg4BQjzvb");
+
+    [Fact]
+    public async Task Playing_claims_the_output_ending_the_airplay_session_and_stopped_releases_it()
+    {
+        // SPEC-receiver.md R8, 8.2: Spotify's Playing → ClaimAsync(Spotify) (AirPlay evicted first); Stopped → Release(Spotify).
+        var runtime = new RuntimeState();
+        var reasons = new ConcurrentQueue<string>();
+        var sources = new SourceSwitch(runtime, null, NullLogger<SourceSwitch>.Instance, new SourceSwitchHooks
+        {
+            EvictAirplayAsync = (reason, _) =>
+            {
+                reasons.Enqueue(reason);
+                return Task.CompletedTask;
+            },
+        });
+        await sources.ClaimAsync(AudioSource.Airplay, null, CancellationToken.None);
+        sources.PublishPlayback(AudioSource.Airplay, new PlaybackDto(true, null, "Phone song", null, null, 0, 0, null, 0));
+        var output = new RecordingOutput();
+        var owners = new List<AudioSource>();
+
+        await RunAsync(output, new object[] {
+            new PlayerEvent.TrackChanged(Item(TrackA, "A", "X", "Y", 200_000)),
+            Step(() =>
+            {
+                owners.Add(sources.Owner);
+                Assert.Equal("Phone song", runtime.Playback.Title); // the track change is Spotify's own view only
+                Assert.Equal("A", runtime.SpotifyPlayback.Title);
+            }),
+            new PlayerEvent.Playing(1, TrackA, 0),
+            Step(() =>
+            {
+                owners.Add(sources.Owner);
+                Assert.Equal("A", runtime.Playback.Title);
+                Assert.Equal("spotify", runtime.Playback.Source);
+                Assert.True(runtime.Playback.Playing);
+            }),
+            new PlayerEvent.Paused(1, TrackA, 1_000),
+            Step(() => owners.Add(sources.Owner)), // a pause keeps the ownership
+            new PlayerEvent.Stopped(1, TrackA),
+        }, sources, runtime);
+
+        owners.Add(sources.Owner);
+        Assert.Equal([AudioSource.Airplay, AudioSource.Spotify, AudioSource.Spotify, AudioSource.None], owners);
+        Assert.Equal(["replaced by Spotify"], reasons);
+        Assert.Null(runtime.Playback.Title);
+        Assert.Null(runtime.Playback.Source);
+    }
+
+    [Fact]
+    public async Task While_airplay_owns_the_output_spotifys_flush_now_playing_and_view_are_held_back()
+    {
+        // SPEC-receiver.md 8.2: the Paused event the AirPlay claim causes must not flip the web app back to Spotify, and
+        // Spotify's player commands are dropped while AirPlay owns the player.
+        var runtime = new RuntimeState();
+        var sources = new SourceSwitch(runtime, null, NullLogger<SourceSwitch>.Instance);
+        var output = new RecordingOutput();
+
+        await RunAsync(output, new object[] {
+            new PlayerEvent.TrackChanged(Item(TrackA, "A", "X", "Y", 200_000)),
+            new PlayerEvent.Playing(1, TrackA, 0),
+            Step(() =>
+            {
+                Assert.Equal(AudioSource.Spotify, sources.Owner); // claimed from None
+                Assert.True(sources.ClaimAsync(AudioSource.Airplay, null, CancellationToken.None).IsCompletedSuccessfully);
+                sources.PublishPlayback(AudioSource.Airplay, new PlaybackDto(true, null, "Phone song", null, null, 0, 0, null, 0));
+            }),
+            new PlayerEvent.Seeked(1, TrackA, 60_000), // librespot still thinks it plays: flush and now-playing are dropped
+            new PlayerEvent.Paused(1, TrackA, 60_000),
+            new PlayerEvent.Seeked(1, TrackA, 90_000),
+        }, sources, runtime);
+
+        Assert.Equal(["now playing"], output.Calls.Select(c => c.Kind)); // only the one sent while Spotify owned the output
+        Assert.Equal("Phone song", runtime.Playback.Title);
+        Assert.Equal("airplay", runtime.Playback.Source);
+        Assert.False(runtime.SpotifyPlayback.Playing);
+        Assert.Equal(90_000, runtime.SpotifyPlayback.PositionMs);
+        Assert.Equal(AudioSource.Airplay, sources.Owner);
+        Assert.True(sources.DroppedCommands >= 3);
+    }
 
     [Fact]
     public async Task Track_start_sends_text_artwork_and_position_without_a_flush()
@@ -226,9 +306,9 @@ public sealed class PlayerEventMapperTests
     }
 
     /// <summary>Feeds the events in order (the <c>Step</c> markers run code in between) and waits for every background send.</summary>
-    private static async Task<PlayerEventMapper> RunAsync(RecordingOutput output, IReadOnlyList<object> events)
+    private static async Task<PlayerEventMapper> RunAsync(RecordingOutput output, IReadOnlyList<object> events, SourceSwitch? sources = null, RuntimeState? runtime = null)
     {
-        var mapper = new PlayerEventMapper(output, new StubArtwork(), new RuntimeState(), hub: null, NullLogger.Instance);
+        var mapper = new PlayerEventMapper(output, new StubArtwork(), runtime ?? new RuntimeState(), hub: null, NullLogger.Instance, sources: sources);
         var channel = Channel.CreateUnbounded<PlayerEvent>();
         var running = mapper.RunAsync(channel.Reader, CancellationToken.None);
         foreach (var item in events)

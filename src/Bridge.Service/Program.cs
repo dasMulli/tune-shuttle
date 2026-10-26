@@ -91,7 +91,7 @@ public static class Program
         services.AddSingleton<RuntimeState>();
         services.AddSingleton<IReceiverBrowser>(sp => new MdnsReceiverBrowser(new ReceiverBrowserOptions(), sp.GetRequiredService<ILogger<MdnsReceiverBrowser>>()));
         services.AddSingleton<AirplaySenderProvider>();
-        services.AddSingleton(sp => new AirplaySink(AudioFormat.S16, sp.GetRequiredService<ILogger<AirplaySink>>()));
+        services.AddSingleton(sp => new AirplaySink(AudioFormat.S16, sp.GetRequiredService<ILogger<AirplaySink>>()) { Sources = sp.GetRequiredService<SourceSwitch>() });
         services.AddSingleton<DtoFactory>();
         services.AddSingleton<ReceiverInventory>();
         services.AddSingleton<PairingCoordinator>();
@@ -111,7 +111,20 @@ public static class Program
                 new PtpPortOptions { BindAddress = o.LocalIPAddress, EventPort = o.Airplay.PtpEventPort, GeneralPort = o.Airplay.PtpGeneralPort },
                 sp.GetRequiredService<ILogger<PtpPort>>());
         });
-        services.AddSingleton<SourceSwitch>();
+        // The switch's evictions and replays reach the sources through delegates resolved at call time (8.2): the sources
+        // and DtoFactory depend on the switch, so it cannot take them in its constructor.
+        services.AddSingleton(sp => new SourceSwitch(
+            sp.GetRequiredService<RuntimeState>(),
+            sp.GetRequiredService<EventHub>(),
+            sp.GetRequiredService<ILogger<SourceSwitch>>(),
+            new SourceSwitchHooks
+            {
+                EvictSpotifyAsync = ct => sp.GetRequiredService<AirplaySink>().EvictAsync(() => sp.GetRequiredService<SpotifyHost>().TryCommand("pause"), ct),
+                EvictAirplayAsync = (reason, ct) => sp.GetRequiredService<AirplaySource>().EndSessionAsync(reason, ct),
+                StartSpotifyIfRunningAsync = ct => sp.GetRequiredService<AirplaySink>().StartIfRunning().WaitAsync(ct),
+                ResumeAirplayIfPlayingAsync = ct => sp.GetRequiredService<AirplaySource>().ResumeIfPlayingAsync(ct),
+                StatusAsync = ct => sp.GetRequiredService<DtoFactory>().StatusAsync(ct),
+            }));
         services.AddSingleton<AirplaySource>();
 
         AddFakeReceivers(services, configuration);

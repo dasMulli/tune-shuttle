@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Net;
+using ReceiverIdentity = Airplay2.Receiver.ReceiverIdentity;
 using Airplay2.Sender.Discovery;
 using Bridge.Contracts;
+using Bridge.Service.Airplay;
 using Bridge.Service.Api;
 using Bridge.Service.Store;
 using Microsoft.Extensions.Options;
@@ -13,7 +15,8 @@ namespace Bridge.Service.Output;
 /// browser, writes every discovered receiver into the store (<see cref="Mapping.ToReceiverRow"/> keeps the user's level,
 /// offset and quirks), publishes <c>receiverChanged</c> on every change, asks the output manager to retry a receiver that
 /// (re)appears, and resolves a receiver id to a <see cref="DiscoveredReceiver"/> for connecting, with the stored last
-/// address as a fallback when mDNS is slow or blocked.
+/// address as a fallback when mDNS is slow or blocked. Our own AirPlay receiver's advertisement (same <c>deviceid</c> or
+/// <c>pk</c> as the stored <c>airplay_identity</c>) is ignored: it never reaches the store or the web app (SPEC-receiver.md R12).
 /// </summary>
 public sealed class ReceiverInventory(
     IReceiverBrowser browser,
@@ -27,8 +30,48 @@ public sealed class ReceiverInventory(
     /// <summary>Delay before the browser is started again after its sockets could not be bound.</summary>
     public static readonly TimeSpan BrowserRetryDelay = TimeSpan.FromSeconds(30);
 
+    private ReceiverIdentity? _self;
+
     /// <summary>The browser.</summary>
     public IReceiverBrowser Browser { get; } = browser;
+
+    /// <summary>
+    /// True when <paramref name="receiver"/> is the advertisement of <paramref name="self"/> (SPEC-receiver.md R12): its id or TXT
+    /// <c>deviceid</c> equals our device id (case-insensitive), or its TXT <c>pk</c> equals our public key.
+    /// </summary>
+    public static bool IsOwnAdvertisement(DiscoveredReceiver receiver, ReceiverIdentity? self)
+    {
+        ArgumentNullException.ThrowIfNull(receiver);
+        if (self is null)
+        {
+            return false;
+        }
+
+        return string.Equals(receiver.Id, self.DeviceId, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(receiver.Airplay.DeviceId, self.DeviceId, StringComparison.OrdinalIgnoreCase)
+            || (receiver.Airplay.PublicKey is { } pk && pk.AsSpan().SequenceEqual(self.PublicKey));
+    }
+
+    /// <summary>
+    /// True when <paramref name="receiver"/> is our own AirPlay receiver (SPEC-receiver.md R12), judged against the identity stored
+    /// in <c>airplay_identity</c> (read once it exists; it never changes, R11).
+    /// </summary>
+    public async Task<bool> IsSelfAsync(DiscoveredReceiver receiver, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(receiver);
+        var self = Volatile.Read(ref _self);
+        if (self is null)
+        {
+            var json = await store.GetSettingAsync(BridgeSettingKeys.AirplayIdentity, cancellationToken).ConfigureAwait(false);
+            if (AirplaySettings.TryParseIdentity(json, out var parsed))
+            {
+                self = parsed;
+                Volatile.Write(ref _self, parsed);
+            }
+        }
+
+        return IsOwnAdvertisement(receiver, self);
+    }
 
     /// <summary>
     /// Resolves a receiver for connecting: the browser's cache, else a short <see cref="IReceiverBrowser.FindAsync"/>, else
@@ -40,7 +83,7 @@ public sealed class ReceiverInventory(
         var cached = Browser.Snapshot().FirstOrDefault(r => r.Id == receiverId);
         if (cached is not null)
         {
-            return cached;
+            return await IsSelfAsync(cached, cancellationToken).ConfigureAwait(false) ? null : cached;
         }
 
         if (options.Value.BrowseReceivers)
@@ -50,7 +93,7 @@ public sealed class ReceiverInventory(
                 var found = await Browser.FindAsync(receiverId, options.Value.ResolveTimeout, cancellationToken).ConfigureAwait(false);
                 if (found is not null && found.Id == receiverId)
                 {
-                    return found;
+                    return await IsSelfAsync(found, cancellationToken).ConfigureAwait(false) ? null : found;
                 }
             }
             catch (Exception ex) when (ex is IOException or System.Net.Sockets.SocketException or InvalidOperationException)
@@ -101,8 +144,12 @@ public sealed class ReceiverInventory(
             return row;
         }
 
-        var discovered = Browser.Snapshot().FirstOrDefault(r => r.Id == receiverId)
-            ?? throw new KeyNotFoundException($"Unknown receiver '{receiverId}'.");
+        var discovered = Browser.Snapshot().FirstOrDefault(r => r.Id == receiverId);
+        if (discovered is null || await IsSelfAsync(discovered, cancellationToken).ConfigureAwait(false))
+        {
+            throw new KeyNotFoundException($"Unknown receiver '{receiverId}'.");
+        }
+
         return await RememberAsync(discovered, cancellationToken).ConfigureAwait(false);
     }
 
@@ -201,6 +248,12 @@ public sealed class ReceiverInventory(
     private async Task OnEventAsync(ReceiverEvent receiverEvent, CancellationToken cancellationToken)
     {
         var receiver = receiverEvent.Receiver;
+        if (await IsSelfAsync(receiver, cancellationToken).ConfigureAwait(false))
+        {
+            logger.LogDebug("Ignoring our own AirPlay receiver {Receiver} ({Id}) (SPEC-receiver.md R12)", receiver.Name, receiver.Id);
+            return;
+        }
+
         switch (receiverEvent)
         {
             case ReceiverEvent.Found:

@@ -34,6 +34,21 @@ Conclusion: worth keeping as a **secondary** target for the control plane and fo
 stream paths, run through the VM script below; not a substitute for the fake receiver (which tests the NTP
 path and every quirk switch deterministically) or receiver A (the real Apple-SDK behaviour, SPEC.md section 4).
 
+## The product receiver and shairport-sync cannot share a host (SPEC-receiver.md R13)
+
+Since TuneShuttle is also an AirPlay 2 receiver (docs/airplay2/SPEC-receiver.md), the bridge binds TCP 7000
+(`Bridge:Airplay:RtspPort`) and UDP 319/320 (its shared `PtpPort`), exactly the ports shairport-sync and its nqptp
+use. Senders are also confused by two AirPlay 2 receivers at one address (`[sps] AIRPLAY2.md`). So:
+
+- Do not run the bridge in the same network namespace as the shairport-sync container (inside the Docker VM with
+  `--net host`, or on a Linux host that runs shairport-sync natively). Run the bridge image on the default bridge
+  network (as the final integration below did), or start it with `--Bridge:Airplay:Enabled=false` (and without PTP
+  receivers, since its sender would want 319/320 too). On this Windows host the bridge and the VM's shairport-sync are
+  in different namespaces and do not collide.
+- The receiver's own tests never need shairport-sync: `Airplay2.Receiver.Tests` drives the product receiver with our
+  sender on loopback with port 0, and no test binds 7000, 319 or 320.
+- shairport-sync cannot act as a sender, so it does not test the receiver role at all (SPEC-receiver.md 11.2).
+
 ## How to start it
 
 ```powershell

@@ -1,4 +1,5 @@
 using Bridge.Service;
+using Bridge.Service.Airplay;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 using Xunit.Abstractions;
@@ -84,6 +85,49 @@ public sealed class ReleaseConsistencyTests(ITestOutputHelper output)
 
         // The image is built from the repository root with the Dockerfile in docker/ (its own header says so).
         Assert.Contains("docker build -f docker/Dockerfile", dockerfile, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The AirPlay receiver's deployment pieces agree (SPEC-receiver.md 7.2, 10): the FFmpeg majors that
+    /// <c>tools/get-ffmpeg.ps1</c> puts into the Windows bundle are the ones the container image and the systemd notes
+    /// install, the ports the install script and the image open are the <see cref="AirplayOptions"/> defaults, and the
+    /// README and ARCHITECTURE.md port lists name them.
+    /// </summary>
+    [Fact]
+    public void Ffmpeg_majors_and_receiver_ports_agree_between_bundle_image_unit_and_docs()
+    {
+        if (Root() is not { } root || !File.Exists(Path.Combine(root, "tools", "get-ffmpeg.ps1")))
+        {
+            output.WriteLine("repository or tools/get-ffmpeg.ps1 not found; skipped");
+            return;
+        }
+
+        var getFfmpeg = File.ReadAllText(Path.Combine(root, "tools", "get-ffmpeg.ps1"));
+        var dockerfile = File.ReadAllText(Path.Combine(root, "docker", "Dockerfile"));
+        var unit = File.ReadAllText(Path.Combine(root, "install", "linux", "tune-shuttle.service"));
+        var install = File.ReadAllText(Path.Combine(root, "install", "windows", "install-service.ps1"));
+        var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+        var architecture = File.ReadAllText(Path.Combine(root, "docs", "ARCHITECTURE.md"));
+
+        foreach (var library in new[] { "avcodec", "avutil", "swresample" })
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(getFfmpeg, library + @"-(\d+)\.dll");
+            Assert.True(match.Success, $"{library}-<major>.dll not named in tools/get-ffmpeg.ps1");
+            var package = "lib" + library + match.Groups[1].Value;
+            Assert.Contains(package, dockerfile, StringComparison.Ordinal);
+            Assert.Contains(package, unit, StringComparison.Ordinal);
+        }
+
+        var defaults = new AirplayOptions();
+        Assert.Contains($"-Protocol TCP -LocalPort {defaults.RtspPort}", install, StringComparison.Ordinal);
+        Assert.Contains($"-Protocol UDP -LocalPort {defaults.PtpEventPort}-{defaults.PtpGeneralPort}", install, StringComparison.Ordinal);
+        Assert.Contains($"EXPOSE {defaults.RtspPort}/tcp {defaults.PtpEventPort}/udp {defaults.PtpGeneralPort}/udp", dockerfile, StringComparison.Ordinal);
+        foreach (var doc in new[] { readme, architecture })
+        {
+            Assert.Contains($"TCP {defaults.RtspPort}", doc, StringComparison.Ordinal);
+            Assert.Contains($"UDP {defaults.PtpEventPort}/{defaults.PtpGeneralPort}", doc, StringComparison.Ordinal);
+            Assert.Contains("Bridge:Airplay:RtspPort", doc, StringComparison.Ordinal);
+        }
     }
 
     private static string? Root()

@@ -29,7 +29,7 @@ public sealed class BridgeApiTests
         Assert.False(status.OutputConnected);
 
         var settings = await client.GetJsonAsync<SettingsDto>(ApiRoutes.Settings);
-        Assert.Equal(new SettingsDto("TuneShuttle", 77175, false, "Realtime", 3), settings);
+        Assert.Equal(new SettingsDto("TuneShuttle", 77175, false, "Realtime", 3, false, "TuneShuttle", null, false), settings);
 
         using (var invalid = await client.SendJsonAsync(HttpMethod.Put, ApiRoutes.Settings, settings with { LatencyFrames = 10 }))
         {
@@ -54,12 +54,12 @@ public sealed class BridgeApiTests
 
         // A client that predates ForgetOfflineAfterDays (null) keeps the value; a new one sets it (0 = never).
         var updated = await client.SendJsonAsync<SettingsDto>(HttpMethod.Put, ApiRoutes.Settings, new SettingsDto("Wohnzimmer", 88200, true, "buffered"));
-        Assert.Equal(new SettingsDto("Wohnzimmer", 88200, true, "Buffered", 3), updated);
+        Assert.Equal(new SettingsDto("Wohnzimmer", 88200, true, "Buffered", 3, false, "Wohnzimmer", null, false), updated);
         Assert.Equal(updated, await client.GetJsonAsync<SettingsDto>(ApiRoutes.Settings));
         updated = await client.SendJsonAsync<SettingsDto>(HttpMethod.Put, ApiRoutes.Settings, updated with { ForgetOfflineAfterDays = 0 });
         Assert.Equal(0, updated.ForgetOfflineAfterDays);
         updated = await client.SendJsonAsync<SettingsDto>(HttpMethod.Put, ApiRoutes.Settings, updated with { ForgetOfflineAfterDays = 7.5 });
-        Assert.Equal(new SettingsDto("Wohnzimmer", 88200, true, "Buffered", 7.5), updated);
+        Assert.Equal(new SettingsDto("Wohnzimmer", 88200, true, "Buffered", 7.5, false, "Wohnzimmer", null, false), updated);
         Assert.Equal(updated, await client.GetJsonAsync<SettingsDto>(ApiRoutes.Settings));
         Assert.Equal(TimeSpan.FromDays(7.5), await ReceiverRetention.LoadAsync(factory.Get<IBridgeStore>(), new BridgeOptions(), CancellationToken.None));
         Assert.Equal("Wohnzimmer", (await client.GetJsonAsync<StatusDto>(ApiRoutes.Status)).DeviceName);

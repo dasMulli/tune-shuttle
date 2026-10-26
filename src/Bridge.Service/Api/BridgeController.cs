@@ -5,11 +5,13 @@ using Airplay2.Sender.Pairing;
 using Airplay2.Sender.Playback;
 using Airplay2.Sender.Rtsp;
 using Bridge.Contracts;
+using Bridge.Service.Airplay;
 using Bridge.Service.Diagnostics;
 using Bridge.Service.Output;
 using Bridge.Service.Spotify;
 using Bridge.Service.Store;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 
 namespace Bridge.Service.Api;
 
@@ -35,6 +37,12 @@ public sealed class BridgeController(
 {
     /// <summary>Longest accepted device or group name.</summary>
     public const int MaxNameLength = 64;
+
+    /// <summary>Longest accepted AirPlay receiver name (SPEC-receiver.md 9.1: 1 to 63 characters, the mDNS label limit).</summary>
+    public const int MaxAirplayNameLength = 63;
+
+    /// <summary>Longest accepted AirPlay password (SPEC-receiver.md 9.1).</summary>
+    public const int MaxAirplayPasswordLength = 63;
 
     /// <summary>Probes of SPEC.md section 4 that still need the user (a microphone, button presses, a second receiver).</summary>
     public static readonly IReadOnlyList<string> PendingProbes =
@@ -228,17 +236,25 @@ public sealed class BridgeController(
         return Results.Ok(await output.SelectAsync(selection, ct).ConfigureAwait(false));
     });
 
-    /// <summary><c>GET /playback</c>.</summary>
-    public Task<IResult> GetPlaybackAsync(CancellationToken ct) => Task.FromResult(Results.Ok(runtime.Playback));
+    /// <summary><c>GET /playback</c>: the owner's view with its <c>Source</c> (SPEC-receiver.md 8.2, 9.1).</summary>
+    public Task<IResult> GetPlaybackAsync(CancellationToken ct) => Task.FromResult(Results.Ok(dtos.Playback()));
 
     /// <summary>
     /// <c>GET /playback/artwork</c> (SPEC-receiver.md 9.1): the AirPlay sender's artwork with its content type and an
-    /// <c>ETag</c> of the <c>rtptime</c>; 404 while the source is not AirPlay or no artwork arrived, which is always the case
-    /// until the wave 3 <c>api</c> package wires the receiver in.
+    /// <c>ETag</c> of the <c>rtptime</c> (a matching <c>If-None-Match</c> answers 304); 404 while the source is not AirPlay
+    /// or no artwork arrived.
     /// </summary>
-    public Task<IResult> GetPlaybackArtworkAsync(CancellationToken ct) => Task.FromResult(Results.NotFound());
+    public Task<IResult> GetPlaybackArtworkAsync(CancellationToken ct)
+    {
+        if (dtos.Owner != AudioSource.Airplay || dtos.AirplayArtwork is not { } artwork)
+        {
+            return Task.FromResult(NotFound("No AirPlay artwork: the output is not playing from AirPlay, or the sender sent none."));
+        }
 
-    /// <summary><c>POST /playback</c>: forwarded to Spirc.</summary>
+        return Task.FromResult(Results.Bytes(artwork.Bytes, artwork.ContentType, entityTag: new EntityTagHeaderValue(artwork.ETag)));
+    }
+
+    /// <summary><c>POST /playback</c>: forwarded to Spirc; 409 while AirPlay owns the output (SPEC-receiver.md N2, 9.1).</summary>
     public Task<IResult> PlaybackCommandAsync(PlaybackCommandRequest body, CancellationToken ct) => RunAsync(() =>
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -248,22 +264,25 @@ public sealed class BridgeController(
             throw new ArgumentException($"Unknown command '{body.Command}'; use one of {string.Join(", ", PlaybackCommands)}.", nameof(body));
         }
 
+        if (dtos.Owner == AudioSource.Airplay)
+        {
+            return Task.FromResult(Problem(StatusCodes.Status409Conflict, "AirPlay is playing", "The output is playing from AirPlay; control playback on the sender."));
+        }
+
         return Task.FromResult(spotify.TryCommand(command)
-            ? Results.Ok(runtime.Playback)
+            ? Results.Ok(dtos.Playback())
             : Problem(StatusCodes.Status409Conflict, "Spotify is not connected", "Select the bridge in a Spotify app first."));
     });
 
-    /// <summary><c>GET /settings</c>.</summary>
-    public Task<IResult> GetSettingsAsync(CancellationToken ct) => RunAsync(async () =>
-    {
-        var settings = await BridgeSettings.LoadAsync(store, options.Value, ct).ConfigureAwait(false);
-        var retention = await ReceiverRetention.LoadAsync(store, options.Value, ct).ConfigureAwait(false);
-        return Results.Ok(new SettingsDto(settings.DeviceName, settings.LatencyFrames, settings.PollReceiverVolume, settings.PreferredStream, ReceiverRetention.ToDays(retention)));
-    });
+    /// <summary><c>GET /settings</c>: with the receiver's fields, never its password (SPEC-receiver.md 9.1).</summary>
+    public Task<IResult> GetSettingsAsync(CancellationToken ct) => RunAsync(async () => Results.Ok(await dtos.SettingsAsync(ct).ConfigureAwait(false)));
 
     /// <summary>
     /// <c>PUT /settings</c>: a new device name relaunches Spotify Connect; L, stream and poll rebuild the output; the
-    /// forget-offline period applies from the next pruning run (null keeps it).
+    /// forget-offline period applies from the next pruning run (null keeps it). The receiver's fields follow
+    /// SPEC-receiver.md 9.1: null keeps a value, <c>AirplayPassword = ""</c> clears the password, the name takes 1 to
+    /// <see cref="MaxAirplayNameLength"/> characters and the password up to <see cref="MaxAirplayPasswordLength"/>; a change
+    /// reaches the receiver per 3.3 while it is or becomes enabled.
     /// </summary>
     public Task<IResult> SetSettingsAsync(SettingsDto body, CancellationToken ct) => RunAsync(async () =>
     {
@@ -281,7 +300,14 @@ public sealed class BridgeController(
             throw new ArgumentException($"Forgetting offline receivers takes 0 (never) to {ReceiverRetention.MaxDays.ToString(CultureInfo.InvariantCulture)} days.", nameof(body));
         }
 
+        var airplayName = ValidateAirplayName(body.AirplayName);
+        if (body.AirplayPassword is { Length: > MaxAirplayPasswordLength })
+        {
+            throw new ArgumentException($"The AirPlay password is longer than {MaxAirplayPasswordLength} characters.", nameof(body));
+        }
+
         var previous = await BridgeSettings.LoadAsync(store, options.Value, ct).ConfigureAwait(false);
+        var airplayBefore = await AirplaySettings.LoadAsync(store, options.Value.Airplay, previous.DeviceName, ct).ConfigureAwait(false);
         var current = new BridgeSettings(name, body.LatencyFrames, body.PollReceiverVolume, stream);
         await current.SaveAsync(store, ct).ConfigureAwait(false);
         if (body.ForgetOfflineAfterDays is { } forgetDays)
@@ -298,14 +324,15 @@ public sealed class BridgeController(
         }
 
         await output.ApplySettingsAsync(previous, current, ct).ConfigureAwait(false);
+        await ApplyAirplaySettingsAsync(body, airplayName, airplayBefore, current.DeviceName, ct).ConfigureAwait(false);
         hub.Publish(new BridgeEvent.StatusChanged(await dtos.StatusAsync(ct).ConfigureAwait(false)));
-        return Results.Ok(new SettingsDto(current.DeviceName, current.LatencyFrames, current.PollReceiverVolume, current.PreferredStream, ReceiverRetention.ToDays(retention)));
+        return Results.Ok(await dtos.SettingsAsync(ct).ConfigureAwait(false));
     });
 
     /// <summary><c>GET /status</c>.</summary>
     public Task<IResult> GetStatusAsync(CancellationToken ct) => RunAsync(async () => Results.Ok(await dtos.StatusAsync(ct).ConfigureAwait(false)));
 
-    /// <summary><c>GET /diagnostics</c>: recent log, local addresses, sender ports and pacer statistics.</summary>
+    /// <summary><c>GET /diagnostics</c>: recent log, local addresses, sender ports, pacer statistics and the AirPlay receiver's diagnostics (SPEC-receiver.md 9.1).</summary>
     public Task<IResult> GetDiagnosticsAsync(CancellationToken ct) => RunAsync(() =>
     {
         var sender = senders.Current;
@@ -322,7 +349,8 @@ public sealed class BridgeController(
             player?.PacketsSent ?? statistics?.PacketsSent ?? 0,
             sender?.Control.RetransmitRequestsReceived ?? statistics?.RetransmitRequests ?? 0,
             player?.LateWakeups ?? statistics?.LateWakeups ?? 0,
-            PendingProbes);
+            PendingProbes,
+            dtos.AirplayDiagnostics());
         return Task.FromResult(Results.Ok(dto));
     });
 
@@ -353,6 +381,63 @@ public sealed class BridgeController(
     }
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>Null keeps the name; anything else is trimmed and takes 1 to <see cref="MaxAirplayNameLength"/> characters (SPEC-receiver.md 9.1).</summary>
+    private static string? ValidateAirplayName(string? name)
+    {
+        if (name is null)
+        {
+            return null;
+        }
+
+        name = name.Trim();
+        if (name.Length == 0)
+        {
+            throw new ArgumentException("The AirPlay name is empty.", nameof(name));
+        }
+
+        if (name.Length > MaxAirplayNameLength)
+        {
+            throw new ArgumentException($"The AirPlay name is longer than {MaxAirplayNameLength} characters.", nameof(name));
+        }
+
+        return name;
+    }
+
+    /// <summary>
+    /// Stores the receiver fields a <c>PUT /settings</c> carries (SPEC-receiver.md 8.4, 9.1: null keeps, <c>""</c> clears
+    /// the password) and hands the result to the receiver (3.3) when it changed and the receiver is or becomes enabled. The
+    /// name also changes when it follows the device name (no <c>airplay_name</c> stored, R11). The password is never logged.
+    /// </summary>
+    private async Task ApplyAirplaySettingsAsync(SettingsDto body, string? name, AirplaySettings before, string deviceName, CancellationToken ct)
+    {
+        if (body.AirplayEnabled is { } enabled)
+        {
+            await store.SetSettingAsync(BridgeSettingKeys.AirplayEnabled, enabled ? "true" : "false", ct).ConfigureAwait(false);
+        }
+
+        if (name is not null)
+        {
+            await store.SetSettingAsync(BridgeSettingKeys.AirplayName, name, ct).ConfigureAwait(false);
+        }
+
+        if (body.AirplayPassword is { } password)
+        {
+            await store.SetSettingAsync(BridgeSettingKeys.AirplayPassword, password.Length == 0 ? null : password, ct).ConfigureAwait(false);
+        }
+
+        var after = await AirplaySettings.LoadAsync(store, options.Value.Airplay, deviceName, ct).ConfigureAwait(false);
+        if (after.Enabled == before.Enabled && after.Name == before.Name && after.Password == before.Password)
+        {
+            return;
+        }
+
+        logger.LogInformation("AirPlay receiver settings: enabled {Enabled}, name {Name}, password {Password}", after.Enabled, after.Name, after.Password is null ? "none" : "set");
+        if (before.Enabled || after.Enabled)
+        {
+            await dtos.Airplay.ApplySettingsAsync(after, ct).ConfigureAwait(false);
+        }
+    }
 
     private static void ValidateLevel(int level)
     {

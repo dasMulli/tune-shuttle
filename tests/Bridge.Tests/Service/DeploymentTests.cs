@@ -53,6 +53,35 @@ public sealed class DeploymentTests
     }
 
     /// <summary>
+    /// The AirPlay receiver's listeners in every deployment shape (SPEC-receiver.md 10): the Windows firewall rules for
+    /// TCP 7000 and UDP 319-320, <c>CAP_NET_BIND_SERVICE</c> next to <c>CAP_SYS_NICE</c> in the systemd unit (319/320 are
+    /// privileged ports), and in the container image the EXPOSE lines and the libavcodec/libavutil/libswresample
+    /// packages of the FFmpeg major that FFmpeg.AutoGen binds (SPEC-receiver.md 7.2).
+    /// </summary>
+    [Fact]
+    public void Every_deployment_shape_opens_the_AirPlay_receiver_ports()
+    {
+        var root = RepositoryRoot();
+        var install = File.ReadAllText(Path.Combine(root, "install", "windows", "install-service.ps1"));
+        Assert.Contains("-DisplayName \"TuneShuttle AirPlay RTSP\" -Protocol TCP -LocalPort 7000", install, StringComparison.Ordinal);
+        Assert.Contains("-DisplayName \"TuneShuttle PTP\" -Protocol UDP -LocalPort 319-320", install, StringComparison.Ordinal);
+
+        var unit = File.ReadAllText(Path.Combine(root, "install", "linux", "tune-shuttle.service"));
+        var capabilities = unit.Split('\n').Select(l => l.Trim()).Single(l => l.StartsWith("AmbientCapabilities=", StringComparison.Ordinal));
+        Assert.Contains("CAP_SYS_NICE", capabilities, StringComparison.Ordinal);
+        Assert.Contains("CAP_NET_BIND_SERVICE", capabilities, StringComparison.Ordinal);
+        Assert.Contains("libavcodec61", unit, StringComparison.Ordinal);
+
+        var dockerfile = File.ReadAllText(Path.Combine(root, "docker", "Dockerfile"));
+        Assert.Contains("EXPOSE 7000/tcp 319/udp 320/udp", dockerfile, StringComparison.Ordinal);
+        var runtime = dockerfile[dockerfile.LastIndexOf("FROM ", StringComparison.Ordinal)..];
+        foreach (var package in new[] { "libavcodec61", "libavutil59", "libswresample5" })
+        {
+            Assert.Contains(package, runtime, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// A run from the build output (no wwwroot/, the static web assets manifest next to bridge.dll) is Production unless
     /// launchSettings.json says otherwise, and must still serve the web app (final review: GET / was 404 there).
     /// </summary>

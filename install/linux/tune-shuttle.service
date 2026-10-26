@@ -1,5 +1,9 @@
 # systemd unit for TuneShuttle (docs/ARCHITECTURE.md, "Deployment"). Install:
 #   sudo cp tune-shuttle.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now tune-shuttle
+# AAC from Apple senders needs the FFmpeg 7.1 libraries that FFmpeg.AutoGen 7.1.1 binds (docs/airplay2/SPEC-receiver.md 7.2):
+#   Debian 13 (trixie): sudo apt-get install --no-install-recommends libavcodec61 libavutil59 libswresample5
+# (same names on Ubuntu 25.04 and later; Ubuntu 24.04 has only FFmpeg 6.1, libavcodec60). Without them the receiver runs
+# ALAC-only (R3). Bridge:Airplay:FfmpegPath points at another directory, e.g. a self-built FFmpeg 7.1.
 [Unit]
 Description=TuneShuttle (Spotify Connect to AirPlay 2 bridge)
 After=network-online.target
@@ -16,9 +20,11 @@ Environment=BRIDGE_DataDirectory=/var/lib/tune-shuttle
 Environment=BRIDGE_Kestrel__Endpoints__Http__Url=http://0.0.0.0:8080
 Restart=on-failure
 RestartSec=5
-# The pacer wants a real-time-ish scheduling class; allow it to raise its priority.
+# The pacer wants a real-time-ish scheduling class; allow it to raise its priority. The AirPlay receiver and the sender's
+# PTP grandmaster share UDP 319/320, privileged ports, hence CAP_NET_BIND_SERVICE (docs/airplay2/SPEC-receiver.md 10);
+# without it the receiver runs with anchor-only timing (R6). Its RTSP listener is TCP 7000 (Bridge:Airplay:RtspPort).
 LimitRTPRIO=20
-AmbientCapabilities=CAP_SYS_NICE
+AmbientCapabilities=CAP_SYS_NICE CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target

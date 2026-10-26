@@ -76,6 +76,7 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
     private readonly CancellationTokenSource _stopping = new();
     private volatile ActiveOutput? _active;
     private volatile LastNowPlaying? _lastNowPlaying;
+    private int _airplayShownSinceNowPlaying;
     private Task _supervisor = Task.CompletedTask;
     private int _stopped;
     private int _activating;
@@ -93,7 +94,8 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
         PairingCoordinator pairing,
         IOptions<BridgeOptions> options,
         ILogger<OutputManager> logger,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        SourceSwitch? sources = null)
     {
         _store = store;
         _inventory = inventory;
@@ -107,10 +109,24 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
         _logger = logger;
         _time = time ?? TimeProvider.System;
         _background = new BackgroundTasks(logger, static ex => IsReceiverFailure(ex) || ex is KeyNotFoundException or ArgumentException);
+        Sources = sources;
+        if (sources is not null)
+        {
+            sources.OwnerChanged += OnOwnerChanged;
+        }
     }
 
     /// <summary>The active player, or null (diagnostics).</summary>
     public IGroupPlayer? ActivePlayer => _active?.Player;
+
+    /// <summary>The ownership gate of the player commands (SPEC-receiver.md 8.2, 8.6), or null when every command passes.</summary>
+    public SourceSwitch? Sources { get; }
+
+    /// <summary>
+    /// Frames queued in the active player's ring ahead of its pacer, 0 without an output (SPEC-receiver.md 5.4, 8.6:
+    /// <see cref="IGroupPlayer.QueuedFrames"/> for <c>AirplaySource</c>, read per write).
+    /// </summary>
+    public int QueuedFrames => _active?.Player.QueuedFrames ?? 0;
 
     /// <inheritdoc />
     public long FramesWritten => _sink.FramesWritten;
@@ -370,7 +386,7 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
                     await TrySetPlayerLevelAsync(active, receiverId, level, cancellationToken).ConfigureAwait(false);
                     if (source != SourceSpotify)
                     {
-                        _spotifyVolume.Writer.TryWrite(level);
+                        PushSpotifyVolume(level);
                     }
                 }
             }
@@ -439,7 +455,7 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
 
             if (source != SourceSpotify && _active?.Selection.GroupId == group.Id)
             {
-                _spotifyVolume.Writer.TryWrite(level);
+                PushSpotifyVolume(level);
             }
         }
         finally
@@ -482,25 +498,108 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
     // ---- IPlaybackOutput -----------------------------------------------------------------------------------------
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Not gated: the caller is not known here. <c>PlayerEventMapper</c> uses the Spotify-tagged
+    /// <see cref="FlushAsync(AudioSource, CancellationToken)"/>, which is (SPEC-receiver.md 8.2); the untagged form is left
+    /// for callers that gate themselves (<c>AirplaySource</c>).
+    /// </remarks>
     public Task FlushAsync(CancellationToken cancellationToken) => _active?.Player.FlushAsync(cancellationToken) ?? Task.CompletedTask;
 
+    /// <summary>A source's flush (SPEC-receiver.md 8.2): forwarded to the active player only while <paramref name="source"/> may command it.</summary>
+    public Task FlushAsync(AudioSource source, CancellationToken cancellationToken) =>
+        Admit(source, "Flush") ? _active?.Player.FlushAsync(cancellationToken) ?? Task.CompletedTask : Task.CompletedTask;
+
     /// <inheritdoc />
-    public Task SetNowPlayingAsync(NowPlaying nowPlaying, CancellationToken cancellationToken)
+    /// <remarks>
+    /// Not gated, like <see cref="FlushAsync(CancellationToken)"/>; the gated form, which <c>PlayerEventMapper</c> uses, is
+    /// <see cref="SetNowPlayingAsync(AudioSource, NowPlaying, CancellationToken)"/> (SPEC-receiver.md 8.2). The caller is
+    /// taken to be the owner (<c>AirplaySource</c> gates itself before it calls this); the update is kept for an output
+    /// selected later only while AirPlay does not own the output.
+    /// </remarks>
+    public Task SetNowPlayingAsync(NowPlaying nowPlaying, CancellationToken cancellationToken) =>
+        SendNowPlayingAsync(Sources?.Owner == AudioSource.Airplay ? AudioSource.Airplay : AudioSource.Spotify, nowPlaying, cancellationToken);
+
+    /// <summary>
+    /// A source's now-playing (SPEC-receiver.md 8.2, 8.3): forwarded to the active player only while
+    /// <paramref name="source"/> may command it. Spotify's is also kept for an output selected later (SPEC-audio.md 7); the
+    /// AirPlay sender's is not, its elapsed time cannot be corrected by Spotify's frame counter.
+    /// </summary>
+    public Task SetNowPlayingAsync(AudioSource source, NowPlaying nowPlaying, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(nowPlaying);
-        _lastNowPlaying = new LastNowPlaying(nowPlaying, _sink.FramesWritten);
+        return Admit(source, "Now playing") ? SendNowPlayingAsync(source, nowPlaying, cancellationToken) : Task.CompletedTask;
+    }
+
+    private Task SendNowPlayingAsync(AudioSource source, NowPlaying nowPlaying, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(nowPlaying);
+        if (source == AudioSource.Spotify)
+        {
+            _lastNowPlaying = new LastNowPlaying(nowPlaying, _sink.FramesWritten);
+            Volatile.Write(ref _airplayShownSinceNowPlaying, 0);
+        }
+
         var player = _active?.Player;
         return player is null
             ? Task.CompletedTask
             : player.SetNowPlayingAsync(nowPlaying.Metadata, nowPlaying.Artwork, nowPlaying.ArtworkContentType, nowPlaying.Elapsed, cancellationToken);
     }
 
+    /// <summary>
+    /// Starts (or resumes) the active player for <paramref name="source"/> (SPEC-receiver.md 8.2, 8.3: <c>AirplaySource</c>'s
+    /// resume). Dropped while another source owns the output, and then remembered by the switch, which replays it when
+    /// the source gains ownership. Spotify starts through the <see cref="AirplaySink"/>, not here.
+    /// </summary>
+    public Task StartPlayerAsync(AudioSource source, CancellationToken cancellationToken)
+    {
+        if (Sources is { } sources && !sources.AdmitStart(source))
+        {
+            return Task.CompletedTask;
+        }
+
+        return _active?.Player.StartAsync(cancellationToken) ?? Task.CompletedTask;
+    }
+
+    /// <summary>Pauses the active player for <paramref name="source"/> (SPEC-receiver.md 8.2, 5.5); dropped while another source owns the output.</summary>
+    public Task PausePlayerAsync(AudioSource source, CancellationToken cancellationToken) =>
+        Admit(source, "Pause") ? _active?.Player.PauseAsync(cancellationToken) ?? Task.CompletedTask : Task.CompletedTask;
+
+    /// <summary>
+    /// Writes a source's interleaved S16 frames to the active player (SPEC-receiver.md 8.3: <c>AirplaySource.WriteAsync</c>);
+    /// false when <paramref name="source"/> does not own the output (the caller counts the drop) or no output is active.
+    /// Blocks above the ring's high-water mark like <see cref="IGroupPlayer.Write"/>.
+    /// </summary>
+    public bool Write(AudioSource source, ReadOnlySpan<short> interleavedPcm)
+    {
+        if (Sources is { } sources && !sources.MayWrite(source))
+        {
+            return false;
+        }
+
+        var player = _active?.Player;
+        if (player is null)
+        {
+            return false;
+        }
+
+        player.Write(interleavedPcm);
+        return true;
+    }
+
     /// <inheritdoc />
+    /// <remarks>
+    /// SPEC-receiver.md 8.2, 8.6: the level of a source that does not own the output (while another one does) is dropped.
+    /// </remarks>
     public async Task SetSourceLevelAsync(int level, string source, CancellationToken cancellationToken)
     {
         if (source is not (SourceSpotify or SourceAirplay))
         {
             throw new ArgumentException($"The source is '{SourceSpotify}' or '{SourceAirplay}'.", nameof(source));
+        }
+
+        if (!Admit(source == SourceSpotify ? AudioSource.Spotify : AudioSource.Airplay, "Level"))
+        {
+            return;
         }
 
         level = Math.Clamp(level, 0, 100);
@@ -532,6 +631,75 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
     }
 
     // ---- internals -----------------------------------------------------------------------------------------------
+
+    private bool Admit(AudioSource source, string command) => Sources?.Admit(source, command) ?? true;
+
+    /// <summary>
+    /// Pushes a level to the Spotify app (SPEC-receiver.md 8.6): not while AirPlay owns the output. While nobody owns it
+    /// the push still goes out, so the Spotify app shows the output's G before anything plays, as before the receiver.
+    /// </summary>
+    private void PushSpotifyVolume(int level)
+    {
+        if (Sources?.Owner == AudioSource.Airplay)
+        {
+            _logger.LogDebug("Level {Level} not pushed to Spotify: AirPlay owns the output", level);
+            return;
+        }
+
+        _spotifyVolume.Writer.TryWrite(level);
+    }
+
+    /// <summary>
+    /// AirPlay gave the output up: the Spotify slider catches up with the levels set meanwhile (SPEC-receiver.md 8.6). When
+    /// Spotify owns the output again after an AirPlay session, its last now-playing goes back to the receivers, which
+    /// showed the AirPlay sender's track meanwhile (8.2).
+    /// </summary>
+    private void OnOwnerChanged(object? sender, OwnerChange change)
+    {
+        if (Volatile.Read(ref _stopped) != 0)
+        {
+            return;
+        }
+
+        if (change.Current == AudioSource.Airplay)
+        {
+            Volatile.Write(ref _airplayShownSinceNowPlaying, 1);
+        }
+
+        if (change.Previous == AudioSource.Airplay && change.Current != AudioSource.Airplay)
+        {
+            _background.Track(PushCurrentLevelToSpotifyAsync(_stopping.Token), "Syncing the Spotify volume");
+        }
+
+        if (change.Current == AudioSource.Spotify && Interlocked.Exchange(ref _airplayShownSinceNowPlaying, 0) != 0
+            && _lastNowPlaying is { } last && _active?.Player is { } player)
+        {
+            _background.Track(ResendNowPlayingAsync(player, last, _stopping.Token), "Restoring Spotify's now-playing");
+        }
+    }
+
+    /// <summary>Re-sends Spotify's last now-playing unless a newer one was sent meanwhile.</summary>
+    private Task ResendNowPlayingAsync(IGroupPlayer player, LastNowPlaying last, CancellationToken cancellationToken) =>
+        ReferenceEquals(_lastNowPlaying, last) ? SendLastNowPlayingAsync(player, last, cancellationToken) : Task.CompletedTask;
+
+    /// <summary>
+    /// Sends <paramref name="last"/> with its elapsed time advanced by the frames written since it was sent (SPEC-audio.md
+    /// 7; a new output mid-track, or Spotify back after an AirPlay session, SPEC-receiver.md 8.2).
+    /// </summary>
+    private Task SendLastNowPlayingAsync(IGroupPlayer player, LastNowPlaying last, CancellationToken cancellationToken)
+    {
+        var written = Math.Max(0, _sink.FramesWritten - last.Mark);
+        var elapsed = last.NowPlaying.Elapsed + TimeSpan.FromSeconds(written / (double)PlayerEventMapper.SampleRate);
+        return player.SetNowPlayingAsync(last.NowPlaying.Metadata, last.NowPlaying.Artwork, last.NowPlaying.ArtworkContentType, elapsed, cancellationToken);
+    }
+
+    private async Task PushCurrentLevelToSpotifyAsync(CancellationToken cancellationToken)
+    {
+        if (await CurrentLevelAsync(cancellationToken).ConfigureAwait(false) is { } level)
+        {
+            PushSpotifyVolume(level);
+        }
+    }
 
     private static bool IsReceiverFailure(Exception ex) =>
         ex is IOException or TimeoutException or SocketException or RtspStatusException or PairingException or InvalidOperationException
@@ -633,7 +801,7 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
         await PublishOutputAsync(cancellationToken).ConfigureAwait(false);
         if (await CurrentLevelAsync(cancellationToken).ConfigureAwait(false) is { } level)
         {
-            _spotifyVolume.Writer.TryWrite(level); // the Spotify slider shows the new output's G
+            PushSpotifyVolume(level); // the Spotify slider shows the new output's G
         }
     }
 
@@ -683,12 +851,10 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
             }
 
             await _sink.AttachAsync(player, cancellationToken).ConfigureAwait(false);
-            if (_lastNowPlaying is { } last)
+            if (_lastNowPlaying is { } last && Sources?.Owner != AudioSource.Airplay)
             {
                 // A new output mid-track gets the current track at once (SPEC-audio.md 7: members joining later get it from the player).
-                var written = Math.Max(0, _sink.FramesWritten - last.Mark);
-                var elapsed = last.NowPlaying.Elapsed + TimeSpan.FromSeconds(written / (double)PlayerEventMapper.SampleRate);
-                await player.SetNowPlayingAsync(last.NowPlaying.Metadata, last.NowPlaying.Artwork, last.NowPlaying.ArtworkContentType, elapsed, cancellationToken).ConfigureAwait(false);
+                await SendLastNowPlayingAsync(player, last, cancellationToken).ConfigureAwait(false);
             }
 
             return active;
@@ -925,7 +1091,7 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
             else if (selection.ReceiverId == receiverId)
             {
                 await _store.SetReceiverLevelAsync(receiverId, level, cancellationToken).ConfigureAwait(false);
-                _spotifyVolume.Writer.TryWrite(level); // single receiver: its level is G
+                PushSpotifyVolume(level); // single receiver: its level is G
             }
         }
         finally
@@ -1002,6 +1168,13 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
                 break;
 
             case GroupPlayerEvent.RemoteCommand command:
+                if (Sources?.Owner == AudioSource.Airplay)
+                {
+                    // SPEC-receiver.md N2: no remote control of an AirPlay sender; the buttons must not wake Spotify either.
+                    _logger.LogInformation("{Receiver} button {Command} ignored: AirPlay owns the output", command.ReceiverId, command.Command);
+                    break;
+                }
+
                 _logger.LogInformation("{Receiver} button: {Command}", command.ReceiverId, command.Command);
                 _remote.Writer.TryWrite(command.Command);
                 break;

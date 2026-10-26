@@ -1,29 +1,37 @@
 # Architecture
 
-How TuneShuttle is built: the components and how audio and control flow between them, the group volume model, what
-is stored, how receivers come and go, the API, the deployment shapes, and the design decisions behind them. The
-AirPlay 2 protocol itself is specified in [`airplay2/SPEC.md`](airplay2/SPEC.md) and its two parts; the web app in
+How TuneShuttle is built: the components and how audio and control flow between them, the two audio sources and who
+owns the output, the group volume model, what is stored, how receivers come and go, the API, the deployment shapes, and
+the design decisions behind them. The AirPlay 2 protocol itself is specified in [`airplay2/SPEC.md`](airplay2/SPEC.md)
+and its two parts, the receiver role in [`airplay2/SPEC-receiver.md`](airplay2/SPEC-receiver.md); the web app in
 [`web/UI-SPEC.md`](web/UI-SPEC.md). For building and testing see [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 ## Components and data flow
 
 ```
  Spotify app ──(Spotify Connect: Zeroconf handoff, then Spotify's servers)──┐
-                                                                            ▼
+ iPhone / iPad / Mac ──(AirPlay 2: mDNS, RTSP/HAP on TCP 7000, PTP, RTP)────┼──────────────────┐
+                                                                            ▼                  ▼
  Bridge.Service (ASP.NET Core host, one process)
  ├─ SpotifyHost ── librespot-dotnet: Session, Spirc, Player (BridgeMixer: no attenuation)
  │                      │ f64 PCM, 44.1 kHz stereo, on librespot's player thread
  │                      ▼
  ├─ AirplaySink ── converts to S16, blocks above the player's high-water mark, discards while no output is connected
+ │                      │
+ ├─ AirplaySource ── Airplay2.Receiver: AirplayReceiver (advertiser, RTSP/HAP, ALAC + AAC decoders, PtpSlave)
+ │                      │                 └─ PlayoutBuffer: S16 frames released at the sender's play time
  │                      ▼
- ├─ OutputManager ── owns the active group player for the selected output (a group or one receiver)
+ ├─ SourceSwitch ── owner: none | spotify | airplay; claims, evictions, the per-write gate (newest source wins)
+ │                      ▼
+ ├─ OutputManager ── owns the active group player for the selected output; drops player commands of a non-owner
  │                      ▼
  │   Airplay2.Sender: GroupPlayer ── PCM ring, pacer thread, one Timeline, ALAC encoder, GroupVolumeModel
  │                      ▼
  │   stream transport ── RealtimeStreamTransport (RTP over UDP, NTP or PTP timing)
  │                    └─ BufferedStreamTransport (TCP, PTP timing)
  │                      ▼ one encrypted session per receiver (ReceiverSession over RtspConnection)
- ├─ ReceiverInventory ── mDNS browser + store; ReceiverJanitor / ReceiverPruner forget receivers
+ ├─ PtpPort (shared, UDP 319/320) ◄── PtpMaster (the sender's PTP transports) and PtpSlave (AirplaySource)
+ ├─ ReceiverInventory ── mDNS browser + store (ignores our own receiver); ReceiverJanitor / ReceiverPruner
  ├─ PairingCoordinator ── the web app's PIN flow
  ├─ SqliteBridgeStore ── bridge.db
  └─ Api (REST + WebSocket) and the Bridge.Web SPA (static files)
@@ -35,7 +43,11 @@ AirPlay 2 protocol itself is specified in [`airplay2/SPEC.md`](airplay2/SPEC.md)
 packet code of `Librespot.Discovery`), the RTSP client with HAP channel encryption, pairing (`HapPairingClient`),
 the receiver session (`ReceiverSession`), RTP/ALAC, the timing responder and control port, the PTP grandmaster
 (`PtpMaster`), the stream transports, the group player and the `AirplaySender` facade that ties them together. It
-uses no ASP.NET and no Spotify session or playback code. `src/Airplay2.Sender.Cli` (`airplay2`) drives the library
+uses no ASP.NET and no Spotify session or playback code. `src/Airplay2.Receiver` is the receiver role on the same
+building blocks: the advertiser (`_airplay._tcp`/`_raop._tcp` through the `Librespot.Discovery` responder), the RTSP
+server with HAP accessory pairing, the realtime and buffered stream receivers, the ALAC and AAC-LC (ffmpeg) decoders,
+the `PtpSlave` and the `PlayoutBuffer`, behind the `AirplayReceiver` facade; it references `Airplay2.Sender` and uses no
+ASP.NET, Spotify or SQLite code (SPEC-receiver.md R2). `src/Airplay2.Sender.Cli` (`airplay2`) drives the sender library
 without Spotify. `src/Bridge.Contracts` holds the DTOs, routes and WebSocket message types shared by the service and
 the web app. `src/Bridge.Service` (`bridge`) is the host, `src/Bridge.Web` the Blazor WebAssembly SPA.
 `librespot-dotnet/` is the C# port of librespot that provides Spotify Connect.
@@ -50,7 +62,9 @@ should be heard.
 
 **Timing.** The bridge is the single clock master for every receiver. Under NTP the receivers ask the sender's timing
 responder (one UDP socket per process) for the time and get sync packets (0xD4) once a second on their control port;
-under PTP the sender runs a PTP grandmaster and sends 0xD7 syncs. Retransmit requests (0xD5) are answered from a
+under PTP the sender runs a PTP grandmaster and sends 0xD7 syncs. One `PtpPort` per process owns UDP 319/320 and routes
+each message by type and source to the grandmaster or to the receiver role's `PtpSlave`, so the two roles share the
+ports (SPEC-receiver.md R5). Retransmit requests (0xD5) are answered from a
 per-receiver history of the last 1000 packets. A group that contains one receiver needing PTP runs entirely under PTP.
 
 **Control path.** For each receiver `AirplaySender` runs `GET /info`, pairing (pair-verify with stored keys,
@@ -63,6 +77,26 @@ remote-control commands reach Spirc.
 skip flush the receivers, a track change sends metadata, artwork and progress, and the Spotify volume sets the master
 level. Receivers stay connected while Spotify is paused or stopped; a receiver is torn down only when the user
 disconnects it, removes it from the active group or selects another output.
+
+**AirPlay receiver.** `AirplaySource` (a hosted service) runs one `AirplayReceiver` built from the stored settings
+(enabled, name, password, identity) and `Bridge:Airplay`. It accepts one Apple sender at a time: `GET /info` and
+`/fp-setup`, transient pairing (or the password as the SRP PIN), session and stream `SETUP`, then the realtime stream
+(type 96, ALAC) or the buffered stream (type 103, ALAC or AAC-LC). Decoded 44.1 kHz/16-bit frames go into the
+`PlayoutBuffer`, each stamped with the moment the sender wants it heard (mapped to local time through the `PtpSlave`'s
+offset, or anchor-only without PTP), and are released into the active `IGroupPlayer` early enough to cover the
+output's own write-to-audible delay (SPEC-receiver.md R6). The sender's volume sets the master level G with source
+`airplay`; its DMAP metadata, artwork and progress become the AirPlay playback view and are forwarded to the receivers
+through the existing now-playing path. Settings changes take effect without a restart: a new name or password
+re-announces the services, `enabled` starts or stops the receiver.
+
+**The source rule (newest wins, SPEC-receiver.md R8).** `SourceSwitch` holds the one owner of the output: none,
+Spotify or AirPlay. An AirPlay stream `SETUP` claims it: Spotify is paused through Spirc, and the claim is granted only
+after that pause reached the player. Spotify's `Playing` event claims it back: the AirPlay session is ended (the Apple
+device shows the speaker as disconnected). A second Apple sender's stream `SETUP` ends the first one's session. When a
+source leaves, the output is unowned; Spotify stays paused until someone plays. Every write and every player command
+(start, pause, flush, now-playing, source level) is gated by ownership, and the playback view (`GET /api/playback`,
+`playbackChanged`) is always the owner's. While AirPlay owns the output, the web app's transport commands answer `409`
+and speaker buttons are ignored (the Apple device is the remote).
 
 ## Group volume model
 
@@ -92,7 +126,7 @@ channel) and the web app's transport buttons are forwarded to Spirc.
 
 One SQLite file, `<DataDirectory>/bridge.db`, written with Microsoft.Data.Sqlite and Dapper. The schema is
 `src/Bridge.Service/Store/schema.sql` (WAL journal, foreign keys on), applied at start-up; upgrades are numbered
-migrations on `PRAGMA user_version` in `StoreMigrations` (none so far, the schema is at version 1).
+migrations on `PRAGMA user_version` in `StoreMigrations`: version 2 adds `airplay_controllers` (SPEC-receiver.md 8.4).
 
 | Table | Holds |
 |---|---|
@@ -100,7 +134,8 @@ migrations on `PRAGMA user_version` in `StoreMigrations` (none so far, the schem
 | `pairings` | Per receiver: our controller id and Ed25519 seed, the receiver's identifier and long-term public key |
 | `groups` | id (a UUID, also sent as `groupUUID` in the session `SETUP`), name, master level `G` |
 | `group_members` | group, receiver, the member's level, position |
-| `settings` | Key/value: device name, selected output, latency, stream preference, volume poll, controller identity, Spotify device id, group reference levels, `forget_offline_after` |
+| `settings` | Key/value: device name, selected output, latency, stream preference, volume poll, controller identity, Spotify device id, group reference levels, `forget_offline_after`; for the AirPlay receiver `airplay_enabled`, `airplay_name`, `airplay_password` (null = open) and `airplay_identity` (JSON: device id, `psi`, Ed25519 seed; created once, R11) |
+| `airplay_controllers` | Apple senders paired with the password (version 2): their HAP pairing identifier, Ed25519 long-term public key and `created_at`, so pair-verify works on reconnect (R7) |
 | `spotify_credentials` | The cached librespot credentials |
 
 Deleting a receiver cascades to its pairing and group memberships. Settings changed in the web app are stored here
@@ -158,10 +193,11 @@ Development environment the OpenAPI document is at `/openapi/v1.json`.
 | PUT | `/groups/{id}/volume` | `VolumeRequest` → `GroupDto` | `G`; scales the members |
 | POST | `/groups/{id}/activate` | → `OutputDto` | selects the group as the output |
 | GET / PUT | `/output` | `OutputRequest` → `OutputDto` | the selected output (a group, a receiver, or none) |
-| GET / POST | `/playback` | `PlaybackCommandRequest` (`play`, `pause`, `next`, `prev`) → `PlaybackDto` | commands go to Spirc; `409` without Spotify |
-| GET / PUT | `/settings` | `SettingsDto` | device name, latency, poll, stream type, `forgetOfflineAfterDays` (a `PUT` without it keeps the value) |
-| GET | `/status` | → `StatusDto` | |
-| GET | `/diagnostics` | → `DiagnosticsDto` | recent log, local addresses, ports, packet statistics, probes still open |
+| GET / POST | `/playback` | `PlaybackCommandRequest` (`play`, `pause`, `next`, `prev`) → `PlaybackDto` | the owner's view, with `source` (`spotify`, `airplay` or null); commands go to Spirc; `409` without Spotify and while the source is AirPlay |
+| GET | `/playback/artwork` | → image bytes | the AirPlay sender's artwork with its content type and an `ETag` of its `rtptime`; `404` when the source is not AirPlay or no artwork arrived |
+| GET / PUT | `/settings` | `SettingsDto` | device name, latency, poll, stream type, `forgetOfflineAfterDays`, `airplayEnabled`, `airplayName`, `airplayPassword` (a `PUT` without a field keeps the value; `""` clears the password); answers carry `airplayPasswordSet`, never the password |
+| GET | `/status` | → `StatusDto` | with `activeSource` (the `SourceSwitch` owner) and `airplay` (receiver state, name, sender, `aacAvailable`) |
+| GET | `/diagnostics` | → `DiagnosticsDto` | recent log, local addresses, ports, packet statistics, probes still open; `airplay`: RTSP port, PTP bound and offset, stream type and format, buffer, offset `D`, late/missing/drift counters, decoder status |
 | DELETE | `/spotify` | → `204` | forgets the cached Spotify credentials |
 
 Debug builds started with `--Bridge:FakeReceivers` add `POST /api/dev/fake-receivers/{id}/offline?daysAgo=N` for the
@@ -182,9 +218,22 @@ The service is an ASP.NET Core generic host with `UseWindowsService()` (service 
 
 | Shape | How | Notes |
 |---|---|---|
-| Windows Service | `install/windows/install-service.ps1` over the published `artifacts/bridge` | Data in `%ProgramData%\TuneShuttle`; inbound firewall rules for the program, UDP 5353 and the web port |
-| Linux with systemd | `install/linux/tune-shuttle.service`, binaries in `/opt/tune-shuttle` | Data in `/var/lib/tune-shuttle`; `CAP_SYS_NICE` so the pacer can raise its priority |
-| Container (Kubernetes) | `docker/Dockerfile`, ASP.NET Core 10 runtime image, `amd64` or `arm64` | Data in the `/data` volume, web port 8080; the pod needs a macvlan interface on the receivers' LAN |
+| Windows Service | `install/windows/install-service.ps1` over the published `artifacts/bridge` (with the ffmpeg DLLs from `tools/get-ffmpeg.ps1`) | Data in `%ProgramData%\TuneShuttle`; inbound firewall rules for the program, UDP 5353, the web port, "TuneShuttle AirPlay RTSP" (TCP 7000) and "TuneShuttle PTP" (UDP 319-320) |
+| Linux with systemd | `install/linux/tune-shuttle.service`, binaries in `/opt/tune-shuttle` | Data in `/var/lib/tune-shuttle`; `CAP_SYS_NICE` so the pacer can raise its priority, `CAP_NET_BIND_SERVICE` for UDP 319/320; the distribution's FFmpeg 7.1 packages (`libavcodec61`, `libavutil59`, `libswresample5`) for AAC |
+| Container (Kubernetes) | `docker/Dockerfile`: the ASP.NET Core 10 runtime on `debian:trixie-slim` with the FFmpeg 7.1 packages, `amd64` or `arm64` | Data in the `/data` volume; `EXPOSE 8080/tcp 7000/tcp 319/udp 320/udp`; the pod needs a macvlan interface on the receivers' LAN |
+
+Listeners (the same in every shape):
+
+| Port | Owner | Notes |
+|---|---|---|
+| TCP 8080 | Kestrel (`Kestrel:Endpoints:Http:Url`) | web app, API, WebSocket |
+| UDP 5353 | mDNS: Spotify Zeroconf, the receiver's advertiser, the receiver browser | multicast |
+| TCP, any free port | Spotify Zeroconf HTTP server (`Bridge:ZeroconfPort`) | |
+| TCP 7000 | the AirPlay receiver's RTSP listener (`Bridge:Airplay:RtspPort`) | one receiver per host (R13) |
+| UDP 319/320 | the shared `PtpPort` (`Bridge:Airplay:PtpEventPort`/`PtpGeneralPort`) | privileged ports; unbindable → the sender cannot use PTP receivers and the receiver runs anchor-only (R5, R6) |
+| UDP and TCP, dynamic | the sender's timing, control and RTP ports; the receiver's per-session audio data, control and event ports | covered by the Windows program rule |
+
+Without the FFmpeg 7.1 libraries the receiver advertises the ALAC-only formats (R3, R4).
 
 Configuration comes from `appsettings.json`, then `BRIDGE_`-prefixed environment variables, then the command line;
 values changed in the web app are stored in SQLite and win. The web app is served by the same process: published
@@ -193,8 +242,8 @@ layouts carry it in `wwwroot/`, and a run from the build output finds it through
 Logging goes to the console (the container's log), to an in-memory ring of the last 500 lines that the Diagnostics
 page shows live, and on Windows to daily files under `<DataDirectory>/logs`.
 
-AirPlay receivers send UDP back to the sender (NTP timing requests, retransmit requests, PTP messages), and Spotify's
-Zeroconf needs mDNS and an inbound HTTP port. A NAT-ed container network therefore does not work; the
+AirPlay receivers send UDP back to the sender (NTP timing requests, retransmit requests, PTP messages), Spotify's
+Zeroconf needs mDNS and an inbound HTTP port, and Apple senders connect to the receiver's TCP and UDP ports. A NAT-ed container network therefore does not work; the
 macvlan interface gives the pod its own address on the LAN without host networking.
 
 ## Design decisions
@@ -209,7 +258,7 @@ macvlan interface gives the pod its own address on the LAN without host networki
 | No receiver connected | Accept playback and discard the audio | Spotify should never fail to play; local playback is not a goal. |
 | User interaction | Only through the web app; the service never prompts | It runs headless as a service or in a pod. |
 | AirPlay 1 | No fallback | Every target receiver speaks AirPlay 2. |
-| Persistence | SQLite with hand-written SQL (Microsoft.Data.Sqlite + Dapper) | Six small tables; EF Core would add migrations tooling and a model for no benefit. |
+| Persistence | SQLite with hand-written SQL (Microsoft.Data.Sqlite + Dapper) | Seven small tables; EF Core would add migrations tooling and a model for no benefit. |
 | Crypto | The .NET BCL for ChaCha20-Poly1305, HKDF, SHA-512 and SRP-6a (hand-written on `BigInteger`); BouncyCastle only for X25519 and Ed25519 | .NET 10 has no X25519/Ed25519 type. |
 | bplist, ALAC | Hand-written binary plist reader/writer; Apple's ALAC encoder ported bit-exact | Receivers accept only `bplist00`; no maintained .NET package fits either. |
 | Web app | Blazor WebAssembly, built by the plain .NET SDK, served by the bridge | No node toolchain; shares the `Bridge.Contracts` types at compile time; its state code is unit-testable. |
@@ -217,6 +266,14 @@ macvlan interface gives the pod its own address on the LAN without host networki
 | Audio output libraries | No NAudio on the bridge's path | The sink is the AirPlay sender, and the container runs on Linux. |
 | Sender dependencies | `Airplay2.Sender` references `Librespot.Discovery` for its mDNS packet code, so `Librespot.Core` is a transitive dependency; no Spotify session, protocol or playback code is used or reachable from the sender | Reusing the codec beats a second one; the dependency is recorded rather than hidden. |
 | CLI | System.CommandLine; audio only with `--i-know` | AirPlay wakes receivers and plays at their current volume. |
+| AirPlay receiver | An AirPlay 2 receiver only (HAP pairing, PTP, stream types 96 and 103), no AirPlay 1 path (SPEC-receiver.md R1); a library of its own, `Airplay2.Receiver`, built from the fake receiver's tested code (R2) | iOS sends buffered AAC to AirPlay 2 receivers; AirPlay 1 would need Apple's private RSA key. |
+| Receiver formats | 44.1 kHz/16-bit stereo only: ALAC (realtime and buffered) and AAC-LC (buffered); without the AAC decoder the ALAC-only variant everywhere it is advertised (R3) | The output pipeline is 44.1/16; no resampler. |
+| AAC decoder | FFmpeg's libavcodec through FFmpeg.AutoGen, loaded dynamically, one pinned FFmpeg major (7.1), behind `IAacDecoder` (R4) | .NET has no AAC decoder; shairport-sync needs libavcodec for the same reason. |
+| PTP ports | One `PtpPort` per process, shared by the grandmaster and the receiver's passive slave; anchor-only timing when it cannot bind (R5, R6) | Two sockets cannot share 319/320. |
+| Two sources | Newest source wins: an AirPlay stream `SETUP` pauses Spotify, a Spotify play ends the AirPlay session (R8) | What a HomePod does; the person who just pressed play gets what they expect. |
+| Receiver volume | The sender's dB maps through the inverse of the sender's mapping to the master level G (R9) | The group volume model stays the one place where levels live. |
+| Receiver identity | One per installation, stored in `settings`; our own advertisement is ignored by the receiver browser (R11, R12) | Stable pairing for password mode; the bridge must not list itself. |
+| Receivers per host | One; TCP 7000 (R13) | Senders are confused by two AirPlay 2 receivers at one address. |
 
 The protocol-level decisions (D1-D17: start-up order, wire hygiene, `TEARDOWN` body, retransmit reply form, nonce
 rules, volume mapping, metadata) are in [`airplay2/SPEC.md`](airplay2/SPEC.md) section 2, and the defaults that came

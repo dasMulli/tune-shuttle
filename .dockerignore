@@ -11,6 +11,8 @@
 artifacts/
 reference/
 docs/
+# ... except the captured /info template that src/Airplay2.Receiver embeds (docs/airplay2/SPEC-receiver.md 3.2).
+!docs/airplay2/test-vectors/info-response.bplist
 tests/
 docker/
 install/

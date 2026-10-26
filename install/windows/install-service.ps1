@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Registers TuneShuttle (the Spotify Connect to AirPlay 2 bridge) as a Windows Service and opens the firewall ports (docs/ARCHITECTURE.md, "Deployment").
+  Registers TuneShuttle (the Spotify Connect to AirPlay 2 bridge and AirPlay 2 receiver) as a Windows Service and opens the firewall
+  ports (docs/ARCHITECTURE.md, "Deployment"; docs/airplay2/SPEC-receiver.md 10).
 .PARAMETER PublishDir
   Folder with the published bridge (dotnet publish src/Bridge.Service -c Release -r win-x64 -o <dir>).
 .PARAMETER DataDir
@@ -54,10 +55,18 @@ if (-not (Get-Service $serviceName -ErrorAction SilentlyContinue)) {
 }
 
 # Firewall (docs/ARCHITECTURE.md, "Deployment"): the Zeroconf HTTP port and the sender's RTP/timing/control UDP ports are chosen at
-# run time, so a per-program rule covers them; mDNS 5353 and the web app port are explicit.
+# run time, so a per-program rule covers them; mDNS 5353, the web app port and the AirPlay receiver's ports are explicit.
+# Rules from an earlier install are removed first, so a reinstall does not stack duplicates.
+Get-NetFirewallRule -DisplayName "TuneShuttle*" -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -DisplayName "TuneShuttle (program)" -Program $exe -Direction Inbound -Action Allow -Profile Private,Domain | Out-Null
 New-NetFirewallRule -DisplayName "TuneShuttle mDNS" -Protocol UDP -LocalPort 5353 -Direction Inbound -Action Allow -Profile Private,Domain | Out-Null
 New-NetFirewallRule -DisplayName "TuneShuttle web" -Protocol TCP -LocalPort $WebPort -Direction Inbound -Action Allow -Profile Private,Domain | Out-Null
+# The AirPlay receiver (docs/airplay2/SPEC-receiver.md 10): RTSP on Bridge:Airplay:RtspPort (7000) and the shared PTP
+# port pair UDP 319/320 (the receiver's PTP slave and the sender's grandmaster). Its per-session data, control and event
+# ports are dynamic and covered by the program rule. The ffmpeg DLLs for AAC (avcodec, avutil, swresample) are part of
+# $PublishDir when build.ps1 fetched them (tools/get-ffmpeg.ps1); without them the receiver runs ALAC-only.
+New-NetFirewallRule -DisplayName "TuneShuttle AirPlay RTSP" -Protocol TCP -LocalPort 7000 -Direction Inbound -Action Allow -Profile Private,Domain | Out-Null
+New-NetFirewallRule -DisplayName "TuneShuttle PTP" -Protocol UDP -LocalPort 319-320 -Direction Inbound -Action Allow -Profile Private,Domain | Out-Null
 
 Start-Service $serviceName
 Write-Host "$serviceName installed and started; web app on http://localhost:$WebPort, data in $DataDir"

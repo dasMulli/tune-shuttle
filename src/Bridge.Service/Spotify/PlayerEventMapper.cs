@@ -19,7 +19,7 @@ namespace Bridge.Service.Spotify;
 /// <see cref="AirplaySink"/>, which pauses and resumes the group player):</para>
 /// <list type="bullet">
 /// <item><c>Paused</c>/<c>Playing</c>: state only; the sink's <c>Stop()</c>/<c>Start()</c> flush and re-anchor.</item>
-/// <item><c>Seeked</c> while playing: <see cref="IPlaybackOutput.FlushAsync"/>, then the now-playing again with the new
+/// <item><c>Seeked</c> while playing: <see cref="IPlaybackOutput.FlushAsync(AudioSource, CancellationToken)"/>, then the now-playing again with the new
 /// position (the player does not re-send progress on flush; SPEC-control.md 5.4 "on seek/resume re-send progress").
 /// While paused the queue is already empty: only the now-playing.</item>
 /// <item>Track change: the now-playing (text, artwork, progress) for the new track, sent when its position is known (the
@@ -34,6 +34,16 @@ namespace Bridge.Service.Spotify;
 /// dragged slider sends only the latest value.</item>
 /// <item><c>Stopped</c>: state only; sessions stay up while "connected but idle" (8.4: TEARDOWN only on user disconnect).</item>
 /// </list>
+/// <para>
+/// Source switch (SPEC-receiver.md 8.2), with a <see cref="SourceSwitch"/>: <c>Playing</c> claims the output for Spotify
+/// (ending an AirPlay session) before the view is published; <c>Stopped</c> releases it (a pause keeps it). The playback
+/// view is kept in <see cref="RuntimeState.SpotifyPlayback"/> and becomes <see cref="RuntimeState.Playback"/> and
+/// <c>playbackChanged</c> only while AirPlay does not own the output (<see cref="SourceSwitch.PublishPlayback"/>), so the
+/// <c>Paused</c> event an AirPlay claim causes does not replace the AirPlay view. Flush and now-playing are dropped here
+/// while another source owns the output (<see cref="SourceSwitch.Admit"/>), and sent with the Spotify tag so the output
+/// manager re-checks the owner (an AirPlay claim landing in between drops them there); the volume is gated by the output manager's
+/// <see cref="IPlaybackOutput.SetSourceLevelAsync"/>.
+/// </para>
 /// <para>
 /// Events are handled one at a time in order (a flush finishes before the now-playing that follows it); the now-playing
 /// and the volume run in the background so a slow receiver (the srcvers-366 speaker answers DMAP with 500 after about 10 s,
@@ -52,6 +62,7 @@ public sealed class PlayerEventMapper
     private readonly IArtworkLoader _artwork;
     private readonly RuntimeState _runtime;
     private readonly EventHub? _hub;
+    private readonly SourceSwitch? _sources;
     private readonly ILogger _logger;
     private readonly TimeProvider _time;
     private readonly Channel<int> _volume = Channel.CreateBounded<int>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
@@ -70,8 +81,8 @@ public sealed class PlayerEventMapper
     private long _positionAt;
     private int _spotifyVolume;
 
-    /// <summary>Creates the mapper.</summary>
-    public PlayerEventMapper(IPlaybackOutput output, IArtworkLoader artwork, RuntimeState runtime, EventHub? hub, ILogger logger, TimeProvider? time = null)
+    /// <summary>Creates the mapper; with <paramref name="sources"/> it claims and releases the output and publishes through the switch (SPEC-receiver.md 8.2).</summary>
+    public PlayerEventMapper(IPlaybackOutput output, IArtworkLoader artwork, RuntimeState runtime, EventHub? hub, ILogger logger, TimeProvider? time = null, SourceSwitch? sources = null)
     {
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(artwork);
@@ -81,6 +92,7 @@ public sealed class PlayerEventMapper
         _artwork = artwork;
         _runtime = runtime;
         _hub = hub;
+        _sources = sources;
         _logger = logger;
         _time = time ?? TimeProvider.System;
         _spotifyVolume = runtime.Playback.SpotifyVolume;
@@ -202,6 +214,12 @@ public sealed class PlayerEventMapper
                 break;
 
             case PlayerEvent.Playing playing:
+                if (_sources is not null)
+                {
+                    // SPEC-receiver.md R8, 8.2: Spotify's play takes the output (an AirPlay session ends first).
+                    await _sources.ClaimAsync(AudioSource.Spotify, null, cancellationToken).ConfigureAwait(false);
+                }
+
                 _playing = true;
                 SetPosition(playing.PositionMs);
                 SendPendingNowPlaying(playing.PositionMs);
@@ -241,6 +259,7 @@ public sealed class PlayerEventMapper
                 _nowPlayingPending = false;
                 SetPosition(0);
                 Publish();
+                _sources?.Release(AudioSource.Spotify); // SPEC-receiver.md 8.2: a stop (not a pause) gives the output up
                 break;
 
             case PlayerEvent.PositionCorrection correction:
@@ -335,7 +354,12 @@ public sealed class PlayerEventMapper
         var written = Math.Max(0, _output.FramesWritten - mark);
         var elapsed = TimeSpan.FromMilliseconds(positionMs) + TimeSpan.FromSeconds(written / (double)SampleRate);
         var nowPlaying = new NowPlaying(ToMetadata(item), artwork?.Data, artwork?.ContentType, elapsed);
-        await _output.SetNowPlayingAsync(nowPlaying, cancellationToken).ConfigureAwait(false);
+        if (_sources?.Admit(AudioSource.Spotify, "Now playing") == false)
+        {
+            return; // SPEC-receiver.md 8.2: the receivers show the AirPlay sender's track meanwhile
+        }
+
+        await _output.SetNowPlayingAsync(AudioSource.Spotify, nowPlaying, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<Artwork?> LoadArtworkQuietlyAsync(AudioItem item, CancellationToken cancellationToken)
@@ -352,9 +376,14 @@ public sealed class PlayerEventMapper
 
     private async Task FlushAsync(CancellationToken cancellationToken)
     {
+        if (_sources?.Admit(AudioSource.Spotify, "Flush") == false)
+        {
+            return; // SPEC-receiver.md 8.2: the player belongs to AirPlay
+        }
+
         try
         {
-            await _output.FlushAsync(cancellationToken).ConfigureAwait(false);
+            await _output.FlushAsync(AudioSource.Spotify, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (IsOutputFailure(ex) && !cancellationToken.IsCancellationRequested)
         {
@@ -409,6 +438,13 @@ public sealed class PlayerEventMapper
     private void Publish()
     {
         var playback = BuildPlayback();
+        if (_sources is not null)
+        {
+            _sources.PublishPlayback(AudioSource.Spotify, playback); // SPEC-receiver.md 8.2: visible only while AirPlay does not own the output
+            return;
+        }
+
+        _runtime.SpotifyPlayback = playback;
         _runtime.Playback = playback;
         _hub?.Publish(new BridgeEvent.PlaybackChanged(playback));
     }
