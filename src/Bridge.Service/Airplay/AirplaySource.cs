@@ -596,7 +596,24 @@ public sealed class AirplaySource : IHostedService, IReceiverAudioOutput, IAirpl
         var started = Interlocked.Exchange(ref _startedPlayer, null);
         if (_host.Admit("pause") && (started ?? _host.Player) is { } player)
         {
+            await PauseOrActiveAsync(player, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Pauses <paramref name="player"/>; when it was disposed because the user switched the output mid-stream (SPEC-receiver.md
+    /// 8.3), the active player is paused instead so the command is not lost.
+    /// </summary>
+    private async Task PauseOrActiveAsync(IGroupPlayer player, CancellationToken cancellationToken)
+    {
+        try
+        {
             await player.PauseAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException) when (_host.Player is { } active && !ReferenceEquals(active, player))
+        {
+            _logger.LogDebug("The started AirPlay player was disposed (output switched); pausing the active player");
+            await active.PauseAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -674,7 +691,7 @@ public sealed class AirplaySource : IHostedService, IReceiverAudioOutput, IAirpl
         {
             try
             {
-                await player.PauseAsync(cancellationToken).ConfigureAwait(false);
+                await PauseOrActiveAsync(player, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

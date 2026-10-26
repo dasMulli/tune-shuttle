@@ -100,10 +100,25 @@ public sealed class AirplayReceiver : IAsyncDisposable
     public ChannelReader<ReceiverEvent> Events => _events.Reader;
 
     /// <summary>The receiver's state (SPEC-receiver.md 9.1 <c>AirplayReceiverDto.State</c>).</summary>
-    public ReceiverStatus Status { get; private set; } = ReceiverStatus.Off;
+    /// <remarks>Read lock-free from one immutable snapshot, so it always pairs with <see cref="Sender"/>.</remarks>
+    public ReceiverStatus Status => Volatile.Read(ref _state).Status;
 
     /// <summary>The sender of the current session, or null (SPEC-receiver.md 4.3): the streaming sender, else the newest sender with a session.</summary>
-    public SenderInfo? Sender { get; private set; }
+    public SenderInfo? Sender => Volatile.Read(ref _state).Sender;
+
+    // Status and sender change together (Recompute); one reference keeps the pair consistent for lock-free readers.
+    private StateSnapshot _state = new(ReceiverStatus.Off, null);
+
+    private sealed record StateSnapshot(ReceiverStatus Status, SenderInfo? Sender);
+
+    private void SetState(ReceiverStatus status, SenderInfo? sender) => Volatile.Write(ref _state, new StateSnapshot(status, sender));
+
+    private void SetStatus(ReceiverStatus status)
+    {
+        // Lifecycle transitions keep the sender; the stop path clears it explicitly.
+        var current = Volatile.Read(ref _state);
+        SetState(status, current.Sender);
+    }
 
     /// <summary>The bound RTSP port after <see cref="StartAsync"/> (the OS-chosen one when <see cref="AirplayReceiverOptions.RtspPort"/> is 0), else 0.</summary>
     public int RtspPort { get; private set; }
@@ -144,7 +159,7 @@ public sealed class AirplayReceiver : IAsyncDisposable
                 return;
             }
 
-            Status = ReceiverStatus.Starting;
+            SetStatus(ReceiverStatus.Starting);
             try
             {
                 await StartCoreAsync(cancellationToken).ConfigureAwait(false);
@@ -153,7 +168,7 @@ public sealed class AirplayReceiver : IAsyncDisposable
             {
                 _logger.LogError(ex, "AirPlay receiver {Name} failed to start", Name);
                 await StopCoreAsync("start failed", CancellationToken.None).ConfigureAwait(false);
-                Status = ReceiverStatus.Error;
+                SetStatus(ReceiverStatus.Error);
                 throw;
             }
         }
@@ -178,7 +193,7 @@ public sealed class AirplayReceiver : IAsyncDisposable
             }
 
             await StopCoreAsync("receiver stopped", cancellationToken).ConfigureAwait(false);
-            Status = ReceiverStatus.Off;
+            SetStatus(ReceiverStatus.Off);
         }
         finally
         {
@@ -255,7 +270,7 @@ public sealed class AirplayReceiver : IAsyncDisposable
                 await StopCoreAsync("receiver stopped", CancellationToken.None).ConfigureAwait(false);
             }
 
-            Status = ReceiverStatus.Off;
+            SetStatus(ReceiverStatus.Off);
             _events.Writer.TryComplete();
             _logger.LogDebug("Receiver {Name} disposed", Name);
         }
@@ -376,7 +391,7 @@ public sealed class AirplayReceiver : IAsyncDisposable
         Volatile.Write(ref _active, null);
         _streams = null;
         RtspPort = 0;
-        Sender = null;
+        SetState(Status, null);
         _logger.LogInformation("AirPlay receiver {Name} stopped: {Reason}", Name, reason);
     }
 
@@ -436,15 +451,15 @@ public sealed class AirplayReceiver : IAsyncDisposable
             var sessions = plane.Sessions;
             if (sessions.FirstOrDefault(s => s.HasStream && !s.IsEnded)?.Sender is { } streaming)
             {
-                (Status, Sender) = (ReceiverStatus.Streaming, streaming);
+                SetState(ReceiverStatus.Streaming, streaming);
             }
             else if (sessions.LastOrDefault(s => s.IsSessionConnection)?.Sender is { } connected)
             {
-                (Status, Sender) = (ReceiverStatus.Connected, connected);
+                SetState(ReceiverStatus.Connected, connected);
             }
             else
             {
-                (Status, Sender) = (ReceiverStatus.Advertising, null);
+                SetState(ReceiverStatus.Advertising, null);
             }
         }
     }

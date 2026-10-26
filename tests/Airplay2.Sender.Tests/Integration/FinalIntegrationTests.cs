@@ -56,11 +56,8 @@ public sealed class RepositoryHygieneTests(ITestOutputHelper output)
         Assert.True(hits.Count == 0, "Contract stubs left:\n" + string.Join('\n', hits));
     }
 
-    // The AirPlay receiver is built in waves (SPEC-receiver.md 13); until wave 5 its pending surface throws
-    // NotImplementedException("SPEC-receiver.md <section>, wave <n>"). Only that exact shape is exempt, and the wave 5
-    // integration package removes the exemption once no stub remains.
-    private static readonly Regex ReceiverWaveStub = new("""NotImplementedException\("SPEC-receiver\.md [0-9][0-9., -]*, wave [1-5]"\)""", RegexOptions.Compiled);
-
+    // The AirPlay receiver was built in waves (SPEC-receiver.md 13) whose pending surface threw
+    // NotImplementedException("SPEC-receiver.md <section>, wave <n>"); wave 5 removed the last stub and the exemption with it.
     [Fact]
     public void Production_code_throws_no_NotImplementedException()
     {
@@ -71,7 +68,6 @@ public sealed class RepositoryHygieneTests(ITestOutputHelper output)
         }
 
         var hits = new List<string>();
-        var pendingStubs = 0;
         foreach (var file in RepositoryRoot.SourceFiles(root, ["src"], [".cs", ".razor"]))
         {
             var lines = File.ReadAllLines(file);
@@ -83,17 +79,10 @@ public sealed class RepositoryHygieneTests(ITestOutputHelper output)
                     continue;
                 }
 
-                if (ReceiverWaveStub.IsMatch(line))
-                {
-                    pendingStubs++;
-                    continue;
-                }
-
                 hits.Add($"{Path.GetRelativePath(root, file)}:{i + 1}: {line.Trim()}");
             }
         }
 
-        output.WriteLine($"{pendingStubs} receiver stubs pending (SPEC-receiver.md 13)");
         Assert.True(hits.Count == 0, "NotImplementedException in:\n" + string.Join('\n', hits));
     }
 

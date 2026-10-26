@@ -75,7 +75,7 @@ Numbered R1-R16 so code and tests can refer to them (`SPEC-receiver.md R5`).
 | R12 | **Self-exclusion**: `ReceiverInventory` ignores discovered receivers whose `deviceid` or `pk` equals our own; they never reach the store or the web app. | Our browser sees our own advertisement. |
 | R13 | **One receiver per host.** The product receiver binds TCP 7000 (`Bridge:Airplay:RtspPort`); tests bind port 0 and run the fake receiver and the product receiver only on loopback. | `[sps] AIRPLAY2.md`: senders are confused by two AirPlay 2 receivers at one address. |
 | R14 | **`POST /fp-setup`** is answered with the canned FairPlay replies shairport-sync uses (`[sps] rtsp.c:1843-1930`, MIT), selected by the request's mode byte; nothing is derived from them. | Our feature word carries bit 14 (shairport-sync's does), and iOS then sends `/fp-setup` before pairing. |
-| R15 | **Feature word** `0x00018340405FCA00` (TXT `features=0x405FCA00,0x18340`): shairport-sync's default plus the metadata bits 15-17; bits 9, 11, 14, 15, 16, 17, 18, 19, 20, 22, 30, 38, 40, 41, 47, 48. `srcvers 366.0`, `protovers 1.1`, `model TuneShuttle1,1`, `manufacturer TuneShuttle`. The word is one constant (`ReceiverFeatures.Default`) so the probes can change it in one place; `ReceiverFeatures.AlacOnly` is the same word with bit 20 cleared (TXT `features=0x405FCA00,0x18240`), used when no AAC decoder loads (R3). | A word proven with iOS and macOS senders (`[sps] shairport.c:1628`); bit table in SPEC-control.md 1.3. |
+| R15 | **Feature word** `0x00018340405FCA00` (TXT `features=0x405FCA00,0x18340`): shairport-sync's default plus the metadata bits 15-17; bits 9, 11, 14, 15, 16, 17, 18, 19, 20, 22, 30, 38, 40, 41, 47, 48. `srcvers 366.0`, `protovers 1.1`, `model TuneShuttle1,1`, `manufacturer TuneShuttle`. The word is one constant (`ReceiverFeatures.Default`) so the probes can change it in one place; `ReceiverFeatures.AlacOnly` is the same word with bit 20 cleared (TXT `features=0x404FCA00,0x18340`; bit 20 is in the low word), used when no AAC decoder loads (R3). | A word proven with iOS and macOS senders (`[sps] shairport.c:1628`); bit table in SPEC-control.md 1.3. |
 | R16 | **Timeouts**: a sender that sends nothing on the control connection for 30 s after a stream SETUP is considered gone (iOS sends `/feedback` every 2 s, SPEC-control.md 4.10); a closed control connection ends the session at once (event channel closed, ports released, output released). | `[sps]` uses a 60 s TCP keepalive; 30 s keeps the output from staying blocked after a phone leaves the Wi-Fi. |
 
 ## 3. Discovery and `/info`
@@ -139,7 +139,9 @@ answered 470 (the fake receiver's `RequirePairing` rule stays the product behavi
 
 `HapAccessoryPairing` (already in `Airplay2.Sender/Pairing`, internal; wave 0 `receiver-extract` adds the
 `InternalsVisibleTo` entries for `Airplay2.Receiver` and `Airplay2.Receiver.Tests`, Section 13) handles
-`/pair-setup`, `/pair-verify`, `/pair-add`, `/pair-remove`, `/pair-list`. Options per R7: `AllowTransient =
+`/pair-pin-start`, `/pair-setup` and `/pair-verify`. `/pair-add`, `/pair-remove` and `/pair-list` are not implemented
+and are answered 404 until a sender is seen using them (iOS and macOS do not use them for AirPlay in the open mode;
+shairport-sync's `handle_pair_add/remove/list` is the shape to follow then). Options per R7: `AllowTransient =
 password is null`, `Pin = password ?? <random 8 digits per start>`, `MaxControllers 16`. Registered controllers
 (identifier + Ed25519 LTPK) are persisted through `IControllerStore` (`LoadAsync()`, `SaveAsync(id, key)`,
 `RemoveAsync(id)`; the bridge backs it with the `airplay_controllers` table, Section 8.4; tests use
@@ -147,7 +149,7 @@ password is null`, `Pin = password ?? <random 8 digits per start>`, `MaxControll
 `Airplay2.Sender/Pairing/HapAccessoryPairing.cs`: `HapControllerRegistry` gets an optional change callback
 (`Action<string, byte[]?> onChanged`, called after `TryAddOrUpdate`, `Set` and `Remove` with the new key or null) and
 `HapAccessoryPairing` a constructor that takes a registry. At start the receiver seeds the registry with `Set` from
-`LoadAsync`; the callback writes through to the store (awaited on the handler path of M5, pair-add and pair-remove; a
+`LoadAsync`; the callback writes through to the store (awaited on the handler path of M5; a
 store failure is logged and the pairing still answers). `MdnsResponder` is used the same way (internal, made visible in
 wave 0). `POST /auth-setup` is answered as the fake does (200 with 1076 zero bytes, SPEC-control.md 3.10).
 

@@ -949,11 +949,19 @@ public sealed class PlayoutBuffer : IAsyncDisposable
     private static bool InBufferedRange(uint sequence, uint from, uint until) =>
         ((sequence - from) & BufferedSequenceMask) < ((until - from) & BufferedSequenceMask);
 
+    /// <summary>The wait after the <paramref name="failures"/>-th output failure in a row: 20 ms doubling up to <see cref="IdleWait"/>.</summary>
+    internal static TimeSpan RetryWait(int failures)
+    {
+        var ms = 20.0 * Math.Pow(2, Math.Clamp(failures - 1, 0, 16));
+        return TimeSpan.FromMilliseconds(Math.Min(ms, IdleWait.TotalMilliseconds));
+    }
+
     private void ReleaseLoop()
     {
         using var sleeper = new PrecisionSleeper();
         var masterClock = new MasterClockAdapter(Clock);
         var token = _stop.Token;
+        var failures = 0;
         try
         {
             while (!token.IsCancellationRequested)
@@ -962,6 +970,7 @@ public sealed class PlayoutBuffer : IAsyncDisposable
                 try
                 {
                     deadline = PumpAsync(token).AsTask().GetAwaiter().GetResult();
+                    failures = 0;
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
@@ -969,8 +978,19 @@ public sealed class PlayoutBuffer : IAsyncDisposable
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Playout output call failed");
-                    _wake.WaitOne(TimeSpan.FromMilliseconds(20));
+                    // The first failure of an episode is a warning; repeats are debug and back off up to IdleWait, so a
+                    // persistent output failure does not log at 50 Hz.
+                    failures++;
+                    if (failures == 1)
+                    {
+                        _logger.LogWarning(ex, "Playout output call failed");
+                    }
+                    else
+                    {
+                        _logger.LogDebug("Playout output call failed again ({Count} in a row): {Error}", failures, ex.Message);
+                    }
+
+                    _wake.WaitOne(RetryWait(failures));
                     continue;
                 }
 

@@ -78,6 +78,29 @@ public sealed class AirplaySourceTests
     }
 
     [Fact]
+    public async Task Pause_and_release_fall_back_to_the_active_player_when_the_started_one_was_disposed()
+    {
+        // SPEC-receiver.md 8.3: the user switched the output mid-stream; the started player is gone.
+        var (host, first) = NewHost(AudioSource.Airplay);
+        await using var source = NewSource(host);
+        await source.ResumeAsync(Ct);
+        var second = new StubPlayer(host.Log);
+        host.Player = second;
+        first.Disposed = true;
+
+        await source.PauseAsync(Ct);
+        Assert.Equal(0, first.Pauses);
+        Assert.Equal(1, second.Pauses);
+
+        await source.ResumeAsync(Ct); // starts the second player
+        var third = new StubPlayer(host.Log);
+        host.Player = third;
+        second.Disposed = true;
+        await source.ReleaseAsync(Ct);
+        Assert.Equal(1, third.Pauses);
+    }
+
+    [Fact]
     public async Task Commands_are_forwarded_with_the_buffer_elapsed_time_and_the_airplay_level_source()
     {
         var (host, player) = NewHost(AudioSource.Airplay);
@@ -660,8 +683,11 @@ public sealed class AirplaySourceTests
             return Task.CompletedTask;
         }
 
+        public bool Disposed { get; set; }
+
         public Task PauseAsync(CancellationToken cancellationToken)
         {
+            ObjectDisposedException.ThrowIf(Disposed, this);
             Pauses++;
             log.Enqueue("pause");
             return Task.CompletedTask;

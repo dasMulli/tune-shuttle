@@ -1,5 +1,7 @@
+using System.Net;
 using System.Text;
 using Airplay2.Receiver.Session;
+using Airplay2.Sender.Playback;
 using Airplay2.Sender.Plist;
 using Airplay2.Sender.Rtsp;
 using Airplay2.Sender.Session;
@@ -14,6 +16,22 @@ namespace Airplay2.Receiver.Tests.Session;
 /// </summary>
 public class ControlSessionTests
 {
+    [Fact]
+    public void Timing_peer_info_carries_link_local_addresses_without_a_scope_id()
+    {
+        // SPEC-receiver.md 4.3: the plist carries wire addresses; a scoped link-local local address must lose its "%<scope>".
+        var local = IPAddress.Parse("fe80::1234:5678:9abc:def0%12");
+        var other = IPAddress.Parse("fe80::aaaa:bbbb:cccc:dddd%7");
+        var mapped = IPAddress.Parse("::ffff:192.0.2.10");
+
+        var info = ControlSession.TimingPeerInfo(local, [local, other, mapped, IPAddress.Parse("fe80::1234:5678:9abc:def0%3")]);
+
+        var addresses = Assert.IsType<List<object?>>(info["Addresses"]).Cast<string>().ToList();
+        Assert.Equal(["fe80::1234:5678:9abc:def0", "fe80::aaaa:bbbb:cccc:dddd", "192.0.2.10"], addresses);
+        Assert.Equal("fe80::1234:5678:9abc:def0", info.GetString("ID"));
+        Assert.DoesNotContain(addresses, a => a.Contains('%', StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(0, 0x0F, 0xBA)]
     [InlineData(1, 0xCF, 0x8A)]
@@ -90,7 +108,7 @@ public class ControlSessionTests
         var volume = await host.WaitForEventAsync<ReceiverEvent.SenderVolume>();
         Assert.Equal(70, volume.Level);
         Assert.Equal(-9.0, volume.Db);
-        Assert.Contains("level 70", host.Recorder.Calls);
+        await WaitUntilAsync(() => host.Recorder.Calls.Contains("level 70"), "the level 70"); // applied off the request path
 
         // Without an output the last sender level is answered; with one, the output's G.
         var answer = await sender.SendAsync(SessionRequests.GetVolume(sender.Uri));
@@ -102,7 +120,36 @@ public class ControlSessionTests
         // Mute.
         await sender.SendAsync(SessionRequests.SetVolume(sender.Uri, -144.0));
         await WaitUntilAsync(() => host.EventsOf<ReceiverEvent.SenderVolume>().Any(v => v.Level == 0), "the mute");
-        Assert.Contains("level 0", host.Recorder.Calls);
+        await WaitUntilAsync(() => host.Recorder.Calls.Contains("level 0"), "the level 0");
+    }
+
+    [Fact]
+    public async Task A_slow_output_level_does_not_block_requests_and_levels_are_coalesced()
+    {
+        // R9: a dragged slider must not serialise output round-trips in front of other requests; the latest level wins.
+        var (plane, host) = await StartAsync();
+        await using var _plane = plane;
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.Recorder.LevelGate = gate.Task;
+        await using var sender = await TestSender.ConnectPairedAsync(plane);
+        await sender.SetUpSessionAsync();
+
+        Assert.Equal(200, (await sender.SendAsync(SessionRequests.SetVolume(sender.Uri, -9.0))).StatusCode);
+        await WaitUntilAsync(() => host.Recorder.Calls.Contains("level 70"), "the first level (now held by the slow output)");
+        foreach (var db in new[] { -20.0, -12.0, -3.0 })
+        {
+            Assert.Equal(200, (await sender.SendAsync(SessionRequests.SetVolume(sender.Uri, db))).StatusCode);
+        }
+
+        Assert.Equal(200, (await sender.SendAsync(SessionRequests.Feedback())).StatusCode); // not behind the held level
+        Assert.Equal(4, host.EventsOf<ReceiverEvent.SenderVolume>().Count()); // raised at once
+
+        gate.SetResult();
+        var last = FormattableString.Invariant($"level {VolumeMapping.DbToLevel(-3.0)}");
+        await WaitUntilAsync(() => host.Recorder.Calls.Contains(last), "the latest level");
+        await Task.Delay(100);
+        var levels = host.Recorder.Calls.Where(c => c.StartsWith("level ", StringComparison.Ordinal)).ToList();
+        Assert.Equal(["level 70", last], levels);
     }
 
     [Fact]
@@ -211,6 +258,12 @@ public class ControlSessionTests
         Assert.Equal(200, (await sender.SendAsync(RtspRequest.WithPlist("PUT", "/setProperty", new PlistDictionary()))).StatusCode);
         Assert.Equal(200, (await sender.SendAsync(SessionRequests.SetPeers(sender.Uri, []))).StatusCode);
         Assert.Equal(404, (await sender.SendAsync(RtspRequest.Create("POST", "/no-such-endpoint"))).StatusCode);
+        // SPEC-receiver.md 4.2: pair-add/remove/list are answered 404 until a sender is seen using them.
+        foreach (var uri in new[] { "/pair-add", "/pair-remove", "/pair-list" })
+        {
+            Assert.Equal(404, (await sender.SendAsync(RtspRequest.WithBody("POST", uri, "application/pairing+tlv8", new byte[] { 0x06, 0x01, 0x01 }))).StatusCode);
+        }
+
         Assert.Equal(404, (await sender.SendAsync(RtspRequest.Create("GET", "/no-such-endpoint"))).StatusCode);
         Assert.Equal(501, (await sender.SendAsync(RtspRequest.Create("ANNOUNCE", sender.Uri))).StatusCode);
         Assert.Equal(200, (await sender.SendAsync(RtspRequest.WithBody("GET_PARAMETER", sender.Uri, RtspContentTypes.Parameters, "something\r\n"u8.ToArray()))).StatusCode);

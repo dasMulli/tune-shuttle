@@ -240,13 +240,14 @@ internal sealed class EventClient : IAsyncDisposable
     public Task SendAsync(BridgeClientMessage message) =>
         _socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(message, EventHub.JsonOptions), WebSocketMessageType.Text, true, CancellationToken.None);
 
-    public async Task<T> WaitAsync<T>(Func<T, bool>? match = null, TimeSpan? timeout = null)
+    /// <summary>The first event of type <typeparamref name="T"/> matching <paramref name="match"/> among the events after the first <paramref name="skip"/> (of any type).</summary>
+    public async Task<T> WaitAsync<T>(Func<T, bool>? match = null, TimeSpan? timeout = null, int skip = 0)
         where T : BridgeEvent
     {
         var deadline = DateTime.UtcNow + (timeout ?? RecordedFake.Patience);
         while (true)
         {
-            var found = _events.OfType<T>().FirstOrDefault(e => match?.Invoke(e) ?? true);
+            var found = _events.Skip(skip).OfType<T>().FirstOrDefault(e => match?.Invoke(e) ?? true);
             if (found is not null)
             {
                 return found;

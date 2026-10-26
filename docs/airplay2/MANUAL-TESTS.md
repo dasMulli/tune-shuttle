@@ -6,7 +6,7 @@ microphone, enters a PIN, holds a phone, or decides about another person's devic
 
 Each item says what to run, what to look for, and its **last known result**. When you run an item, update its result
 here with the date, and record protocol findings in [`SPEC.md`](SPEC.md) section 4 as a dated "Result (date): ..."
-line, as the probes so far have been. Live logs go to `artifacts/live/` (git-ignored).
+line, as the probes so far have been (section 4.3 for the AirPlay receiver probes of section 9). Live logs go to `artifacts/live/` (git-ignored).
 
 The live-device rules apply ([`docs/DEVELOPMENT.md`, "Live-device rules"](../DEVELOPMENT.md#live-device-rules)).
 AirPlay wakes receivers, and they play at their current volume. Contacting receiver B (a TV receiver that requires PIN pairing,
@@ -140,7 +140,7 @@ are both accepted.
 Last known result: the layout, touch and language checks that a headless browser can do pass (`tools/web-audit.ps1`
 over every route at 360-1280 px in all seven languages, and an emulated-touch pass over the DevTools protocol at
 390×844 and 844×390: 44px range inputs, 24px thumbs, 34px theme buttons, 16px inputs, the theme picker opening on the
-first tap and selecting on the second). The items below need real hardware and have not been recorded.
+first tap and selecting on the second). The items below: not yet run (needs the owner's devices).
 
 - [ ] On a desktop browser and on a phone: Player, Receivers, Groups, Settings and Diagnostics render and update
       live. With the bridge restarted, the WebSocket reconnects by itself.
@@ -179,3 +179,87 @@ Windows Service reboot test and the macvlan deployment have not been recorded.
       receiver, or PTP for a second receiver), add a rule keyed on its TXT `srcvers` (and `features` if needed) to
       `src/Airplay2.Sender/Session/KnownReceiverQuirks.cs`, and update
       the "Resulting defaults" table in `SPEC.md` section 4.2 and `QuirkDefaultsTests` along with it.
+
+## 9. AirPlay receiver probes (RP1-RP12)
+
+TuneShuttle as an AirPlay 2 **receiver**: an iPhone, iPad or Mac sends to the bridge, and the bridge plays to its
+selected output ([`SPEC-receiver.md`](SPEC-receiver.md) 11.3). Everything up to the sender is automated: the receiver
+loopback tests (`tests/Airplay2.Receiver.Tests`) and the end-to-end bridge test
+(`tests/Bridge.Tests/Integration/AirplayEndToEndTests.cs`: our own sender streams buffered ALAC and then realtime ALAC
+under PTP to the bridge's receiver, the bridge plays it to a fake receiver, and volume, metadata, TEARDOWN and the
+Spotify take-over are checked; loopback only, part of `./build.ps1`). What only a person can check is how Apple's
+senders treat the receiver. Record each result here (date, the sender by kind and OS version, never by name or
+address) and in [`SPEC.md`](SPEC.md) section 4.3 as a dated "Result (date): ..." line. A result that answers an open
+question (RQ1-RQ11, SPEC-receiver.md 12) names it and says whether its default stays.
+
+Last known result: none of RP1-RP12 has been run.
+
+Preparation for every item:
+
+- [ ] `./build.ps1 -SkipContainer` passes, and `artifacts/bridge` contains the FFmpeg DLLs (`avcodec-61.dll`; RP11
+      removes them on purpose).
+- [ ] Firewall: install the service (step 1.1), or allow inbound TCP 7000 and UDP 319-320 for `bridge.exe` (README,
+      "Firewall and network"). No other AirPlay receiver (shairport-sync, for example) runs on this machine (R13).
+- [ ] Start the bridge with the receiver's log at Debug:
+      `dotnet run --project src/Bridge.Service -c Release -- --Logging:LogLevel:Airplay2.Receiver=Debug --Logging:LogLevel:Bridge.Service.Airplay=Debug`
+      (for the service, the same keys in `appsettings.json`). Keep the log as `artifacts/live/<date>-RP<n>.log`.
+- [ ] Output: receiver A as the single output at level 15-20. The section 2 rules apply: never the TV, receiver C only
+      with its owner's permission. The phone or Mac is on the same LAN as the bridge.
+- [ ] Settings, **AirPlay receiver**: on, the default name, no password (RP9 sets one).
+
+1. [ ] **RP1, discovery and connection** (RQ2, RQ9). On the iPhone, open Control Center, long-press the audio card and
+       open the AirPlay list. **Check**: the receiver's name is listed within a few seconds, and choosing it connects.
+       The log shows `GET /info`, `POST /fp-setup`, transient pair-setup and pair-verify, then a session SETUP with
+       `timingProtocol: PTP`. Diagnostics, **AirPlay receiver** shows the state *connected* and the phone's name. Note
+       whether a `timingProtocol: None` session appears ("remote-control-only session SETUP accepted", RQ9), and
+       whether the phone stays connected after the `updateInfo` on the event channel (RQ2).
+       *Last known result: not yet run.*
+2. [ ] **RP2, stream type and format** (RQ3). Play a song in the Music app, then audio from a second app (a podcast
+       app, a video in Safari). **Check**: the log line `stream <id> set up: type <96|103>, <format>` for each, and for
+       a buffered stream (type 103) the SSRC of its first block (Debug log). Diagnostics shows the same stream type and
+       format. Record which app used which. *Last known result: not yet run.*
+3. [ ] **RP3, audio and delay** (RQ6, RQ7). Press play on the phone. **Check**: receiver A plays within 3 s of the
+       tap, and the phone's progress and what you hear stay together within the expected delay (5.4: about 2 s for a
+       buffered stream, plus the learnt offset `D`, about 0.45 s, for a realtime stream; Diagnostics shows `D` and the
+       buffer). For RQ7, repeat once with the latency in Settings set to 22050 frames (0.5 s), then put it back.
+       *Last known result: not yet run.*
+4. [ ] **RP4, transport from the phone**. Pause, resume, seek forward and back, next track, previous track. **Check**:
+       each acts within about 1 s, with no old audio after a seek or a skip and nothing stuck. The log shows the
+       FLUSHBUFFERED forms (immediate for pause and seek, deferred for a gapless track change) and SETRATEANCHORTIME
+       with rates 0 and 1. *Last known result: not yet run.*
+5. [ ] **RP5, ten minutes with the passive PTP slave** (RQ4, RQ5). Let music play for 10 minutes. **Check**: no
+       disconnect and no audible drift. Note the PTP offset and the late, missing and drift counters from Diagnostics,
+       **AirPlay receiver** at the end. In the log, look for PTP messages from the phone that the slave leaves
+       unanswered (Delay_Req, Signaling) and for "Anchor timeline ... differs from the grandmaster" (RQ4).
+       *Last known result: not yet run.*
+6. [ ] **RP6, volume from the phone**. Use the volume buttons and the slider in Control Center. **Check**: the master
+       level in the web app follows (a level change with the source `airplay`), and so does receiver A's level. The
+       phone's `GET_PARAMETER volume` is answered, and its slider does not jump back. *Last known result: not yet run.*
+7. [ ] **RP7, metadata**. Skip through three tracks with artwork. **Check**: within 2 s of each track change the Player
+       page shows "AirPlay · <sender>", the title, artist, album, artwork and progress; receiver A's companion app
+       shows what it shows for Spotify (compare 2.7). *Last known result: not yet run.*
+8. [ ] **RP8, take-over both ways** (R8). (a) Spotify plays through the bridge; start AirPlay from the phone.
+       **Check**: Spotify pauses and the phone's audio plays. (b) While AirPlay plays, press play in the Spotify app.
+       **Check**: the phone shows the speaker as disconnected and Spotify plays. (c) With a second phone of your own,
+       start AirPlay while the first one plays. **Check**: the first phone is disconnected and the second one plays.
+       *Last known result: not yet run.*
+9. [ ] **RP9, password mode** (RQ1, RQ8). Settings, **AirPlay receiver**: set a password, then choose the receiver on
+       the phone. **Check**: the phone asks for the password; a wrong one is refused (log: pair-setup M3 answered with
+       `Error 2`); the right one connects (pair-setup M1-M6, then pair-verify). Disconnect and connect again: no second
+       prompt (pair-verify only). Note whether the phone went on to regular pair-setup after the 470 on transient M1 or
+       needed anything else (RQ8). Clear the password afterwards. *Last known result: not yet run.*
+10. [ ] **RP10, a Mac as the sender** (RQ9, RQ10). On a Mac, use the Music app's AirPlay menu, then the system sound
+        output (Control Center, Sound). **Check**: RP1-RP4 hold for both. Note the stream type the system output uses
+        and whether its extra delay is acceptable (RQ10). *Last known result: not yet run.*
+11. [ ] **RP11, without libavcodec** (RQ11). Start the bridge with `--Bridge:Airplay:FfmpegPath=<an empty folder>`.
+        **Check**: the log says "No AAC decoder ... ALAC-only formats" and Diagnostics shows the AAC decoder as not loaded
+        (ALAC only). Does the phone still list and use the receiver, and which stream type and format does it send
+        (RP2's log line)? *Last known result: not yet run.*
+12. [ ] **RP12, settings while the phone watches**. Keep the phone's AirPlay list open. In Settings, rename the
+        receiver, then turn it off, then on again. **Check**: the list shows the new name, drops the receiver and lists
+        it again, each within 10 s. *Last known result: not yet run.*
+
+After the probes: put receiver A's volume back, clear the receiver password if one is left, and update the results
+above and `SPEC.md` section 4.3. If a result changes a default (the feature word, a timing rule, the latency), change
+`ReceiverFeatures`, the `PlayoutOptions` defaults or `AirplayOptions` together with SPEC-receiver.md and the tests that
+pin them.

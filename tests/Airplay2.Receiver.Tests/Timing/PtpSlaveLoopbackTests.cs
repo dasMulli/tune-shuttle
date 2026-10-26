@@ -21,6 +21,26 @@ public class PtpSlaveLoopbackTests
     private static PtpPortOptions Loopback => new() { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 };
 
     [Fact]
+    public async Task Link_local_senders_route_unscoped_but_announce_to_the_control_connections_scope()
+    {
+        // SPEC-receiver.md 6.1/6.2: the plist carries fe80:: without a scope, the control connection's remote address has
+        // one; the routing key is unscoped, the Announce target borrows the scope (an unscoped link-local send fails).
+        await using var port = new PtpPort(Loopback); // never bound: the slave is not started
+        await using var slave = new PtpSlave(new PtpSlaveOptions
+        {
+            Port = port,
+            SenderAddresses = [IPAddress.Parse("fe80::10"), IPAddress.Parse("192.0.2.20"), IPAddress.Parse("fe80::10%5"), IPAddress.Parse("fe80::11")],
+        });
+
+        Assert.Equal(
+            [IPAddress.Parse("fe80::10%5"), IPAddress.Parse("192.0.2.20"), IPAddress.Parse("fe80::11%5")],
+            slave.AnnounceTargets);
+        Assert.Equal(IPAddress.Parse("192.0.2.21"), PtpSlave.SendTarget(IPAddress.Parse("::ffff:192.0.2.21"), 5));
+        Assert.Equal(IPAddress.Parse("fe80::12"), PtpSlave.SendTarget(IPAddress.Parse("fe80::12"), 0));
+        Assert.Equal(7, PtpSlave.SendTarget(IPAddress.Parse("fe80::12%7"), 5).ScopeId);
+    }
+
+    [Fact]
     public async Task Slave_follows_the_master_within_five_milliseconds_and_announces_itself_twice()
     {
         var clock = new MasterClock();

@@ -173,15 +173,20 @@ public sealed class AirplaySinkTests
         Assert.Equal(1, player.Starts);
 
         var requested = 0;
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var eviction = sink.EvictAsync(
             () =>
             {
                 Interlocked.Increment(ref requested);
-                ThreadPool.QueueUserWorkItem(_ => sink.Stop()); // Spirc pauses the player thread a moment later
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    sink.Stop(); // Spirc pauses the player thread a moment later
+                    stopped.TrySetResult();
+                });
                 return true;
             },
             CancellationToken.None);
-        await Task.Delay(100);
+        await stopped.Task.WaitAsync(TimeSpan.FromSeconds(5)); // not a fixed delay: a starved pool may run the item late
         Assert.Equal(1, requested);
         Assert.False(eviction.IsCompleted);
         Assert.False(sink.IsRunning);

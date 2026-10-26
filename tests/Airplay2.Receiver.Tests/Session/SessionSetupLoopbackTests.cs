@@ -385,6 +385,25 @@ public class SessionSetupLoopbackTests
     }
 
     [Fact]
+    public async Task Teardown_with_an_empty_streams_array_ends_the_stream_and_keeps_the_session()
+    {
+        var (plane, host) = await StartAsync();
+        await using var _plane = plane;
+        await using var sender = await TestSender.ConnectPairedAsync(plane);
+        await sender.SetUpSessionAsync();
+        await sender.SetUpRealtimeStreamAsync();
+
+        var response = await sender.SendAsync(RtspRequest.WithPlist("TEARDOWN", sender.Uri, new PlistDictionary { ["streams"] = new List<object?>() }));
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Null(response.Header(RtspHeaders.Connection));
+        Assert.False(plane.HasActiveStream);
+        Assert.True(Assert.Single(host.Streams).Disposed);
+        Assert.True(plane.Sessions.Single().IsSessionConnection);
+        Assert.Empty(host.EventsOf<ReceiverEvent.SenderGone>());
+    }
+
+    [Fact]
     public async Task End_session_evicts_the_sender_and_later_requests_get_451()
     {
         var (plane, host) = await StartAsync();

@@ -61,14 +61,15 @@ dotnet test tests/Bridge.Tests --filter FullyQualifiedName~Bridge.Tests.Web     
 ```
 
 Warnings are errors in this solution (`TreatWarningsAsErrors`; only CS1591, a missing XML doc, is exempt). The 30 s
-pacer accuracy test is tagged `Category=Timing`; add `&Category!=Timing` on a loaded machine.
+pacer accuracy test and a few wall-clock-sensitive receiver and sink tests are tagged `Category=Timing`; add
+`&Category!=Timing` on a loaded machine.
 
 Test categories:
 
 | Category | Runs | Gate |
 |---|---|---|
 | (none) | everything offline: unit tests, the in-process fake receiver, loopback sockets, `WebApplicationFactory`, bUnit | always |
-| `Timing` | the 30 s pacer accuracy run | always; excluded with `-ExcludeTimingTests` |
+| `Timing` | the 30 s pacer accuracy runs, plus a few short wall-clock tests of the receiver (gap request timing, release thread, feedback keep-alive) and the sink (dropped-frame pacing) | always; `build.ps1` runs them in a second pass of their own after the other tests, and `-ExcludeTimingTests` drops that pass |
 | `ReceiverLive` | against the live receiver (`AIRPLAY_LIVE_RECEIVER`) on the LAN | `AIRPLAY_LIVE=1` plus the target (`AIRPLAY_LIVE_RECEIVER` or `AIRPLAY_LIVE_RECEIVER_HOST`, see "Live tests"); audio additionally `AIRPLAY_AUDIO_I_KNOW=1` |
 | `ShairportLive` | against shairport-sync in Docker | `AIRPLAY_LIVE=1`; set by the VM scripts |
 

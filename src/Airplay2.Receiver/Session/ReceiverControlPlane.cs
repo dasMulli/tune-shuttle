@@ -103,6 +103,11 @@ public sealed class ReceiverControlPlane : IAsyncDisposable
         _listener = listener;
         Port = ((IPEndPoint)listener.LocalEndPoint!).Port;
         _acceptLoop = AcceptLoopAsync(listener, _stop.Token);
+        _ = _acceptLoop.ContinueWith(
+            t => _logger.LogError(t.Exception!.GetBaseException(), "Receiver {Name}: the RTSP accept loop failed; no new senders are accepted", Options.Name),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
         _logger.LogInformation("Receiver {Name}: RTSP listener on port {Port} ({Mode} pairing)", Options.Name, Port, Options.Password is null ? "transient" : "password");
     }
 
@@ -313,8 +318,18 @@ public sealed class ReceiverControlPlane : IAsyncDisposable
                 _sessions.Add(session);
             }
 
-            session.Start(socket);
-            _logger.LogDebug("Receiver {Name}: control connection #{Id} from {Remote}", Options.Name, id, socket.RemoteEndPoint);
+            try
+            {
+                session.Start(socket);
+                _logger.LogDebug("Receiver {Name}: control connection #{Id} from {Remote}", Options.Name, id, socket.RemoteEndPoint);
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException or InvalidCastException or ObjectDisposedException)
+            {
+                // A peer that reset right after accept must not stop the listener (SPEC-receiver.md 4.1).
+                _logger.LogWarning("Receiver {Name}: control connection #{Id} could not be started: {Error}", Options.Name, id, ex.Message);
+                socket.Dispose();
+                Remove(session);
+            }
         }
     }
 }

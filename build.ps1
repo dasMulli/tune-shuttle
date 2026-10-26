@@ -9,8 +9,13 @@
                 "Privacy scan"); fails the build with the offending lines
     3. test     dotnet test with --filter "Category!=ReceiverLive&Category!=ShairportLive" (docs/DEVELOPMENT.md, "Live tests":
                 live tests never run here; AIRPLAY_LIVE is cleared for the test step as a second guard).
-                -ExcludeTimingTests also drops the 30 s pacer accuracy run (Category=Timing) on loaded runners.
-                TRX files go to <Output>/test-results.
+                The wall-clock tests (Category=Timing: the pacer accuracy runs and a few receiver and sink timing tests)
+                run in a second pass of their own after the rest, so the parallel test assemblies do not disturb their
+                wake-up jitter; -ExcludeTimingTests drops that pass on loaded runners.
+                TRX files go to <Output>/test-results. The AirPlay receiver's end-to-end bridge test runs here as well
+                (tests/Bridge.Tests/Integration/AirplayEndToEndTests.cs, SPEC-receiver.md 11.1 and 13 wave 5): our sender
+                streams to the bridge's receiver and the bridge plays to a fake receiver, all on 127.0.0.1 with port 0, so
+                it is not a live test and needs no device.
     3a. ffmpeg  tools/get-ffmpeg.ps1 into <Output>/ffmpeg: the FFmpeg 7.1 LGPL shared DLLs (avcodec, avutil, swresample) the AAC
                 decoder loads (docs/airplay2/SPEC-receiver.md 7.2, Section 10). Runs before the tests, which find the DLLs
                 through AIRPLAY_FFMPEG_PATH, and after publish copies them into <Output>/bridge next to bridge.exe.
@@ -98,17 +103,15 @@ try {
     }
 
     if (-not $SkipTests) {
-        $filter = "Category!=ReceiverLive&Category!=ShairportLive"
-        if ($ExcludeTimingTests) {
-            $filter += "&Category!=Timing"
+        # Two passes: everything offline except the wall-clock tests, then those alone (see the description above).
+        $filter = "Category!=ReceiverLive&Category!=ShairportLive&Category!=Timing"
+        $filters = @($filter)
+        if (-not $ExcludeTimingTests) {
+            $filters += "Category=Timing"
         }
 
         $results = Join-Path $Output "test-results"
         New-Item -ItemType Directory -Force $results | Out-Null
-        $testArgs = @("test", $solution, "-c", $Configuration, "--filter", $filter, "--logger", "trx", "--results-directory", $results, "-nologo")
-        if (-not $SkipBuild) {
-            $testArgs += "--no-build"
-        }
 
         # Second guard next to the filter: live tests return early unless AIRPLAY_LIVE=1 (docs/DEVELOPMENT.md, "Live tests").
         $savedLive = $env:AIRPLAY_LIVE
@@ -118,7 +121,14 @@ try {
         Remove-Item Env:AIRPLAY_LIVE -ErrorAction SilentlyContinue
         Remove-Item Env:AIRPLAY_AUDIO_I_KNOW -ErrorAction SilentlyContinue
         try {
-            Invoke-Native "test ($filter)" "dotnet" $testArgs
+            foreach ($f in $filters) {
+                $testArgs = @("test", $solution, "-c", $Configuration, "--filter", $f, "--logger", "trx", "--results-directory", $results, "-nologo")
+                if (-not $SkipBuild) {
+                    $testArgs += "--no-build"
+                }
+
+                Invoke-Native "test ($f)" "dotnet" $testArgs
+            }
         }
         finally {
             if ($null -ne $savedLive) { $env:AIRPLAY_LIVE = $savedLive }
@@ -126,7 +136,7 @@ try {
             if ($null -ne $savedFfmpeg) { $env:AIRPLAY_FFMPEG_PATH = $savedFfmpeg } else { Remove-Item Env:AIRPLAY_FFMPEG_PATH -ErrorAction SilentlyContinue }
         }
 
-        $summary.Add("test: passed ($filter), TRX in $results")
+        $summary.Add("test: passed ($($filters -join '; then ')), TRX in $results")
     }
 
     if (-not $SkipPublish) {

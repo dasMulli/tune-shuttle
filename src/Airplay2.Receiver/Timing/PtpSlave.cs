@@ -143,7 +143,9 @@ public sealed partial class PtpSlave : IPtpSlave, IPtpEndpoint
     private readonly ConcurrentDictionary<ushort, (ulong T2, ulong Clock)> _syncArrivals = new();
     private readonly ConcurrentDictionary<ushort, (ulong T1, ulong Clock)> _earlyFollowUps = new();
     private readonly ConcurrentDictionary<PtpMessageType, int> _counts = new();
-    private readonly HashSet<IPAddress> _senders = [];
+    // Routing key (unscoped, SPEC-receiver.md 6.1) -> send target (scoped for IPv6 link-local, so the Announces go out).
+    private readonly Dictionary<IPAddress, IPAddress> _senders = [];
+    private readonly long _linkLocalScope;
     private readonly List<Task> _announceTasks = [];
     private readonly CancellationTokenSource _stop = new();
     private readonly Lock _gate = new();
@@ -196,9 +198,11 @@ public sealed partial class PtpSlave : IPtpSlave, IPtpEndpoint
             _ownsPort = true;
         }
 
+        // A plist-supplied link-local address carries no scope; borrow the one of the control connection's remote address.
+        _linkLocalScope = _options.SenderAddresses.FirstOrDefault(a => a.IsIPv6LinkLocal && a.ScopeId != 0)?.ScopeId ?? 0;
         foreach (var address in _options.SenderAddresses)
         {
-            _senders.Add(PtpPortKey(address));
+            AddSenderLocked(address);
         }
     }
 
@@ -358,7 +362,7 @@ public sealed partial class PtpSlave : IPtpSlave, IPtpEndpoint
             }
 
             _started = true;
-            senders = [.. _senders];
+            senders = [.. _senders.Keys];
             if (_ownsPort)
             {
                 _port.SetDefaultHandler(this);
@@ -371,9 +375,9 @@ public sealed partial class PtpSlave : IPtpSlave, IPtpEndpoint
                 }
             }
 
-            foreach (var address in senders)
+            foreach (var target in _senders.Values)
             {
-                StartAnnouncesLocked(address);
+                StartAnnouncesLocked(target);
             }
         }
 
@@ -392,7 +396,7 @@ public sealed partial class PtpSlave : IPtpSlave, IPtpEndpoint
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (!_senders.Add(key) || !_started)
+            if (!AddSenderLocked(address) || !_started)
             {
                 return;
             }
@@ -402,7 +406,7 @@ public sealed partial class PtpSlave : IPtpSlave, IPtpEndpoint
                 _port.Register(key, this);
             }
 
-            StartAnnouncesLocked(key);
+            StartAnnouncesLocked(_senders[key]);
         }
     }
 
@@ -420,7 +424,7 @@ public sealed partial class PtpSlave : IPtpSlave, IPtpEndpoint
 
             _disposed = true;
             announces = [.. _announceTasks];
-            senders = [.. _senders];
+            senders = [.. _senders.Keys];
         }
 
         await _stop.CancelAsync().ConfigureAwait(false);
@@ -509,6 +513,53 @@ public sealed partial class PtpSlave : IPtpSlave, IPtpEndpoint
                 Interlocked.Exchange(ref _masterClockId, grandmaster);
                 break;
         }
+    }
+
+    /// <summary>The send targets of the start-up Announces (SPEC-receiver.md 6.2), for tests.</summary>
+    internal IReadOnlyList<IPAddress> AnnounceTargets
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _senders.Values];
+            }
+        }
+    }
+
+    /// <summary>
+    /// The address the Announces go to (SPEC-receiver.md 6.2): IPv4-mapped unmapped; an IPv6 link-local address without a
+    /// scope gets <paramref name="linkLocalScope"/> (the control connection's), since an unscoped link-local target fails to send.
+    /// </summary>
+    internal static IPAddress SendTarget(IPAddress address, long linkLocalScope)
+    {
+        if (address.IsIPv4MappedToIPv6)
+        {
+            return address.MapToIPv4();
+        }
+
+        return address.IsIPv6LinkLocal && address.ScopeId == 0 && linkLocalScope != 0
+            ? new IPAddress(address.GetAddressBytes(), linkLocalScope)
+            : address;
+    }
+
+    /// <summary>Records a sender address; true when its routing key is new. A scoped target replaces an unscoped one of the same key.</summary>
+    private bool AddSenderLocked(IPAddress address)
+    {
+        var key = PtpPortKey(address);
+        var target = SendTarget(address, _linkLocalScope);
+        if (_senders.TryGetValue(key, out var known))
+        {
+            if (known.AddressFamily == AddressFamily.InterNetworkV6 && known.IsIPv6LinkLocal && known.ScopeId == 0 && target.ScopeId != 0)
+            {
+                _senders[key] = target;
+            }
+
+            return false;
+        }
+
+        _senders.Add(key, target);
+        return true;
     }
 
     private static IPAddress PtpPortKey(IPAddress address)

@@ -38,7 +38,10 @@ public sealed class ControlSession : IAsyncDisposable, IEventChannelHost
     private SessionState? _session;
     private IReceiverStream? _stream;
     private uint _streamId;
+    private const int NoPendingLevel = -1;
     private int? _lastSenderLevel;
+    private int _pendingLevel = NoPendingLevel;
+    private int _levelPumpRunning;
     private Timer? _liveness;
     private bool _livenessArmed;
     private volatile bool _ended;
@@ -391,6 +394,12 @@ public sealed class ControlSession : IAsyncDisposable, IEventChannelHost
         {
             _logger.LogWarning(ex, "Receiver connection #{Id}: the PTP slave did not start; anchor-only timing (R6)", Id);
         }
+        catch (OperationCanceledException)
+        {
+            // The session never came to be: close the event listener and its accept loop so nothing is orphaned.
+            await events.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
 
         var sender = new SenderInfo(body.GetString("name"), body.GetString("model"), body.GetString("deviceID"), remote);
         _session = new SessionState(sender, events, timing);
@@ -403,13 +412,33 @@ public sealed class ControlSession : IAsyncDisposable, IEventChannelHost
             body.GetString("groupUUID") ?? "none");
         Host.Publish(new ReceiverEvent.SenderConnected(sender));
 
-        var addresses = LocalAddresses(local).Select(a => (object?)a.ToString()).ToList();
-        answer["timingPeerInfo"] = new PlistDictionary
-        {
-            ["Addresses"] = addresses,
-            ["ID"] = local.ToString(),
-        };
+        answer["timingPeerInfo"] = TimingPeerInfo(local, LocalAddresses(local));
         return RtspServerResponse.Plist(answer);
+    }
+
+    /// <summary>
+    /// Our <c>timingPeerInfo</c> for the session SETUP answer (SPEC-receiver.md 4.3, SPEC-control.md 4.2): wire addresses
+    /// without an IPv6 scope id (<see cref="SessionRequests.FormatAddress"/>), the connection's local address first and as
+    /// <c>ID</c>, duplicates removed. The scoped forms stay for the local socket binds only.
+    /// </summary>
+    internal static PlistDictionary TimingPeerInfo(IPAddress local, IEnumerable<IPAddress> addresses)
+    {
+        var id = SessionRequests.FormatAddress(local);
+        var list = new List<object?> { id };
+        foreach (var address in addresses)
+        {
+            var text = SessionRequests.FormatAddress(address);
+            if (!list.Contains(text))
+            {
+                list.Add(text);
+            }
+        }
+
+        return new PlistDictionary
+        {
+            ["Addresses"] = list,
+            ["ID"] = id,
+        };
     }
 
     private static SenderTimingPeer ReadTimingPeer(PlistDictionary body, IPAddress remote)
@@ -717,7 +746,7 @@ public sealed class ControlSession : IAsyncDisposable, IEventChannelHost
             var handled = false;
             if (ReceiverParameters.ParseVolume(text) is { } db)
             {
-                await SetVolumeAsync(db, cancellationToken).ConfigureAwait(false);
+                SetVolume(db);
                 handled = true;
             }
 
@@ -764,20 +793,56 @@ public sealed class ControlSession : IAsyncDisposable, IEventChannelHost
     }
 
     /// <summary>R9: the dB value mapped with <see cref="VolumeMapping.DbToLevel"/> to the output's master level; <c>SenderVolume</c> raised.</summary>
-    private async Task SetVolumeAsync(double db, CancellationToken cancellationToken)
+    /// <remarks>
+    /// The output call (one RTSP round-trip per output receiver) runs off the request path and is coalesced, latest level
+    /// wins (as <c>PlayerEventMapper</c> does for Spotify), so a dragged slider does not serialise round-trips in front of
+    /// every other request under the plane's gate.
+    /// </remarks>
+    private void SetVolume(double db)
     {
         var level = VolumeMapping.DbToLevel(db);
         _lastSenderLevel = level;
-        try
+        Volatile.Write(ref _pendingLevel, level);
+        if (Interlocked.CompareExchange(ref _levelPumpRunning, 1, 0) == 0)
         {
-            await Host.Output.SetMasterLevelAsync(level, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex, "Receiver connection #{Id}: setting the master level {Level} failed", Id, level);
+            _plane.Track(PumpLevelsAsync(), $"sender level (connection #{Id})");
         }
 
         Host.Publish(new ReceiverEvent.SenderVolume(level, db));
+    }
+
+    /// <summary>Applies the latest pending sender level until none is left (R9); levels set in between are skipped.</summary>
+    private async Task PumpLevelsAsync()
+    {
+        await Task.Yield();
+        while (true)
+        {
+            var level = Interlocked.Exchange(ref _pendingLevel, NoPendingLevel);
+            if (level == NoPendingLevel)
+            {
+                Volatile.Write(ref _levelPumpRunning, 0);
+                if (Volatile.Read(ref _pendingLevel) == NoPendingLevel || Interlocked.CompareExchange(ref _levelPumpRunning, 1, 0) != 0)
+                {
+                    return;
+                }
+
+                continue;
+            }
+
+            if (_ended)
+            {
+                continue; // the session ended (the output was released): a late level must not reach it
+            }
+
+            try
+            {
+                await Host.Output.SetMasterLevelAsync(level, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Receiver connection #{Id}: setting the master level {Level} failed", Id, level);
+            }
+        }
     }
 
     /// <summary><c>GET_PARAMETER volume</c> (SPEC-receiver.md 4.8, R9): the current G, else the sender's last level, else 50.</summary>
@@ -809,15 +874,18 @@ public sealed class ControlSession : IAsyncDisposable, IEventChannelHost
     }
 
     /// <summary>
-    /// <c>TEARDOWN</c> (SPEC-receiver.md 4.9): <c>{streams: [...]}</c> ends the stream and keeps the session; <c>{}</c> and a
+    /// <c>TEARDOWN</c> (SPEC-receiver.md 4.9): a body with the <c>streams</c> key (even an empty array) ends the stream and keeps
+    /// the session; <c>{}</c> and a
     /// body-less TEARDOWN (a deliberate deviation from shairport-sync's no-op) end the session, answered with
     /// <c>Connection: close</c> before the connection is closed.
     /// </summary>
     private async ValueTask<RtspServerResponse> TeardownAsync(RtspIncomingRequest request)
     {
         var body = TryPlist(request);
-        if (body?.GetArray("streams") is { Count: > 0 } streams)
+        if (body is not null && body.ContainsKey("streams"))
         {
+            // The key, not a non-empty array, selects the per-stream form [sps:rtsp.c handle_teardown_2].
+            var streams = body.GetArray("streams") ?? [];
             var ids = streams.OfType<PlistDictionary>().Select(s => s.GetInt64("streamID")).ToList();
             if (_stream is not null && (ids.Count == 0 || ids.Any(id => id is null || id == _streamId)))
             {

@@ -296,6 +296,12 @@ public sealed class EventChannelServer : IAsyncDisposable
             {
                 break;
             }
+            catch (SocketException ex)
+            {
+                // A failed accept (e.g. a connection reset in the backlog) must not leave the session's event channel deaf.
+                _logger.LogWarning("Receiver {Name}: event channel accept failed: {Error}", _options.Name, ex.Message);
+                continue;
+            }
 
             var options = new RtspServerConnectionOptions
             {
@@ -304,7 +310,18 @@ public sealed class EventChannelServer : IAsyncDisposable
                 RequestTimeout = _options.AnswerTimeout,
                 SendCSeqOnRequests = _options.SendCSeqOnRequests,
             };
-            var connection = RtspServerConnection.Start(socket, HandleAsync, options, _logger);
+            RtspServerConnection connection;
+            try
+            {
+                connection = RtspServerConnection.Start(socket, HandleAsync, options, _logger);
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or InvalidOperationException or InvalidCastException or ObjectDisposedException)
+            {
+                _logger.LogWarning("Receiver {Name}: event channel connection could not be started: {Error}", _options.Name, ex.Message);
+                socket.Dispose();
+                continue;
+            }
+
             if (_keys is not null)
             {
                 // Encrypted from the first byte (SPEC-control.md 4.3); nothing has been sent or received yet.

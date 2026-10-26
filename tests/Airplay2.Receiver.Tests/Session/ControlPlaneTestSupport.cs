@@ -331,7 +331,17 @@ internal sealed class RecordingOutput : IReceiverAudioOutput
 
     public Task FlushAsync(CancellationToken cancellationToken) => Record("flush");
 
-    public Task SetMasterLevelAsync(int level, CancellationToken cancellationToken) => Record(FormattableString.Invariant($"level {level}"));
+    /// <summary>When set, <see cref="SetMasterLevelAsync"/> records its call and then waits for this task (a slow speaker).</summary>
+    public Task? LevelGate { get; set; }
+
+    public async Task SetMasterLevelAsync(int level, CancellationToken cancellationToken)
+    {
+        await Record(FormattableString.Invariant($"level {level}"));
+        if (LevelGate is { } gate)
+        {
+            await gate;
+        }
+    }
 
     public Task SetNowPlayingAsync(TrackMetadata metadata, ReadOnlyMemory<byte>? artwork, string? artworkContentType, TimeSpan elapsed, CancellationToken cancellationToken) => Record("nowplaying");
 

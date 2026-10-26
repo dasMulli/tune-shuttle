@@ -5,7 +5,9 @@ re-verified against the reference checkouts the same day). It records the decisi
 the contradictions found between the two parts and how they were resolved, every receiver question with its probe and
 the recorded live result, and the defaults that follow from them. How the code is organised around this is in
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md); the local test receiver in [`TEST-RECEIVER.md`](TEST-RECEIVER.md); the checks
-that still need a person in [`MANUAL-TESTS.md`](MANUAL-TESTS.md).
+that still need a person in [`MANUAL-TESTS.md`](MANUAL-TESTS.md). TuneShuttle's own AirPlay 2 receiver has its contract in
+[`SPEC-receiver.md`](SPEC-receiver.md) (decisions R1-R16, written 2026-10-26); its live probes RP1-RP12 are recorded in
+section 4.3 here.
 
 ## 1. The parts
 
@@ -322,6 +324,42 @@ Two candidate quirks were **not** switched on (2026-10-09, final integration), e
   it if `PreferredStream = Buffered`, and playback would then fail at `SETRATEANCHORTIME` (P16). Today the realtime
   default keeps it off. A `ReceiverQuirks` switch for this would be an additive contract change and is left for when
   AAC-LC is added.
+
+### 4.3 Receiver probes (TuneShuttle as a receiver, RP1-RP12)
+
+The questions only Apple senders can answer about our own receiver ([`SPEC-receiver.md`](SPEC-receiver.md) 11.3; the
+open questions RQ1-RQ11 they decide are in its section 12). Each probe is an item of
+[`MANUAL-TESTS.md`](MANUAL-TESTS.md) section 9 (in brackets). Results follow the table as dated "Result (date): ..."
+entries in the style of section 4: the sender by kind and OS version (never a device name or address), what the log
+showed, the outcome, the question it settles and the log file under `artifacts/live/`. Update the status column with
+each result; a result that changes a default changes SPEC-receiver.md, the code and the tests that pin it together
+(`ReceiverFeatures`, `PlayoutOptions`, `AirplayOptions`).
+
+The offline coverage the probes build on (2026-10-26, wave 5): the receiver loopback tests drive the product receiver
+with our own sender (pairing, session SETUP under PTP, realtime and buffered ALAC, buffered AAC from recorded blocks,
+volume, metadata, TEARDOWN, eviction), and `AirplayEndToEndTests` (tests/Bridge.Tests/Integration) runs the whole chain
+in the bridge on loopback: our sender streams a 3 s tone as buffered ALAC and then as realtime ALAC under PTP to the
+bridge's receiver, the selected output (a fake receiver) gets it sample for sample, `SET_PARAMETER volume -15` becomes
+master level 50, the metadata becomes the `airplay` playback view, TEARDOWN releases the output, and a Spotify `Playing`
+event ends the AirPlay session.
+
+| RP | Status | Outcome in one line | Decides | Manual test |
+|---|---|---|---|---|
+| RP1 | Open | Not run | RQ2, RQ9 | (9.1) |
+| RP2 | Open | Not run | RQ3 | (9.2) |
+| RP3 | Open | Not run | RQ6, RQ7 | (9.3) |
+| RP4 | Open | Not run | pause/seek/splice handling (4.7, 5.5) | (9.4) |
+| RP5 | Open | Not run | RQ4, RQ5 | (9.5) |
+| RP6 | Open | Not run | R9 with Apple senders | (9.6) |
+| RP7 | Open | Not run | R10 with Apple senders | (9.7) |
+| RP8 | Open | Not run | R8 with real Spotify and phones | (9.8) |
+| RP9 | Open | Not run | RQ1, RQ8 | (9.9) |
+| RP10 | Open | Not run | RQ9, RQ10 | (9.10) |
+| RP11 | Open | Not run | RQ11 | (9.11) |
+| RP12 | Open | Not run | 3.3 (rename, disable) | (9.12) |
+
+No receiver probe has a result yet. Add them below in the form
+"- RP<n> Result (date, <sender kind and OS version>, output receiver A): ... Log: `artifacts/live/<date>-RP<n>.log`."
 
 ## 5. Glossary of the names used in code
 
