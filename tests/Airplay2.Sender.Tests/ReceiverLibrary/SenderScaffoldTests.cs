@@ -24,14 +24,15 @@ public class SenderScaffoldTests
     }
 
     [Fact]
-    public async Task Ptp_port_is_a_pending_type_that_never_binds_on_construction()
+    public async Task Ptp_port_never_binds_on_construction()
     {
         await using var port = new PtpPort(new PtpPortOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 });
 
         Assert.False(port.IsBound);
         Assert.Equal(0, port.EventPort);
-        var pending = await Assert.ThrowsAsync<NotImplementedException>(() => port.EnsureBoundAsync(CancellationToken.None));
-        Assert.Equal("SPEC-receiver.md 6.1, wave 1", pending.Message);
+        await port.EnsureBoundAsync(CancellationToken.None); // ptp-port, wave 1 (6.1): binds on first use
+        Assert.True(port.IsBound);
+        Assert.NotEqual(0, port.EventPort);
         var failure = new PtpPortException("taken", 319);
         Assert.Equal("taken", failure.Message);
         Assert.Equal(319, failure.Port);
@@ -44,7 +45,7 @@ public class SenderScaffoldTests
         var item = new DmapItem("Title", "Artist", "Album", TimeSpan.FromSeconds(200), 3, 1, "Genre");
 
         Assert.Equal(new TrackMetadata("Title", "Artist", "Album", TimeSpan.FromSeconds(200), 3, 1, "Genre"), item.ToTrackMetadata());
-        Assert.Equal("SPEC-receiver.md 4.8, wave 1", Assert.Throws<NotImplementedException>(() => DmapDecoder.Decode(DmapEncoder.EncodeListingItem(item.ToTrackMetadata()))).Message);
+        Assert.Equal(item.ToTrackMetadata(), DmapDecoder.Decode(DmapEncoder.EncodeListingItem(item.ToTrackMetadata())).ToTrackMetadata());
     }
 
     [Fact]

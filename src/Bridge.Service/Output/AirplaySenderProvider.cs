@@ -3,6 +3,7 @@ using Airplay2.Sender;
 using Airplay2.Sender.Discovery;
 using Airplay2.Sender.Playback;
 using Airplay2.Sender.Session;
+using Airplay2.Sender.Streams;
 using Bridge.Service.Store;
 using Microsoft.Extensions.Options;
 
@@ -21,14 +22,20 @@ public sealed class AirplaySenderProvider : IAsyncDisposable
     private readonly IOptions<BridgeOptions> _options;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
+    private readonly IPtpPort? _ptpPort;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly ConcurrentDictionary<string, ReceiverQuirks> _quirks = new(StringComparer.Ordinal);
     private AirplaySender? _sender;
     private bool _disposed;
 
     /// <summary>Creates the provider; nothing is bound until <see cref="GetAsync"/>.</summary>
-    public AirplaySenderProvider(IBridgeStore store, IOptions<BridgeOptions> options, ILoggerFactory loggerFactory)
+    /// <param name="store">The store (identity, settings).</param>
+    /// <param name="options">The bridge options.</param>
+    /// <param name="loggerFactory">Logger factory.</param>
+    /// <param name="ptpPort">The process's shared PTP port (SPEC-receiver.md 6.1), handed to the sender as <see cref="AirplaySenderOptions.PtpPort"/>; null lets the sender bind a private one.</param>
+    public AirplaySenderProvider(IBridgeStore store, IOptions<BridgeOptions> options, ILoggerFactory loggerFactory, IPtpPort? ptpPort = null)
     {
+        _ptpPort = ptpPort;
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -73,6 +80,7 @@ public sealed class AirplaySenderProvider : IAsyncDisposable
                 Identity = AirplaySender.DeriveIdentity(settings.DeviceName, controller),
                 PreferredStream = settings.PreferredStream == "Buffered" ? StreamType.Buffered : StreamType.Realtime,
                 LocalAddress = options.LocalIPAddress,
+                PtpPort = _ptpPort, // SPEC-receiver.md 6.1: one PtpPort for the grandmaster and the receiver's slave
                 Quirks = _quirks,
                 Player = PlayerOptions(settings, options.PollReceiverVolumeSeconds, null),
             };

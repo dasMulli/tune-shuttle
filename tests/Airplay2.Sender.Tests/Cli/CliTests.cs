@@ -349,7 +349,7 @@ public sealed class CliTests
             {
                 LocalAddress = IPAddress.Loopback,
                 Quirks = new Dictionary<string, ReceiverQuirks> { [receiver.Id] = new() { TimingProtocol = TimingProtocol.Ptp } },
-                Ptp = new PtpMasterOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 },
+                PtpPortOptions = new PtpPortOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 },
             },
         };
         Assert.Equal(ExitCodes.Ok, await Program.RunAsync(["volume", "Fake A", "25"], cli.Services, None));

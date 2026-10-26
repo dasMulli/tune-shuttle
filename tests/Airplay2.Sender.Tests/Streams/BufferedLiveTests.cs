@@ -117,7 +117,7 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
         using var log = new SessionLiveLog("buffered-shairport-player", output);
         var receiver = new DiscoveredReceiver("SPS", "shairport-sync", [host], port, AirplayTxtRecord.Parse(["features=0x405FCA00,0x1C340", "flags=0x4", "model=ShairportSync"]), null, DateTimeOffset.UtcNow);
         var clock = new MasterClock();
-        await using var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), PtpOptions());
+        await using var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), null, PtpPorts());
         await using var control = new ControlPort(log.CreateLogger<ControlPort>());
         var transport = new BufferedStreamTransport(clock, master, control, new BufferedStreamOptions(), log.CreateLogger<BufferedStreamTransport>());
 
@@ -189,7 +189,7 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
 
         var receiver = new DiscoveredReceiver("02:1A:2B:3C:4D:5E", "Test Speaker ABCD", [host], LiveTarget.Port, AirplayTxtRecord.Parse(SpeakerAAirplay), null, DateTimeOffset.UtcNow);
         using var log = new SessionLiveLog("P16-anchor-body", output);
-        await using var rig = await Rig.StartAsync(log, BufferedAudioFormat.Alac44100S16, PtpOptions() with { PeerTimeout = Timeout.InfiniteTimeSpan });
+        await using var rig = await Rig.StartAsync(log, BufferedAudioFormat.Alac44100S16, new PtpMasterOptions { PeerTimeout = Timeout.InfiniteTimeSpan });
         await using var session = await rig.ConnectAsync(receiver, new RtspConnectionOptions { RequestTimeout = TimeSpan.FromSeconds(30) });
         try
         {
@@ -292,7 +292,7 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
         var receiver = new DiscoveredReceiver("02:1A:2B:3C:4D:5E", "Test Speaker ABCD", [host], LiveTarget.Port, AirplayTxtRecord.Parse(SpeakerAAirplay), null, DateTimeOffset.UtcNow);
         using var log = new SessionLiveLog(probe, output);
         log.Write($"P16 format {format.Name}: SSRC 0x{format.Ssrc:X8}, audioFormat 0x{format.AudioFormat:X}, sr {format.SampleRate}, spf {format.FramesPerPacket}");
-        await using var rig = await Rig.StartAsync(log, format, PtpOptions() with { PeerTimeout = Timeout.InfiniteTimeSpan });
+        await using var rig = await Rig.StartAsync(log, format, new PtpMasterOptions { PeerTimeout = Timeout.InfiniteTimeSpan });
         await using var session = await rig.ConnectAsync(receiver, new RtspConnectionOptions { RequestTimeout = TimeSpan.FromSeconds(30) });
         try
         {
@@ -379,7 +379,7 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
         return samples;
     }
 
-    private static PtpMasterOptions PtpOptions() => new()
+    private static PtpPortOptions PtpPorts() => new()
     {
         EventPort = (int)Number("PTP_EVENT_PORT", PtpMessages.EventPort),
         GeneralPort = (int)Number("PTP_GENERAL_PORT", PtpMessages.GeneralPort),
@@ -424,7 +424,7 @@ public sealed class BufferedLiveTests(ITestOutputHelper output)
         public static async Task<Rig> StartAsync(SessionLiveLog log, BufferedAudioFormat format, PtpMasterOptions? ptp = null)
         {
             var clock = new MasterClock();
-            var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), ptp ?? PtpOptions());
+            var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), ptp, PtpPorts());
             var control = new ControlPort(log.CreateLogger<ControlPort>());
             var transport = new BufferedStreamTransport(clock, master, control, new BufferedStreamOptions { Format = format }, log.CreateLogger<BufferedStreamTransport>());
             await transport.StartAsync(CancellationToken.None);

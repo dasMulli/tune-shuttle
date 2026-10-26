@@ -61,9 +61,16 @@ public sealed record AirplaySenderOptions
     /// <summary>
     /// The shared PTP port the grandmaster is built on (SPEC-receiver.md R5, 6.1): the bridge passes its one instance so the
     /// sender and the receiver's slave share UDP 319/320; null (CLI, probes, tests) lets the sender bind a private port as
-    /// today. Read by <see cref="AirplaySender.EnsurePtpMasterAsync"/> once the wave 1 <c>ptp-port</c> package refactors <see cref="PtpMaster"/> onto it.
+    /// today with <see cref="PtpPortOptions"/>. <see cref="AirplaySender.EnsurePtpMasterAsync"/> builds the grandmaster on it;
+    /// the sender never disposes a port passed here (its owner does, after the sender and the receiver).
     /// </summary>
     public IPtpPort? PtpPort { get; init; }
+
+    /// <summary>
+    /// Bind address and local ports of the private PTP port the sender creates when <see cref="PtpPort"/> is null
+    /// (SPEC-receiver.md 6.1; the defaults bind the wildcard on 319/320, tests use port 0).
+    /// </summary>
+    public PtpPortOptions PtpPortOptions { get; init; } = new();
 
     /// <summary>Local address for the timing responder and the control port; null binds the wildcard.</summary>
     public IPAddress? LocalAddress { get; init; }
@@ -505,9 +512,11 @@ public sealed class AirplaySender : IAsyncDisposable
     /// <summary>
     /// The process-wide PTP grandmaster (SPEC-audio.md 4.4), started with <see cref="AirplaySenderOptions.Ptp"/> on first
     /// call; PTP-timed group players use it, and hosts that open PTP sessions themselves (the CLI's probes and
-    /// <c>volume</c>) use it for <c>timingPeerInfo</c> and <c>SETPEERS</c>. The sender disposes it.
+    /// <c>volume</c>) use it for <c>timingPeerInfo</c> and <c>SETPEERS</c>. It runs on <see cref="AirplaySenderOptions.PtpPort"/>
+    /// when set (the bridge's shared port, SPEC-receiver.md 6.1), else on a private port bound with
+    /// <see cref="AirplaySenderOptions.PtpPortOptions"/>. The sender disposes the master (and with it a private port).
     /// </summary>
-    /// <exception cref="PtpMasterException">UDP 319/320 could not be bound (e.g. nqptp runs in the same network namespace).</exception>
+    /// <exception cref="PtpMasterException">UDP 319/320 could not be bound (e.g. nqptp runs in the same network namespace); wraps the <see cref="PtpPortException"/>.</exception>
     public async Task<IPtpMaster> EnsurePtpMasterAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -519,7 +528,10 @@ public sealed class AirplaySender : IAsyncDisposable
                 return existing;
             }
 
-            var master = new PtpMaster(Clock, LoggerFactory.CreateLogger<PtpMaster>(), Options.Ptp);
+            // SPEC-receiver.md 6.1: on the shared port when the host passes one, else on a private port the master owns.
+            var master = Options.PtpPort is { } shared
+                ? new PtpMaster(Clock, shared, LoggerFactory.CreateLogger<PtpMaster>(), Options.Ptp)
+                : new PtpMaster(Clock, LoggerFactory.CreateLogger<PtpMaster>(), Options.Ptp, Options.PtpPortOptions);
             try
             {
                 await master.StartAsync(cancellationToken).ConfigureAwait(false);

@@ -62,7 +62,7 @@ public sealed class PtpLiveTests(ITestOutputHelper output)
         using var log = new SessionLiveLog("ptp-shairport", output);
         var receiver = new DiscoveredReceiver("SPS", "shairport-sync", [host], port, AirplayTxtRecord.Parse(["features=0x405FCA00,0x1C340", "flags=0x4", "model=ShairportSync"]), null, DateTimeOffset.UtcNow);
         var clock = new MasterClock();
-        await using var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), PtpOptions());
+        await using var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), PtpOptions(), PtpPorts());
         await master.StartAsync(CancellationToken.None);
         log.Write($"grandmaster {master.ClockId:X16} on UDP {master.EventPort}/{master.GeneralPort}, peer timeout {master.Options.PeerTimeout}");
 
@@ -133,7 +133,7 @@ public sealed class PtpLiveTests(ITestOutputHelper output)
         using var log = new SessionLiveLog("ptp-shairport-transport", output);
         var receiver = new DiscoveredReceiver("SPS", "shairport-sync", [host], port, AirplayTxtRecord.Parse(["features=0x405FCA00,0x1C340", "flags=0x4", "model=ShairportSync"]), null, DateTimeOffset.UtcNow);
         var clock = new MasterClock();
-        await using var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), PtpOptions());
+        await using var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), PtpOptions(), PtpPorts());
         await using var timing = new TimingResponder(clock, log.CreateLogger<TimingResponder>());
         await using var control = new ControlPort(log.CreateLogger<ControlPort>());
         await using var transport = new RealtimeStreamTransport(clock, timing, control, RealtimeStreamConstants.DefaultLatencyFrames, master, log.CreateLogger<RealtimeStreamTransport>());
@@ -218,7 +218,7 @@ public sealed class PtpLiveTests(ITestOutputHelper output)
         var receiver = new DiscoveredReceiver("02:1A:2B:3C:4D:5E", "Test Speaker ABCD", [host], LiveTarget.Port, AirplayTxtRecord.Parse(SpeakerAAirplay), null, DateTimeOffset.UtcNow);
         using var log = new SessionLiveLog("P17-ptp-capture", output);
         var clock = new MasterClock();
-        await using var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), PtpOptions() with { PeerTimeout = Timeout.InfiniteTimeSpan });
+        await using var master = new PtpMaster(clock, log.CreateLogger<PtpMaster>(), PtpOptions() with { PeerTimeout = Timeout.InfiniteTimeSpan }, PtpPorts());
         await master.StartAsync(CancellationToken.None);
         log.Write($"grandmaster {master.ClockId:X16} on UDP {master.EventPort}/{master.GeneralPort}");
         var connection = await RtspConnection.ConnectAsync(new IPEndPoint(host, LiveTarget.Port), new RtspConnectionOptions { RequestTimeout = TimeSpan.FromSeconds(30) }, log.CreateLogger("rtsp"), CancellationToken.None);
@@ -261,13 +261,15 @@ public sealed class PtpLiveTests(ITestOutputHelper output)
         }
     }
 
+    private static PtpPortOptions PtpPorts() => new()
+    {
+        EventPort = (int)Seconds("PTP_EVENT_PORT", PtpMessages.EventPort),
+        GeneralPort = (int)Seconds("PTP_GENERAL_PORT", PtpMessages.GeneralPort),
+    };
+
     private static PtpMasterOptions PtpOptions()
     {
-        var options = new PtpMasterOptions
-        {
-            EventPort = (int)Seconds("PTP_EVENT_PORT", PtpMessages.EventPort),
-            GeneralPort = (int)Seconds("PTP_GENERAL_PORT", PtpMessages.GeneralPort),
-        };
+        var options = new PtpMasterOptions();
         var timeout = Seconds("PTP_PEER_TIMEOUT_SECONDS", -1);
         return timeout switch
         {

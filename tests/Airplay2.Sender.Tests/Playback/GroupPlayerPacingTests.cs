@@ -25,7 +25,11 @@ public sealed class GroupPlayerPacingTests(ITestOutputHelper output)
     [Trait("Category", "Timing")]
     public Task Pacer_stays_within_two_milliseconds_of_its_deadlines_over_30_seconds() => AssertPacerAccuracyAsync(30);
 
+    // Tagged Timing as well: like the 30 s run it measures wall-clock wake-up jitter, and with the receiver
+    // test assembly now running in parallel it misses the 99 % bound on a loaded machine (98.8 %) while
+    // passing reliably on its own. The Timing run covers it.
     [Fact]
+    [Trait("Category", "Timing")]
     public Task Pacer_stays_within_two_milliseconds_of_its_deadlines_over_5_seconds() => AssertPacerAccuracyAsync(5);
 
     [Fact]

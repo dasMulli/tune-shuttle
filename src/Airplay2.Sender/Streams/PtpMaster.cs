@@ -9,18 +9,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Airplay2.Sender.Streams;
 
-/// <summary>Options of <see cref="PtpMaster"/>. The defaults are what libairptp sends and nqptp/Apple receivers accept (SPEC-audio.md 4.4).</summary>
+/// <summary>
+/// Options of <see cref="PtpMaster"/>. The defaults are what libairptp sends and nqptp/Apple receivers accept (SPEC-audio.md
+/// 4.4). The local bind address and ports are the <see cref="IPtpPort"/>'s (<see cref="PtpPortOptions"/>, SPEC-receiver.md 6.1).
+/// </summary>
 public sealed record PtpMasterOptions
 {
-    /// <summary>Local address for both sockets; null binds the wildcard (dual-mode IPv6 where available).</summary>
-    public IPAddress? BindAddress { get; init; }
-
-    /// <summary>Local event port (Sync, Delay_Req). 319 by the standard; 0 lets the OS choose (tests, or a host where nqptp owns 319).</summary>
-    public int EventPort { get; init; } = PtpMessages.EventPort;
-
-    /// <summary>Local general port (Announce, Follow_Up, Delay_Resp, Signaling). 320 by the standard; 0 lets the OS choose.</summary>
-    public int GeneralPort { get; init; } = PtpMessages.GeneralPort;
-
     /// <summary>The event port peers listen on (Sync, Pdelay_Resp go there); 319 for every real receiver.</summary>
     public int PeerEventPort { get; init; } = PtpMessages.EventPort;
 
@@ -146,10 +140,13 @@ public sealed record PtpMasterStatistics(
 /// <param name="PortIdentity">Its PTP port identity, once it sent a PTP message.</param>
 public sealed record PtpPeerStatus(IPAddress Address, IPEndPoint EventEndPoint, IPEndPoint GeneralEndPoint, TimeSpan SinceLastSeen, long MessagesReceived, PtpPortIdentity? PortIdentity);
 
-/// <summary>The grandmaster could not bind its ports.</summary>
+/// <summary>The grandmaster could not bind its ports; wraps the <see cref="PtpPortException"/> of its <see cref="IPtpPort"/> (SPEC-receiver.md 6.1).</summary>
 public sealed class PtpMasterException : IOException
 {
-    /// <summary>Creates the exception.</summary>
+    /// <summary>Creates the exception (SPEC-receiver.md 6.1).</summary>
+    /// <param name="message">What failed.</param>
+    /// <param name="port">The port that could not be bound.</param>
+    /// <param name="innerException">The <see cref="PtpPortException"/> (or socket error).</param>
     public PtpMasterException(string message, int port, Exception? innerException = null)
         : base(message, innerException)
     {
@@ -170,8 +167,14 @@ public sealed class PtpMasterException : IOException
 /// </summary>
 /// <remarks>
 /// <para>
+/// Sockets (SPEC-receiver.md 6.1): the master binds none of its own; it sends and receives through an
+/// <see cref="IPtpPort"/>, as that port's default handler (Delay_Req, Pdelay_Req, and everything from addresses no
+/// receiver-side slave registered). Either the caller passes the process's shared port, or the master creates a
+/// private <see cref="PtpPort"/> from <see cref="PtpPortOptions"/> and disposes it with itself.
+/// </para>
+/// <para>
 /// Threads: one send loop (a <see cref="PeriodicTimer"/> at the Sync interval; Announce and Signaling ride on the same
-/// tick when due) and one receive loop per socket (<see cref="UdpReceiveLoop"/>). The peer list is guarded by a lock and
+/// tick when due) and the port's receive loop per socket. The peer list is guarded by a lock and
 /// published to the send loop as an immutable array, so a tick allocates nothing. The Sync send time <c>t1</c> is
 /// captured right before each peer's Sync leaves; all Syncs of a tick go out before their Follow_Ups, with libairptp's
 /// 100 µs gap in between (<see cref="PtpMasterOptions.FollowUpDelay"/>).
@@ -184,15 +187,13 @@ public sealed class PtpMasterException : IOException
 /// remove the peer.
 /// </para>
 /// </remarks>
-public sealed partial class PtpMaster : IPtpMaster
+public sealed partial class PtpMaster : IPtpMaster, IPtpEndpoint
 {
     private readonly IMasterClock _clock;
     private readonly ILogger _logger;
     private readonly PtpMasterOptions _options;
-    private readonly UdpReceiveLoop _eventLoop;
-    private readonly UdpReceiveLoop _generalLoop;
-    private const string EventLoopName = "PTP event port";
-    private const string GeneralLoopName = "PTP general port";
+    private readonly IPtpPort _port;
+    private readonly bool _ownsPort;
 
     private readonly Lock _gate = new();
     private readonly Dictionary<IPAddress, Peer> _peers = [];
@@ -238,13 +239,37 @@ public sealed partial class PtpMaster : IPtpMaster
     private long _silentPeerReports;
     private long _sendLoopErrors;
 
-    /// <summary>Creates the grandmaster; nothing is bound until <see cref="StartAsync"/>.</summary>
+    /// <summary>
+    /// Creates the grandmaster on a private <see cref="PtpPort"/> (CLI, probes, tests; SPEC-receiver.md 6.1: binds 319/320
+    /// exactly as before the shared port existed), which it disposes with itself; nothing is bound until <see cref="StartAsync"/>.
+    /// </summary>
     /// <param name="clock">The shared master clock (the realtime transport's <see cref="IStreamTransport.Clock"/>).</param>
     /// <param name="logger">Logger; null for none.</param>
     /// <param name="options">Options; null for the defaults.</param>
-    public PtpMaster(IMasterClock clock, ILogger<PtpMaster>? logger = null, PtpMasterOptions? options = null)
+    /// <param name="portOptions">Bind address and local ports of the private port; null for the wildcard and 319/320.</param>
+    public PtpMaster(IMasterClock clock, ILogger<PtpMaster>? logger = null, PtpMasterOptions? options = null, PtpPortOptions? portOptions = null)
+        : this(clock, new PtpPort(portOptions), ownsPort: true, logger, options)
+    {
+    }
+
+    /// <summary>
+    /// Creates the grandmaster on <paramref name="port"/> (SPEC-receiver.md 6.1: the bridge's shared port), which it does
+    /// not dispose; <see cref="StartAsync"/> binds the port if nobody did yet and makes the master its default handler.
+    /// </summary>
+    /// <param name="clock">The shared master clock (the realtime transport's <see cref="IStreamTransport.Clock"/>).</param>
+    /// <param name="port">The PTP port to send and receive on.</param>
+    /// <param name="logger">Logger; null for none.</param>
+    /// <param name="options">Options; null for the defaults.</param>
+    public PtpMaster(IMasterClock clock, IPtpPort port, ILogger<PtpMaster>? logger = null, PtpMasterOptions? options = null)
+        : this(clock, port ?? throw new ArgumentNullException(nameof(port)), ownsPort: false, logger, options)
+    {
+    }
+
+    private PtpMaster(IMasterClock clock, IPtpPort port, bool ownsPort, ILogger<PtpMaster>? logger, PtpMasterOptions? options)
     {
         ArgumentNullException.ThrowIfNull(clock);
+        _port = port;
+        _ownsPort = ownsPort;
         _clock = clock;
         _logger = logger ?? (ILogger)NullLogger.Instance;
         _options = options ?? new PtpMasterOptions();
@@ -264,18 +289,19 @@ public sealed partial class PtpMaster : IPtpMaster
         _peerTimeoutNanos = _options.PeerTimeout == Timeout.InfiniteTimeSpan
             ? long.MaxValue
             : (long)_options.PeerTimeout.TotalMilliseconds * 1_000_000L;
-        _eventLoop = new UdpReceiveLoop(EventLoopName, _logger, _options.BindAddress, _options.EventPort, HandleEventAsync);
-        _generalLoop = new UdpReceiveLoop(GeneralLoopName, _logger, _options.BindAddress, _options.GeneralPort, HandleGeneralAsync);
     }
 
     /// <inheritdoc />
     public ulong ClockId { get; }
 
-    /// <summary>The bound event port; 0 before <see cref="StartAsync"/>.</summary>
-    public int EventPort => _eventLoop.Port;
+    /// <summary>The bound event port of <see cref="Port"/>; 0 before it is bound.</summary>
+    public int EventPort => _port.EventPort;
 
-    /// <summary>The bound general port; 0 before <see cref="StartAsync"/>.</summary>
-    public int GeneralPort => _generalLoop.Port;
+    /// <summary>The bound general port of <see cref="Port"/>; 0 before it is bound.</summary>
+    public int GeneralPort => _port.GeneralPort;
+
+    /// <summary>The PTP port the master sends and receives on (SPEC-receiver.md 6.1): the shared one or its private one.</summary>
+    public IPtpPort Port => _port;
 
     /// <summary>The options in effect.</summary>
     public PtpMasterOptions Options => _options;
@@ -336,7 +362,6 @@ public sealed partial class PtpMaster : IPtpMaster
                 Interlocked.Exchange(ref peer.Received, Interlocked.Read(ref existing.Received));
             }
 
-            peer.Bind(_eventLoop.Socket, _generalLoop.Socket);
             _peers[address] = peer;
             Publish();
         }
@@ -369,29 +394,46 @@ public sealed partial class PtpMaster : IPtpMaster
     }
 
     /// <summary>
-    /// Binds the event and general ports and starts the send loop; idempotent. Throws <see cref="PtpMasterException"/> when a
-    /// port is taken (nqptp, ptp4l or another grandmaster on this host) or needs privileges (ports below 1024 on Linux).
-    /// The token only covers starting; the master runs until <see cref="DisposeAsync"/>.
+    /// Binds the port (<see cref="IPtpPort.EnsureBoundAsync"/>, idempotent and shared with the receiver's slave,
+    /// SPEC-receiver.md 6.1), becomes its default handler and starts the send loop; idempotent. Throws
+    /// <see cref="PtpMasterException"/>, wrapping the port's <see cref="PtpPortException"/>, when a port is taken (nqptp,
+    /// ptp4l or another grandmaster on this host) or needs privileges (ports below 1024 on Linux). The token only covers
+    /// starting; the master runs until <see cref="DisposeAsync"/>.
     /// </summary>
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_started)
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            await _port.EnsureBoundAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (PtpPortException ex)
+        {
+            // A bound event socket stays bound until the port is disposed; the caller disposes the master after this exception.
+            var what = ex.Port == 0 ? "an OS-chosen UDP port" : $"UDP {ex.Port}";
+            LogBindFailed(ex, what, ex.Message);
+            throw new PtpMasterException($"The PTP grandmaster cannot bind its ports ({what}): {ex.Message}", ex.Port, ex);
+        }
+
         CancellationToken stop;
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_started)
             {
-                return Task.CompletedTask;
+                return;
             }
 
-            Bind(_eventLoop, EventLoopName, _options.EventPort);
-            Bind(_generalLoop, GeneralLoopName, _options.GeneralPort);
-            foreach (var peer in _peers.Values)
-            {
-                peer.Bind(_eventLoop.Socket, _generalLoop.Socket);
-            }
-
+            _port.SetDefaultHandler(this);
             _started = true;
             stop = _stop.Token;
         }
@@ -405,15 +447,17 @@ public sealed partial class PtpMaster : IPtpMaster
             _sendLoop = loop;
             if (_disposed)
             {
-                return Task.CompletedTask;
+                return;
             }
         }
 
         LogStarted(ClockId, EventPort, GeneralPort);
-        return Task.CompletedTask;
     }
 
-    /// <summary>Stops the send loop, closes both sockets and completes <see cref="Events"/>; idempotent.</summary>
+    /// <summary>
+    /// Stops the send loop, stops being the port's default handler, closes a private port (a shared one stays open for
+    /// its owner, SPEC-receiver.md 6.1) and completes <see cref="Events"/>; idempotent.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         Task? loop;
@@ -441,31 +485,22 @@ public sealed partial class PtpMaster : IPtpMaster
             }
         }
 
-        await _eventLoop.DisposeAsync().ConfigureAwait(false);
-        await _generalLoop.DisposeAsync().ConfigureAwait(false);
+        if (_port is PtpPort concrete)
+        {
+            concrete.ClearDefaultHandler(this);
+        }
+        else
+        {
+            _port.SetDefaultHandler(null);
+        }
+
+        if (_ownsPort)
+        {
+            await _port.DisposeAsync().ConfigureAwait(false);
+        }
+
         _events.Writer.TryComplete();
         _stop.Dispose();
-    }
-
-    private void Bind(UdpReceiveLoop loop, string name, int port)
-    {
-        try
-        {
-            loop.Start(this);
-        }
-        catch (SocketException ex)
-        {
-            // A bound event port stays bound until DisposeAsync; the caller disposes the master after this exception.
-            var why = ex.SocketErrorCode switch
-            {
-                SocketError.AddressAlreadyInUse => "it is in use (nqptp, ptp4l or another PTP grandmaster on this host?)",
-                SocketError.AccessDenied => "access was denied (ports below 1024 need root or CAP_NET_BIND_SERVICE on Linux)",
-                _ => ex.SocketErrorCode.ToString(),
-            };
-            var what = port == 0 ? "an OS-chosen UDP port" : $"UDP {port}";
-            LogBindFailed(ex, name, what, why);
-            throw new PtpMasterException($"The PTP grandmaster cannot bind its {name} ({what}): {why}.", port, ex);
-        }
     }
 
     private async Task RunSendLoopAsync(CancellationToken stop)
@@ -539,7 +574,7 @@ public sealed partial class PtpMaster : IPtpMaster
         var length = PtpMessages.WriteAnnounce(_announceBuffer, ClockId, _announceSequence++, _announceLogInterval);
         foreach (var peer in peers)
         {
-            if (await SendAsync(_generalLoop.Socket, _announceBuffer.AsMemory(0, length), peer, general: true, stop).ConfigureAwait(false))
+            if (await SendAsync(_announceBuffer.AsMemory(0, length), peer, general: true, stop).ConfigureAwait(false))
             {
                 Interlocked.Increment(ref _announcesSent);
             }
@@ -553,7 +588,7 @@ public sealed partial class PtpMaster : IPtpMaster
         {
             var target = _options.SignalingTargetsPeer && peer.Identity is { } identity ? identity : default;
             var length = PtpMessages.WriteSignaling(_signalingBuffer, ClockId, sequence, target);
-            if (await SendAsync(_generalLoop.Socket, _signalingBuffer.AsMemory(0, length), peer, general: true, stop).ConfigureAwait(false))
+            if (await SendAsync(_signalingBuffer.AsMemory(0, length), peer, general: true, stop).ConfigureAwait(false))
             {
                 Interlocked.Increment(ref _signalingsSent);
             }
@@ -573,7 +608,7 @@ public sealed partial class PtpMaster : IPtpMaster
         for (var i = 0; i < peers.Length; i++)
         {
             _syncTimes[i] = _clock.PtpNowNanos;
-            if (await SendAsync(_eventLoop.Socket, _syncBuffer.AsMemory(0, syncLength), peers[i], general: false, stop).ConfigureAwait(false))
+            if (await SendAsync(_syncBuffer.AsMemory(0, syncLength), peers[i], general: false, stop).ConfigureAwait(false))
             {
                 Interlocked.Increment(ref _syncsSent);
             }
@@ -592,7 +627,7 @@ public sealed partial class PtpMaster : IPtpMaster
             }
 
             var length = PtpMessages.WriteFollowUp(_followUpBuffer, ClockId, sequence, PtpTimestamp.FromNanoseconds(_syncTimes[i]), _syncLogInterval);
-            if (await SendAsync(_generalLoop.Socket, _followUpBuffer.AsMemory(0, length), peers[i], general: true, stop).ConfigureAwait(false))
+            if (await SendAsync(_followUpBuffer.AsMemory(0, length), peers[i], general: true, stop).ConfigureAwait(false))
             {
                 Interlocked.Increment(ref _followUpsSent);
             }
@@ -624,17 +659,16 @@ public sealed partial class PtpMaster : IPtpMaster
     }
 
     [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
-    private async ValueTask<bool> SendAsync(Socket? socket, ReadOnlyMemory<byte> message, Peer peer, bool general, CancellationToken stop)
+    private async ValueTask<bool> SendAsync(ReadOnlyMemory<byte> message, Peer peer, bool general, CancellationToken stop)
     {
-        var target = general ? peer.GeneralTarget : peer.EventTarget;
-        if (socket is null || target is null)
+        if (!_port.IsBound)
         {
             return false;
         }
 
         try
         {
-            await socket.SendToAsync(message, SocketFlags.None, target, stop).ConfigureAwait(false);
+            await _port.SendAsync(general ? peer.GeneralEndPoint : peer.EventEndPoint, message, eventPort: !general, stop).ConfigureAwait(false);
             if (peer.SendFailing)
             {
                 peer.SendFailing = false;
@@ -710,20 +744,27 @@ public sealed partial class PtpMaster : IPtpMaster
         }
     }
 
-    private ValueTask HandleEventAsync(Socket socket, ReadOnlyMemory<byte> datagram, SocketAddress source, CancellationToken stop) =>
-        HandleAsync(socket, datagram, source, eventPort: true, _eventReplyBuffer, stop);
-
-    private ValueTask HandleGeneralAsync(Socket socket, ReadOnlyMemory<byte> datagram, SocketAddress source, CancellationToken stop) =>
-        HandleAsync(socket, datagram, source, eventPort: false, _generalReplyBuffer, stop);
+    /// <summary>
+    /// A datagram the port routed to the master as its default handler (SPEC-receiver.md 6.1): Delay_Req is answered,
+    /// Pdelay_Req too when enabled, other clocks' Announces are reported, and every message refreshes its peer's liveness.
+    /// </summary>
+    /// <param name="header">The parsed header.</param>
+    /// <param name="datagram">The whole datagram; valid only during the call.</param>
+    /// <param name="source">Where it came from.</param>
+    /// <param name="eventPort">True for the event port.</param>
+    /// <param name="receivedAtNanos">Arrival on <see cref="PtpPort.NowNanos"/>.</param>
+    /// <param name="cancellationToken">Cancelled when the port closes.</param>
+    public ValueTask HandleAsync(PtpHeader header, ReadOnlyMemory<byte> datagram, IPEndPoint source, bool eventPort, ulong receivedAtNanos, CancellationToken cancellationToken) =>
+        HandleCoreAsync(header, datagram, source, eventPort, receivedAtNanos, eventPort ? _eventReplyBuffer : _generalReplyBuffer, cancellationToken);
 
     [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder))]
-    private async ValueTask HandleAsync(Socket socket, ReadOnlyMemory<byte> datagram, SocketAddress source, bool eventPort, byte[] reply, CancellationToken stop)
+    private async ValueTask HandleCoreAsync(PtpHeader header, ReadOnlyMemory<byte> datagram, IPEndPoint from, bool eventPort, ulong receivedAtNanos, byte[] reply, CancellationToken stop)
     {
-        // The receive time (t4 of a Delay_Req, t2 of a Pdelay_Req) first.
-        var receivedAt = _clock.PtpNowNanos;
+        // The receive time (t4 of a Delay_Req, t2 of a Pdelay_Req) first, moved back by the time since the port received it.
+        var lag = PtpPort.ElapsedSince(receivedAtNanos);
+        var receivedAt = _clock.PtpNowNanos - lag;
         var nowNanos = _clock.NowNanos;
         Interlocked.Increment(ref _messagesReceived);
-        var from = UdpSockets.ToEndPoint(source);
         var peer = FindPeer(from.Address);
         if (peer is not null)
         {
@@ -733,13 +774,6 @@ public sealed partial class PtpMaster : IPtpMaster
             {
                 LogPeerSendsAgain(peer.Address);
             }
-        }
-
-        if (!PtpHeader.TryRead(datagram.Span, out var header))
-        {
-            Interlocked.Increment(ref _messagesIgnored);
-            LogNotPtp(datagram.Length, from, eventPort ? EventPort : GeneralPort);
-            return;
         }
 
         if (header.SourcePortIdentity.ClockId == ClockId)
@@ -773,7 +807,7 @@ public sealed partial class PtpMaster : IPtpMaster
             {
                 var length = PtpMessages.WriteDelayResp(reply, ClockId, header, PtpTimestamp.FromNanoseconds(receivedAt));
                 var target = peer?.GeneralEndPoint ?? new IPEndPoint(from.Address, _options.PeerGeneralPort);
-                if (await ReplyAsync(_generalLoop.Socket, reply.AsMemory(0, length), target, stop).ConfigureAwait(false))
+                if (await ReplyAsync(eventPort: false, reply.AsMemory(0, length), target, stop).ConfigureAwait(false))
                 {
                     Interlocked.Increment(ref _delayResponsesSent);
                     LogDelayResp(target, header.SequenceId);
@@ -786,12 +820,12 @@ public sealed partial class PtpMaster : IPtpMaster
             {
                 var eventTarget = peer?.EventEndPoint ?? new IPEndPoint(from.Address, _options.PeerEventPort);
                 var length = PtpMessages.WritePdelayResp(reply, ClockId, header, PtpTimestamp.FromNanoseconds(receivedAt));
-                if (await ReplyAsync(_eventLoop.Socket, reply.AsMemory(0, length), eventTarget, stop).ConfigureAwait(false))
+                if (await ReplyAsync(eventPort: true, reply.AsMemory(0, length), eventTarget, stop).ConfigureAwait(false))
                 {
                     Interlocked.Increment(ref _peerDelayResponsesSent);
                     var generalTarget = peer?.GeneralEndPoint ?? new IPEndPoint(from.Address, _options.PeerGeneralPort);
                     length = PtpMessages.WritePdelayRespFollowUp(reply, ClockId, header, PtpTimestamp.FromNanoseconds(_clock.PtpNowNanos));
-                    await ReplyAsync(_generalLoop.Socket, reply.AsMemory(0, length), generalTarget, stop).ConfigureAwait(false);
+                    await ReplyAsync(eventPort: false, reply.AsMemory(0, length), generalTarget, stop).ConfigureAwait(false);
                 }
 
                 break;
@@ -835,16 +869,11 @@ public sealed partial class PtpMaster : IPtpMaster
         }
     }
 
-    private async ValueTask<bool> ReplyAsync(Socket? socket, ReadOnlyMemory<byte> message, IPEndPoint target, CancellationToken stop)
+    private async ValueTask<bool> ReplyAsync(bool eventPort, ReadOnlyMemory<byte> message, IPEndPoint target, CancellationToken stop)
     {
-        if (socket is null)
-        {
-            return false;
-        }
-
         try
         {
-            await socket.SendToAsync(message, SocketFlags.None, UdpSockets.Target(socket, target), stop).ConfigureAwait(false);
+            await _port.SendAsync(target, message, eventPort, stop).ConfigureAwait(false);
             return true;
         }
         catch (SocketException ex)
@@ -928,11 +957,6 @@ public sealed partial class PtpMaster : IPtpMaster
 
         public IPEndPoint GeneralEndPoint { get; } = generalEndPoint;
 
-        /// <summary>Pre-serialised targets for the event and general sockets (no per-send allocation).</summary>
-        public SocketAddress? EventTarget { get; private set; }
-
-        public SocketAddress? GeneralTarget { get; private set; }
-
         private StrongBox<PtpPortIdentity>? _identity;
 
         /// <summary>The peer's port identity once it sent a PTP message (boxed so the send loop never reads a torn value).</summary>
@@ -943,12 +967,6 @@ public sealed partial class PtpMaster : IPtpMaster
         }
 
         public bool SendFailing { get; set; }
-
-        public void Bind(Socket? eventSocket, Socket? generalSocket)
-        {
-            EventTarget = eventSocket is null ? null : Serialize(eventSocket, EventEndPoint);
-            GeneralTarget = generalSocket is null ? null : Serialize(generalSocket, GeneralEndPoint);
-        }
 
         private int _silent;
 
@@ -975,16 +993,6 @@ public sealed partial class PtpMaster : IPtpMaster
 
             return true;
         }
-
-        private static SocketAddress Serialize(Socket socket, IPEndPoint endpoint)
-        {
-            if (socket.AddressFamily == AddressFamily.InterNetworkV6 && endpoint.AddressFamily == AddressFamily.InterNetwork)
-            {
-                endpoint = new IPEndPoint(endpoint.Address.MapToIPv6(), endpoint.Port);
-            }
-
-            return UdpSockets.Target(socket, endpoint).Serialize();
-        }
     }
 
     [LoggerMessage(EventId = 200, Level = LogLevel.Information, Message = "PTP grandmaster {ClockId:X16} running on UDP {EventPort}/{GeneralPort}")]
@@ -993,8 +1001,8 @@ public sealed partial class PtpMaster : IPtpMaster
     [LoggerMessage(EventId = 201, Level = LogLevel.Debug, Message = "PTP grandmaster {ClockId:X16} stopped")]
     private partial void LogStopped(ulong clockId);
 
-    [LoggerMessage(EventId = 202, Level = LogLevel.Error, Message = "PTP grandmaster cannot bind its {Loop} ({Port}): {Reason}")]
-    private partial void LogBindFailed(Exception exception, string loop, string port, string reason);
+    [LoggerMessage(EventId = 202, Level = LogLevel.Error, Message = "PTP grandmaster cannot bind its ports ({Port}): {Reason}")]
+    private partial void LogBindFailed(Exception exception, string port, string reason);
 
     [LoggerMessage(EventId = 203, Level = LogLevel.Information, Message = "PTP peer {Address} added (event port {EventPort}, general port {GeneralPort})")]
     private partial void LogPeerAdded(IPAddress address, int eventPort, int generalPort);
@@ -1013,9 +1021,6 @@ public sealed partial class PtpMaster : IPtpMaster
 
     [LoggerMessage(EventId = 208, Level = LogLevel.Warning, Message = "PTP {Type} answer to {Target} could not be sent: {Error}")]
     private partial void LogReplyFailed(Exception exception, PtpMessageType type, IPEndPoint target, SocketError error);
-
-    [LoggerMessage(EventId = 209, Level = LogLevel.Debug, Message = "Ignored {Length}-byte non-PTPv2 datagram from {Source} on UDP {Port}")]
-    private partial void LogNotPtp(int length, IPEndPoint source, int port);
 
     [LoggerMessage(EventId = 210, Level = LogLevel.Information, Message = "First PTP {Type} from peer {Source} (clock {ClockId:X16}, log interval {LogInterval})")]
     private partial void LogFirstMessage(PtpMessageType type, IPEndPoint source, ulong clockId, sbyte logInterval);

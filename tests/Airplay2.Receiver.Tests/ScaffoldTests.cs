@@ -100,13 +100,14 @@ public class ScaffoldTests
     }
 
     [Fact]
-    public void Ffmpeg_factory_fails_with_a_reason_until_wave_1()
+    public void Ffmpeg_factory_fails_with_a_reason_when_the_libraries_are_missing()
     {
-        var factory = new FfmpegAacDecoderFactory();
+        // A directory that does not exist: the default search may find the libraries once Codecs/FfmpegAacDecoderTests bound them.
+        var factory = new FfmpegAacDecoderFactory(Path.Combine(Path.GetTempPath(), "tune-shuttle-no-ffmpeg-" + Guid.NewGuid().ToString("N")));
 
         Assert.False(factory.TryCreate(out var decoder, out var reason));
         Assert.Null(decoder);
-        Assert.Contains("SPEC-receiver.md 7.2", reason);
+        Assert.Contains("libavcodec not found", reason);
     }
 
     [Fact]
@@ -138,7 +139,7 @@ public class ScaffoldTests
         Assert.Matches(@"wave 2$", Assert.Throws<NotImplementedException>(() => buffer.Enqueue(0, 0, ReadOnlyMemory<short>.Empty)).Message);
 
         await using var slave = new PtpSlave();
-        Assert.Matches(@"wave 1$", Assert.Throws<NotImplementedException>(() => slave.TryMapToLocal(0, out _)).Message);
+        Assert.False(slave.TryMapToLocal(0, out _)); // ptp-port, wave 1: no estimate before the first Sync/Follow_Up pair (6.2)
         Assert.Equal(new PtpSlaveStatistics(null, 0, null, 0), slave.Statistics);
     }
 }

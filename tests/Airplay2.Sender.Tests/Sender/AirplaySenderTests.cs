@@ -214,7 +214,7 @@ public sealed class AirplaySenderTests
         {
             PreferredStream = StreamType.Buffered,
             LocalAddress = IPAddress.Loopback,
-            Ptp = new PtpMasterOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 },
+            PtpPortOptions = new PtpPortOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 },
         });
         await using var player = await sender.CreateGroupPlayerAsync([withBit40], new GroupPlayerOptions { LatencyFrames = 66150 }, None);
         var group = Assert.IsType<GroupPlayer>(player);

@@ -404,7 +404,7 @@ public sealed partial class ProbeCommand(CliServices services)
         var log = new Observations("P17", logging.CreateLogger("airplay2.probe"));
         var identity = sender.Options.Identity;
         await sender.StartAsync(ct).ConfigureAwait(false);
-        await using var master = new PtpMaster(sender.Clock, logging.CreateLogger<PtpMaster>(), sender.Options.Ptp with { PeerTimeout = Timeout.InfiniteTimeSpan });
+        await using var master = new PtpMaster(sender.Clock, logging.CreateLogger<PtpMaster>(), sender.Options.Ptp with { PeerTimeout = Timeout.InfiniteTimeSpan }, sender.Options.PtpPortOptions);
         await master.StartAsync(ct).ConfigureAwait(false);
         log.Add($"grandmaster {master.ClockId:X16} on UDP {master.EventPort}/{master.GeneralPort}");
         var session = await sender.ConnectAsync(receiver, pinPrompt: null, ct).ConfigureAwait(false);

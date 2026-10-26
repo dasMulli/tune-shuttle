@@ -65,9 +65,10 @@ public sealed record FakePtpSample(ushort Sequence, ulong T1, ulong T2, long Mea
 /// A minimal PTP slave for the fake receiver and the grandmaster's loopback tests: the library's <see cref="PtpSlave"/>
 /// (SPEC-receiver.md 6.2), which records every message, pairs each Sync with its Follow_Up to estimate the offset of its
 /// clock to the master's (as nqptp does from <c>t1</c> and its Sync receive time, SPEC-audio.md 4.4), and optionally sends
-/// Delay_Req to the master's event port and uses the Delay_Resp to measure the path delay. It runs on its own
-/// (OS-chosen) ports, so tests register it with <see cref="PtpMaster.AddPeer(IPAddress, int, int)"/>. Kept with the
-/// fake's names so the tests written against it stay unchanged.
+/// Delay_Req to the master's event port and uses the Delay_Resp to measure the path delay. It runs on its own private
+/// <see cref="PtpPort"/> (OS-chosen ports) as that port's default handler, so tests register it with
+/// <see cref="PtpMaster.AddPeer(IPAddress, int, int)"/>. Kept with the fake's names so the tests written against it stay
+/// unchanged; <see cref="Slave"/> exposes the library slave (estimate, <see cref="PtpSlave.TryMapToLocal"/>).
 /// </summary>
 public sealed class FakePtpSlave : IAsyncDisposable
 {
@@ -87,6 +88,12 @@ public sealed class FakePtpSlave : IAsyncDisposable
                 PortNumber = options.PortNumber,
                 SendDelayRequests = options.SendDelayRequests,
                 DelayRequestInterval = options.DelayRequestInterval,
+
+                // The fake's slave answers the master it hears: Delay_Req to the port its Syncs come from, no start-up
+                // Announces (the grandmaster tests count what reaches the master), every message recorded.
+                PeerEventPort = 0,
+                StartAnnounces = 0,
+                RecordMessages = true,
                 LocalClock = options.LocalClock is { } clock ? MonotonicClock.FromDelegate(clock) : null,
             },
             options.Logger);
@@ -97,6 +104,9 @@ public sealed class FakePtpSlave : IAsyncDisposable
             _slave.Samples,
             static s => new FakePtpSample(s.Sequence, s.T1, s.T2, s.MeanPathDelay));
     }
+
+    /// <summary>The library slave behind the fake (SPEC-receiver.md 6.2).</summary>
+    public PtpSlave Slave => _slave;
 
     /// <summary>The bound event port.</summary>
     public int EventPort => _slave.EventPort;

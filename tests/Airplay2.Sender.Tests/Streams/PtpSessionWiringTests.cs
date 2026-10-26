@@ -27,11 +27,9 @@ public class PtpSessionWiringTests
         await using var slave = new FakePtpSlave();
         await slave.StartAsync(CancellationToken.None);
         var clock = new MasterClock();
-        await using var master = new PtpMaster(clock, NullLogger<PtpMaster>.Instance, new PtpMasterOptions
+        await using var port = new PtpPort(new PtpPortOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 });
+        await using var master = new PtpMaster(clock, port, NullLogger<PtpMaster>.Instance, new PtpMasterOptions
         {
-            BindAddress = IPAddress.Loopback,
-            EventPort = 0,
-            GeneralPort = 0,
             PeerEventPort = slave.EventPort,
             PeerGeneralPort = slave.GeneralPort,
         });
@@ -70,7 +68,7 @@ public class PtpSessionWiringTests
     [Fact]
     public async Task Failed_setpeers_removes_the_peer_again()
     {
-        await using var master = new PtpMaster(new MasterClock(), null, new PtpMasterOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 });
+        await using var master = new PtpMaster(new MasterClock(), null, null, new PtpPortOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 });
         var connection = Substitute.For<IRtspConnection>();
         connection.RemoteEndPoint.Returns(new IPEndPoint(IPAddress.Parse("192.0.2.26"), 7000));
         connection.LocalAddress.Returns(IPAddress.Parse("203.0.113.150"));
@@ -86,7 +84,7 @@ public class PtpSessionWiringTests
     [Fact]
     public async Task Setpeers_lists_the_peer_first_then_our_addresses()
     {
-        await using var master = new PtpMaster(new MasterClock(), null, new PtpMasterOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 });
+        await using var master = new PtpMaster(new MasterClock(), null, null, new PtpPortOptions { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 });
         var connection = Substitute.For<IRtspConnection>();
         connection.RemoteEndPoint.Returns(new IPEndPoint(IPAddress.Parse("192.0.2.26"), 7000));
         connection.LocalAddress.Returns(IPAddress.Parse("203.0.113.150"));

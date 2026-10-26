@@ -11,6 +11,11 @@
                 live tests never run here; AIRPLAY_LIVE is cleared for the test step as a second guard).
                 -ExcludeTimingTests also drops the 30 s pacer accuracy run (Category=Timing) on loaded runners.
                 TRX files go to <Output>/test-results.
+    3a. ffmpeg  tools/get-ffmpeg.ps1 into <Output>/ffmpeg: the FFmpeg 7.1 LGPL shared DLLs (avcodec, avutil, swresample) the AAC
+                decoder loads (docs/airplay2/SPEC-receiver.md 7.2, Section 10). Runs before the tests, which find the DLLs
+                through AIRPLAY_FFMPEG_PATH, and after publish copies them into <Output>/bridge next to bridge.exe.
+                Windows runtimes only; -SkipFfmpeg skips it (the decode tests then report "skipped: libavcodec not found"
+                and the bridge runs ALAC-only, SPEC-receiver.md R3).
     4. publish  the bridge (src/Bridge.Service, the web app included) to <Output>/bridge, the folder
                 install/windows/install-service.ps1 expects, and the CLI (src/Airplay2.Sender.Cli) to <Output>/airplay2,
                 both for -Runtime (win-x64), framework-dependent unless -SelfContained.
@@ -39,6 +44,7 @@ param(
     [switch]$SkipTests,
     [switch]$SkipPublish,
     [switch]$SkipContainer,
+    [switch]$SkipFfmpeg,
     [switch]$RequireContainer,
     [switch]$ExcludeTimingTests
 )
@@ -82,6 +88,15 @@ try {
         $summary.Add("privacy scan: clean")
     }
 
+    # FFmpeg DLLs for the AAC decoder (SPEC-receiver.md 7.2): fetched once before the tests, copied into the bundle after publish.
+    $ffmpegOut = Join-Path $Output "ffmpeg"
+    $withFfmpeg = (-not $SkipFfmpeg) -and ($Runtime -like "win-*")
+    if ($withFfmpeg -and -not ($SkipTests -and $SkipPublish)) {
+        $shell = (Get-Process -Id $PID).Path
+        Invoke-Native "ffmpeg (get-ffmpeg.ps1)" $shell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $repo "tools/get-ffmpeg.ps1"), "-Destination", $ffmpegOut, "-CacheDirectory", (Join-Path $Output "ffmpeg-cache"))
+        $summary.Add("ffmpeg: $ffmpegOut")
+    }
+
     if (-not $SkipTests) {
         $filter = "Category!=ReceiverLive&Category!=ShairportLive"
         if ($ExcludeTimingTests) {
@@ -98,6 +113,8 @@ try {
         # Second guard next to the filter: live tests return early unless AIRPLAY_LIVE=1 (docs/DEVELOPMENT.md, "Live tests").
         $savedLive = $env:AIRPLAY_LIVE
         $savedAudio = $env:AIRPLAY_AUDIO_I_KNOW
+        $savedFfmpeg = $env:AIRPLAY_FFMPEG_PATH
+        if ($withFfmpeg) { $env:AIRPLAY_FFMPEG_PATH = $ffmpegOut }
         Remove-Item Env:AIRPLAY_LIVE -ErrorAction SilentlyContinue
         Remove-Item Env:AIRPLAY_AUDIO_I_KNOW -ErrorAction SilentlyContinue
         try {
@@ -106,6 +123,7 @@ try {
         finally {
             if ($null -ne $savedLive) { $env:AIRPLAY_LIVE = $savedLive }
             if ($null -ne $savedAudio) { $env:AIRPLAY_AUDIO_I_KNOW = $savedAudio }
+            if ($null -ne $savedFfmpeg) { $env:AIRPLAY_FFMPEG_PATH = $savedFfmpeg } else { Remove-Item Env:AIRPLAY_FFMPEG_PATH -ErrorAction SilentlyContinue }
         }
 
         $summary.Add("test: passed ($filter), TRX in $results")
@@ -123,6 +141,13 @@ try {
         foreach ($required in @((Join-Path $bridgeOut "bridge$exe"), (Join-Path $bridgeOut "wwwroot/index.html"), (Join-Path $cliOut "airplay2$exe"))) {
             if (-not (Test-Path $required)) {
                 throw "publish output incomplete: $required is missing"
+            }
+        }
+
+        if ($withFfmpeg) {
+            Invoke-Native "ffmpeg into the bundle (get-ffmpeg.ps1)" $shell @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $repo "tools/get-ffmpeg.ps1"), "-Destination", $bridgeOut, "-CacheDirectory", (Join-Path $Output "ffmpeg-cache"))
+            if (-not (Test-Path (Join-Path $bridgeOut "avcodec-61.dll"))) {
+                throw "publish output incomplete: avcodec-61.dll is missing from $bridgeOut"
             }
         }
 

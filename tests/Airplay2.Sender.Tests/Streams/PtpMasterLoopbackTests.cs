@@ -10,14 +10,17 @@ namespace Airplay2.Sender.Tests.Streams;
 
 /// <summary>
 /// <see cref="PtpMaster"/> against the fake receiver's <see cref="FakePtpSlave"/> on loopback (the
-/// slave's offset converges, Delay_Req is answered, a silent peer is dropped after 15 s). Both sides use
-/// OS-chosen ports; the master is told the slave's ports with <see cref="PtpMaster.AddPeer(IPAddress, int, int)"/>.
+/// slave's offset converges, Delay_Req is answered, a silent peer is dropped after 15 s). Each master runs on its own
+/// <see cref="PtpPort"/> (SPEC-receiver.md 6.1: a port per test) and each slave on another, both on OS-chosen ports;
+/// the master is told the slave's ports with <see cref="PtpMaster.AddPeer(IPAddress, int, int)"/>.
 /// </summary>
 public class PtpMasterLoopbackTests
 {
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
-    private static PtpMasterOptions LoopbackOptions => new() { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 };
+    private static PtpMasterOptions LoopbackOptions => new();
+
+    private static PtpPortOptions LoopbackPort => new() { BindAddress = IPAddress.Loopback, EventPort = 0, GeneralPort = 0 };
 
     private static async Task WaitUntilAsync(Func<bool> condition, string what, TimeSpan? timeout = null)
     {
@@ -35,7 +38,7 @@ public class PtpMasterLoopbackTests
 
     private static async Task<(PtpMaster Master, FakePtpSlave Slave)> StartPairAsync(IMasterClock clock, PtpMasterOptions? options = null, FakePtpSlaveOptions? slaveOptions = null)
     {
-        var master = new PtpMaster(clock, NullLogger<PtpMaster>.Instance, options ?? LoopbackOptions);
+        var master = new PtpMaster(clock, NullLogger<PtpMaster>.Instance, options ?? LoopbackOptions, LoopbackPort);
         await master.StartAsync(CancellationToken.None);
         var slave = new FakePtpSlave(slaveOptions);
         await slave.StartAsync(CancellationToken.None);
@@ -183,9 +186,9 @@ public class PtpMasterLoopbackTests
     public async Task Peer_timeout_must_be_positive_or_infinite()
     {
         var clock = new MasterClock();
-        Assert.Throws<ArgumentOutOfRangeException>(() => new PtpMaster(clock, options: LoopbackOptions with { PeerTimeout = TimeSpan.Zero }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new PtpMaster(clock, options: LoopbackOptions with { PeerTimeout = TimeSpan.FromSeconds(-2) }));
-        await using var master = new PtpMaster(clock, options: LoopbackOptions with { PeerTimeout = Timeout.InfiniteTimeSpan });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PtpMaster(clock, options: LoopbackOptions with { PeerTimeout = TimeSpan.Zero }, portOptions: LoopbackPort));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PtpMaster(clock, options: LoopbackOptions with { PeerTimeout = TimeSpan.FromSeconds(-2) }, portOptions: LoopbackPort));
+        await using var master = new PtpMaster(clock, options: LoopbackOptions with { PeerTimeout = Timeout.InfiniteTimeSpan }, portOptions: LoopbackPort);
         Assert.Equal(Timeout.InfiniteTimeSpan, master.Options.PeerTimeout);
     }
 
@@ -287,12 +290,13 @@ public class PtpMasterLoopbackTests
             Assert.Equal(slave.EventPort, resp.LocalPort);
             Assert.Equal(0x0033, resp.Header.SequenceId);
 
-            // Garbage and our own clock's messages are counted as ignored.
+            // Garbage is counted and dropped by the port (SPEC-receiver.md 6.1), our own clock's messages are counted as ignored.
             await probe.SendToAsync(new byte[] { 1, 2, 3 }, masterGeneral);
             var own = new byte[PtpMessages.SyncSize];
             PtpMessages.WriteSync(own, master.ClockId, 1);
             await probe.SendToAsync(own, masterEvent);
-            await WaitUntilAsync(() => master.GetStatistics().MessagesIgnored >= 2, "ignored datagrams");
+            var port = Assert.IsType<PtpPort>(master.Port);
+            await WaitUntilAsync(() => master.GetStatistics().MessagesIgnored >= 1 && port.Statistics.NotPtp >= 1, "ignored datagrams");
 
             // Another clock's Announce: reported once, ignored otherwise.
             var announce = new byte[PtpMessages.AnnounceSize];
@@ -315,18 +319,19 @@ public class PtpMasterLoopbackTests
     [Fact]
     public async Task Port_conflict_raises_a_ptp_master_exception_and_start_is_idempotent()
     {
-        await using var first = new PtpMaster(new MasterClock(), null, LoopbackOptions);
+        await using var first = new PtpMaster(new MasterClock(), null, LoopbackOptions, LoopbackPort);
         await first.StartAsync(CancellationToken.None);
         await first.StartAsync(CancellationToken.None);
-        await using var second = new PtpMaster(new MasterClock(), null, LoopbackOptions with { EventPort = first.EventPort });
+        await using var second = new PtpMaster(new MasterClock(), null, LoopbackOptions, LoopbackPort with { EventPort = first.EventPort });
         var ex = await Assert.ThrowsAsync<PtpMasterException>(() => second.StartAsync(CancellationToken.None));
         Assert.Equal(first.EventPort, ex.Port);
+        Assert.Equal(first.EventPort, Assert.IsType<PtpPortException>(ex.InnerException).Port); // SPEC-receiver.md 6.1: wraps the port's failure
     }
 
     [Fact]
     public async Task Peers_added_before_start_receive_traffic_and_dispose_completes_events()
     {
-        var master = new PtpMaster(new MasterClock(), null, LoopbackOptions with { ClockIdSeed = 0x0000_0102_0304_0506UL });
+        var master = new PtpMaster(new MasterClock(), null, LoopbackOptions with { ClockIdSeed = 0x0000_0102_0304_0506UL }, LoopbackPort);
         Assert.Equal(0xFFFF_0102_0304_0506UL, master.ClockId);
         await using var slave = new FakePtpSlave();
         await slave.StartAsync(CancellationToken.None);
