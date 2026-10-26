@@ -14,6 +14,7 @@
 | [`airplay2/SPEC.md`](airplay2/SPEC.md) | The index of the protocol specification: the decisions D1-D17, the contradictions between the sources and their resolution, the receiver findings with every live probe result, the resulting defaults, and a glossary of the names used in code |
 | [`airplay2/SPEC-control.md`](airplay2/SPEC-control.md) | The control plane: discovery, RTSP and the encrypted channel, pairing, session setup, `SET_PARAMETER`, sequence diagrams |
 | [`airplay2/SPEC-audio.md`](airplay2/SPEC-audio.md) | The audio plane: the realtime stream, NTP timing, sync and retransmits, group playback, the buffered stream and PTP, ALAC, volume and metadata on the wire, the sender pipeline |
+| [`airplay2/SPEC-receiver.md`](airplay2/SPEC-receiver.md) | TuneShuttle as an AirPlay 2 receiver: decisions, advertising, control and audio plane in the receiver role, PTP slave, decoders, the source switch, API/web/deployment changes, tests, live probes, implementation waves |
 | [`airplay2/TEST-RECEIVER.md`](airplay2/TEST-RECEIVER.md) | The shairport-sync test receiver in Docker: setup, what it can and cannot test, what it exercised |
 | [`airplay2/MANUAL-TESTS.md`](airplay2/MANUAL-TESTS.md) | The checklist of tests that need a person (listening, Spotify, a second receiver, PIN pairing, real phones, deployments) with their last known results |
 | [`airplay2/probes/`](airplay2/probes) | The scripts and raw outputs of the first live probes (mDNS browse, `GET /info`) and the vector generators |
