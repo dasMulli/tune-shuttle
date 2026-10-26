@@ -32,13 +32,13 @@
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
 
     <!-- Tests (same versions as librespot-dotnet/Directory.Packages.props) -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <!-- WebApplicationFactory for the bridge API tests (bridge-service). -->
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
-    <!-- Blazor component tests for the web app (web-app; bUnit 2.11.3 targets net10.0, checked on api.nuget.org 2026-10-09). -->
-    <PackageVersion Include="bunit" Version="2.11.3" />
+    <!-- Blazor component tests for the web app (web-app; bUnit 2.13.3 targets net10.0, checked on api.nuget.org 2026-10-26). -->
+    <PackageVersion Include="bunit" Version="2.13.3" />
   </ItemGroup>
 </Project>
