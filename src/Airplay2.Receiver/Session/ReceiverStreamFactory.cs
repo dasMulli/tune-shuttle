@@ -48,7 +48,8 @@ public sealed class ReceiverStreamFactory
     public async ValueTask<IReceiverStream> CreateAsync(ReceiverStreamRequest request, ISenderTiming? timing, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var buffer = new PlayoutBuffer(_output, _clock, timing?.Slave, _playout, _loggerFactory.CreateLogger<PlayoutBuffer>());
+        // The type is set before any frame arrives: a buffered stream holds its frames until SETRATEANCHORTIME (4.7, SPEC-audio.md 4.1).
+        var buffer = new PlayoutBuffer(_output, _clock, request.Type, timing?.Slave, _playout, _loggerFactory.CreateLogger<PlayoutBuffer>());
         try
         {
             await buffer.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -56,7 +57,8 @@ public sealed class ReceiverStreamFactory
             {
                 var realtime = new RealtimeStreamReceiver(
                     new RealtimeStreamReceiverOptions { BindAddress = request.BindAddress, Clock = _masterClock },
-                    new BufferFeed(buffer),
+                    buffer,
+                    observer: null,
                     _loggerFactory.CreateLogger<RealtimeStreamReceiver>());
                 var stream = new PlayoutReceiverStream(buffer, realtime, null);
                 realtime.Start();
@@ -64,10 +66,20 @@ public sealed class ReceiverStreamFactory
                 return stream;
             }
 
+            // The decoder is chosen per block by SSRC (5.2) and the format can change mid-stream (SPEC-audio.md 4.1), so an AAC
+            // decoder is created whenever one is available, whatever the SETUP's audioFormat says.
             IAacDecoder? decoder = null;
-            if (request.AudioFormat == ReceiverStreamFormats.AacLc && _aacDecoders is not null && !_aacDecoders.TryCreate(out decoder, out var reason))
+            if (_aacDecoders is not null && !_aacDecoders.TryCreate(out decoder, out var reason))
             {
-                _loggerFactory.CreateLogger<ReceiverStreamFactory>().LogWarning("No AAC decoder for the buffered stream: {Reason}", reason);
+                var logger = _loggerFactory.CreateLogger<ReceiverStreamFactory>();
+                if (request.AudioFormat == ReceiverStreamFormats.AacLc)
+                {
+                    logger.LogWarning("No AAC decoder for the buffered stream: {Reason}", reason);
+                }
+                else
+                {
+                    logger.LogDebug("No AAC decoder for the buffered stream (AAC blocks would be dropped): {Reason}", reason);
+                }
             }
 
             var buffered = new BufferedStreamReceiver(buffer, decoder, new BufferedStreamReceiverOptions { BindAddress = request.BindAddress }, _loggerFactory.CreateLogger<BufferedStreamReceiver>());
@@ -81,15 +93,6 @@ public sealed class ReceiverStreamFactory
         }
     }
 
-    /// <summary>Feeds a realtime receiver's decoded packets and 0xD7 anchors into the buffer (SPEC-receiver.md 5.1).</summary>
-    private sealed class BufferFeed(PlayoutBuffer buffer) : IRealtimeStreamObserver
-    {
-        public void OnAudioPacket(ushort sequence, uint timestamp, bool marker, ReadOnlySpan<short> pcm) =>
-            buffer.Enqueue(timestamp, sequence, pcm.ToArray());
-
-        public void OnPtpSync(PtpSyncPacket sync) => buffer.SetAnchor(sync.NowFrame, sync.PtpTimeNanos, sync.ClockId);
-    }
-
     /// <summary>A stream over its buffer and its socket reader (SPEC-receiver.md 4.5-4.7, 4.9).</summary>
     private sealed class PlayoutReceiverStream(PlayoutBuffer buffer, RealtimeStreamReceiver? realtime, BufferedStreamReceiver? buffered) : IReceiverStream
     {
@@ -101,6 +104,8 @@ public sealed class ReceiverStreamFactory
 
         public long? AudioBufferSize => buffered?.Options.AudioBufferSize;
 
+        public PlayoutStatistics? Statistics => buffer.Statistics;
+
         public void SetAnchor(uint rtpTime, ulong networkTimeNanos, ulong timelineId) => buffer.SetAnchor(rtpTime, networkTimeNanos, timelineId);
 
         public void Pause() => buffer.Pause();
@@ -110,12 +115,21 @@ public sealed class ReceiverStreamFactory
         public void Flush(ushort? nextSequence)
         {
             realtime?.Flush(this, nextSequence);
+            buffered?.Flush(null);
             buffer.Flush(null);
         }
 
-        public void FlushBuffered(uint untilSequence) => buffer.Flush(untilSequence);
+        public void FlushBuffered(uint untilSequence)
+        {
+            buffered?.Flush(untilSequence);
+            buffer.Flush(untilSequence);
+        }
 
-        public void Splice(uint fromSequence, uint untilSequence) => buffer.Splice(fromSequence, untilSequence);
+        public void Splice(uint fromSequence, uint untilSequence)
+        {
+            buffered?.Splice(fromSequence, untilSequence);
+            buffer.Splice(fromSequence, untilSequence);
+        }
 
         public async ValueTask DisposeAsync()
         {

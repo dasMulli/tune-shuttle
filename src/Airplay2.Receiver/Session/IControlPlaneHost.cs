@@ -113,4 +113,7 @@ public interface IReceiverStream : IAsyncDisposable
 
     /// <summary>Deferred <c>FLUSHBUFFERED</c> (SPEC-receiver.md 4.7): a splice registered with <see cref="PlayoutBuffer.Splice"/>.</summary>
     void Splice(uint fromSequence, uint untilSequence);
+
+    /// <summary>The stream's <see cref="PlayoutBuffer.Statistics"/> (SPEC-receiver.md 5.3, 9.1), or null when the stream has no buffer.</summary>
+    PlayoutStatistics? Statistics => null;
 }

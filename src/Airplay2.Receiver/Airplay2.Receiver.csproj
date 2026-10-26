@@ -4,7 +4,7 @@
     <RootNamespace>Airplay2.Receiver</RootNamespace>
     <!-- FFmpeg.AutoGen exposes the libavcodec structs as pointers (Codecs/FfmpegAacDecoder.cs, SPEC-receiver.md 7.2). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Description>AirPlay 2 receiver library (docs/airplay2/SPEC-receiver.md R2): the receiver side of HAP pairing, the RTSP server with the encrypted control channel, the event channel, the realtime UDP stream with retransmit requests and ALAC decoding, and a PTP slave. Built from the fake receiver's code; references Airplay2.Sender for the shared protocol parts and Librespot.Discovery for the mDNS responder; no ASP.NET, Spotify or SQLite code.</Description>
+    <Description>AirPlay 2 receiver library (docs/airplay2/SPEC-receiver.md R2): the AirplayReceiver facade that advertises _airplay._tcp and _raop._tcp, accepts one sender at a time over HAP pairing and the encrypted control channel, follows its PTP clock, decodes realtime ALAC and buffered ALAC or AAC-LC (libavcodec) streams into a playout buffer and drives the host's audio output with pause, flush, volume and now-playing. Built from the fake receiver's code; references Airplay2.Sender for the shared protocol parts and Librespot.Discovery for the mDNS responder; no ASP.NET, Spotify or SQLite code.</Description>
   </PropertyGroup>
 
   <ItemGroup>

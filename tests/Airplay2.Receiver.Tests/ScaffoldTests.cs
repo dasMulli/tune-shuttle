@@ -10,8 +10,7 @@ namespace Airplay2.Receiver.Tests;
 
 /// <summary>
 /// The wave 0 scaffold of <c>Airplay2.Receiver</c> (SPEC-receiver.md 13): the parts that already behave (identity, feature
-/// word, status flags, the AAC factory's fallback) and a smoke test that the pending surface reports the spec section
-/// and wave it waits for.
+/// word, status flags, the AAC factory's fallback) and the inert state of a receiver that was never started.
 /// </summary>
 public class ScaffoldTests
 {
@@ -123,23 +122,27 @@ public class ScaffoldTests
     }
 
     [Fact]
-    public async Task Pending_surface_names_its_spec_section_and_wave()
+    public async Task A_new_receiver_is_off_and_inert_until_started()
     {
         var identity = ReceiverIdentity.Create();
         var output = Substitute.For<IReceiverAudioOutput>();
-        await using var receiver = new AirplayReceiver(new AirplayReceiverOptions { Identity = identity, RtspPort = 0 }, output);
+        var receiver = new AirplayReceiver(new AirplayReceiverOptions { Identity = identity, RtspPort = 0 }, output);
         Assert.Equal(ReceiverStatus.Off, receiver.Status);
         Assert.Null(receiver.Sender);
+        Assert.Equal(0, receiver.RtspPort);
+        Assert.Null(receiver.Statistics);
+        Assert.Null(receiver.Advertisement);
         Assert.False(receiver.Events.Completion.IsCompleted);
 
-        var pending = await Assert.ThrowsAsync<NotImplementedException>(() => receiver.StartAsync(CancellationToken.None));
-        Assert.Matches(@"^SPEC-receiver\.md [0-9.]+(-[0-9.]+)?(, [0-9.]+)*, wave [1-5]$", pending.Message);
-
-        await using var buffer = new PlayoutBuffer(output, MonotonicClock.CreateStopwatch());
-        Assert.Matches(@"wave 2$", Assert.Throws<NotImplementedException>(() => buffer.Enqueue(0, 0, ReadOnlyMemory<short>.Empty)).Message);
+        // Without a session these are no-ops (SPEC-receiver.md 4.9, 3.3); disposing completes the event stream.
+        await receiver.EndSessionAsync("nothing to end", CancellationToken.None);
+        await receiver.StopAsync(CancellationToken.None);
+        await receiver.DisposeAsync();
+        Assert.True(receiver.Events.Completion.IsCompleted);
+        Assert.Empty(output.ReceivedCalls());
 
         await using var slave = new PtpSlave();
-        Assert.False(slave.TryMapToLocal(0, out _)); // ptp-port, wave 1: no estimate before the first Sync/Follow_Up pair (6.2)
+        Assert.False(slave.TryMapToLocal(0, out _)); // no estimate before the first Sync/Follow_Up pair (6.2)
         Assert.Equal(new PtpSlaveStatistics(null, 0, null, 0), slave.Statistics);
     }
 }

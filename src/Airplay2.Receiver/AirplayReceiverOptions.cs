@@ -6,6 +6,7 @@ using Airplay2.Receiver.Rtsp;
 using Airplay2.Receiver.Timing;
 using Airplay2.Sender.Rtp;
 using Airplay2.Sender.Streams;
+using Librespot.Discovery.Mdns;
 
 namespace Airplay2.Receiver;
 
@@ -79,4 +80,32 @@ public sealed record AirplayReceiverOptions
 
     /// <summary>Where registered controllers are persisted (SPEC-receiver.md 4.2, 8.4); null uses an <see cref="InMemoryControllerStore"/>.</summary>
     public IControllerStore? ControllerStore { get; init; }
+
+    /// <summary>
+    /// The current master level G of the selected output, or null while no output is selected (SPEC-receiver.md R9: the bridge
+    /// reads <c>OutputManager.CurrentLevelAsync</c>); answered by <c>GET_PARAMETER volume</c> and <c>/info</c> <c>initialVolume</c>.
+    /// Null means no output level is known: the sender's last level in the session is answered, else 50.
+    /// </summary>
+    public Func<CancellationToken, ValueTask<int?>>? OutputLevel { get; init; }
+
+    /// <summary>Register the two DNS-SD services on start (SPEC-receiver.md 3.1); false runs the listener without advertising (tests that connect directly).</summary>
+    public bool Advertise { get; init; } = true;
+
+    /// <summary>The mDNS groups, port and hop limit of the advertiser (SPEC-receiver.md 3.1, 11.1); null for the standard mDNS endpoint. Tests pass a private one.</summary>
+    public MdnsEndpoint? Mdns { get; init; }
+
+    /// <summary>The SRV target host name of the advertisement (single label); null for the machine name (SPEC-receiver.md 3.1).</summary>
+    public string? MdnsHostname { get; init; }
+
+    /// <summary>The addresses the advertisement publishes, or null for every interface's (SPEC-receiver.md 3.1, 8.5 <c>Bridge:LocalAddress</c>).</summary>
+    public IReadOnlyList<IPAddress>? AdvertisedAddresses { get; init; }
+
+    /// <summary>How often <see cref="ReceiverEvent.Statistics"/> is raised while a stream is set up (SPEC-receiver.md 5.3, 9.1: every 5 s).</summary>
+    public TimeSpan StatisticsInterval { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// How long DMAP text, artwork and progress with one <c>rtptime</c> are collected before the now-playing call is made with
+    /// what arrived (SPEC-receiver.md 5.5: 500 ms after the first).
+    /// </summary>
+    public TimeSpan NowPlayingWindow { get; init; } = TimeSpan.FromMilliseconds(500);
 }

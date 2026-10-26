@@ -41,6 +41,11 @@ public sealed partial class FakeReceiver
             BindAddress = IPAddress.Loopback,
             Name = "fake",
             RequestRetransmits = options.RequestRetransmits,
+
+            // One request per gap and no give-up, as before the product receiver repeated its requests (SPEC-receiver.md 5.1):
+            // the fake's tests count requests and accept an answer whenever it comes.
+            MaxRetransmitRequests = 1,
+            RetransmitInterval = TimeSpan.FromHours(1),
             ExtendedRetransmitRequests = options.ExtendedRetransmitRequests,
             RetransmitFromSecondSocket = options.RetransmitFromSecondSocket,
             SimulateLoss = n > 0 ? (fresh, _) => fresh % n == 0 : null,
