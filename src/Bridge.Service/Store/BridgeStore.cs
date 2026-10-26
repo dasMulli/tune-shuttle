@@ -33,6 +33,11 @@ public sealed record GroupRow(string Id, string Name, int MasterLevel, IReadOnly
 /// <param name="Position">Display order inside the group (ascending; gaps are allowed).</param>
 public sealed record GroupMemberRow(string GroupId, string ReceiverId, int Level, int Position);
 
+/// <summary>A row of <c>airplay_controllers</c> (SPEC-receiver.md 8.4): a sender that completed regular pair-setup with the AirPlay receiver.</summary>
+/// <param name="ControllerId">The sender's HAP pairing identifier.</param>
+/// <param name="PublicKey">Its Ed25519 LTPK, 32 bytes.</param>
+public sealed record AirplayControllerRow(string ControllerId, byte[] PublicKey);
+
 /// <summary>A row of <c>spotify_credentials</c>: the reusable librespot credentials (username, auth type, blob).</summary>
 /// <param name="Username">The Spotify username.</param>
 /// <param name="AuthType">librespot <c>AuthenticationType</c> as an integer.</param>
@@ -122,6 +127,15 @@ public interface IBridgeStore : IPairingStore, IAsyncDisposable
 
     /// <summary>Forgets the cached Spotify credentials.</summary>
     Task ClearSpotifyCredentialsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Every sender registered with the AirPlay receiver, ordered by id (SPEC-receiver.md 4.2, 8.4 <c>airplay_controllers</c>).</summary>
+    Task<IReadOnlyList<AirplayControllerRow>> GetAirplayControllersAsync(CancellationToken cancellationToken);
+
+    /// <summary>Adds or replaces a registered sender (SPEC-receiver.md 4.2). Throws <see cref="ArgumentException"/> for an empty id or a key that is not 32 bytes.</summary>
+    Task SaveAirplayControllerAsync(string controllerId, byte[] publicKey, CancellationToken cancellationToken);
+
+    /// <summary>Removes a registered sender; removing an unknown one is not an error (SPEC-receiver.md 4.2).</summary>
+    Task RemoveAirplayControllerAsync(string controllerId, CancellationToken cancellationToken);
 }
 
 /// <summary>Setting keys.</summary>

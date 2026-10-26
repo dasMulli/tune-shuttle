@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using Bridge.Service.Airplay;
 using Bridge.Service.Store;
 
 namespace Bridge.Service;
@@ -70,6 +71,9 @@ public sealed class BridgeOptions
     /// </summary>
     public TimeSpan ForgetOfflineAfter { get; set; } = TimeSpan.FromDays(3);
 
+    /// <summary>The AirPlay receiver section <c>Bridge:Airplay</c> (SPEC-receiver.md 8.5).</summary>
+    public AirplayOptions Airplay { get; set; } = new();
+
     /// <summary>The parsed <see cref="LocalAddress"/>, or null.</summary>
     public IPAddress? LocalIPAddress => string.IsNullOrWhiteSpace(LocalAddress) ? null : IPAddress.Parse(LocalAddress);
 }
@@ -98,6 +102,18 @@ public static class BridgeSettingKeys
 
     /// <summary>How long an offline receiver without user state is kept (<see cref="ReceiverRetention"/>), as a <c>c</c>-format TimeSpan.</summary>
     public const string ForgetOfflineAfter = "forget_offline_after";
+
+    /// <summary><c>true</c>/<c>false</c>: offer the AirPlay receiver (SPEC-receiver.md 8.4; default <c>Bridge:Airplay:Enabled</c>).</summary>
+    public const string AirplayEnabled = "airplay_enabled";
+
+    /// <summary>The AirPlay receiver's advertised name (SPEC-receiver.md 8.4; default: the device name).</summary>
+    public const string AirplayName = "airplay_name";
+
+    /// <summary>The AirPlay receiver's password; unset means the open mode (SPEC-receiver.md 8.4, R7).</summary>
+    public const string AirplayPassword = "airplay_password";
+
+    /// <summary>The receiver identity JSON <c>{deviceId, psi, seed}</c>, created once (SPEC-receiver.md 8.4, R11; <see cref="AirplaySettings"/>).</summary>
+    public const string AirplayIdentity = "airplay_identity";
 }
 
 /// <summary>

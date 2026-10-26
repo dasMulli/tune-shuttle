@@ -586,6 +586,40 @@ public sealed class SqliteBridgeStore : IBridgeStore
             new { key, value }, transaction, cancellationToken)), cancellationToken).ConfigureAwait(false);
     }
 
+    // ---------------------------------------------------------------- AirPlay controllers (SPEC-receiver.md 8.4)
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<AirplayControllerRow>> GetAirplayControllersAsync(CancellationToken cancellationToken)
+    {
+        var rows = await ReadAsync((connection, transaction) => connection.QueryAsync<AirplayControllerRow>(Command(
+            "SELECT controller_id AS ControllerId, public_key AS PublicKey FROM airplay_controllers ORDER BY controller_id;", null, transaction, cancellationToken)), cancellationToken).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task SaveAirplayControllerAsync(string controllerId, byte[] publicKey, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(controllerId);
+        ArgumentNullException.ThrowIfNull(publicKey);
+        if (publicKey.Length != 32)
+        {
+            throw new ArgumentException("An Ed25519 public key is 32 bytes.", nameof(publicKey));
+        }
+
+        await WriteAsync((connection, transaction) => connection.ExecuteAsync(Command(
+            "INSERT INTO airplay_controllers (controller_id, public_key) VALUES (@controllerId, @publicKey) " +
+            "ON CONFLICT(controller_id) DO UPDATE SET public_key = excluded.public_key;",
+            new { controllerId, publicKey }, transaction, cancellationToken)), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task RemoveAirplayControllerAsync(string controllerId, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(controllerId);
+        await WriteAsync((connection, transaction) => connection.ExecuteAsync(Command(
+            "DELETE FROM airplay_controllers WHERE controller_id = @controllerId;", new { controllerId }, transaction, cancellationToken)), cancellationToken).ConfigureAwait(false);
+    }
+
     // ---------------------------------------------------------------- Spotify credentials
 
     /// <inheritdoc />

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Airplay2.Receiver.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="NSubstitute" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test vectors live in docs/airplay2/test-vectors so the documentation and the tests share one copy (SPEC-receiver.md 7.2). -->
+    <None Include="..\..\docs\airplay2\test-vectors\**" LinkBase="TestVectors" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The product receiver, our own sender that drives it on loopback (SPEC-receiver.md 11.1), and the fake receiver's recorder helpers. -->
+    <ProjectReference Include="..\..\src\Airplay2.Receiver\Airplay2.Receiver.csproj" />
+    <ProjectReference Include="..\..\src\Airplay2.Sender\Airplay2.Sender.csproj" />
+    <ProjectReference Include="..\Airplay2.FakeReceiver\Airplay2.FakeReceiver.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Airplay2.Receiver</RootNamespace>
+    <Description>AirPlay 2 receiver library (docs/airplay2/SPEC-receiver.md R2): the receiver side of HAP pairing, the RTSP server with the encrypted control channel, the event channel, the realtime UDP stream with retransmit requests and ALAC decoding, and a PTP slave. Built from the fake receiver's code; references Airplay2.Sender for the shared protocol parts and Librespot.Discovery for the mDNS responder; no ASP.NET, Spotify or SQLite code.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Airplay2.Sender\Airplay2.Sender.csproj" />
+    <ProjectReference Include="..\..\librespot-dotnet\src\Librespot.Discovery\Librespot.Discovery.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Airplay2.Receiver.Tests" />
+    <!-- The extraction tests (tests/Airplay2.Sender.Tests/ReceiverLibrary) drive the pairing registry and store flush. -->
+    <InternalsVisibleTo Include="Airplay2.Sender.Tests" />
+  </ItemGroup>
+
+</Project>

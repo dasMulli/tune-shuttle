@@ -46,6 +46,13 @@ public sealed class ReleaseConsistencyTests(ITestOutputHelper output)
         Assert.Equal(defaults.ReconnectDelay, shipped.ReconnectDelay);
         Assert.Equal(defaults.MaxReconnectDelay, shipped.MaxReconnectDelay);
         Assert.Equal(0, shipped.FakeReceivers); // development switch, never on in a release
+        Assert.Equal(defaults.Airplay.Enabled, shipped.Airplay.Enabled); // SPEC-receiver.md 8.5
+        Assert.Equal(7000, shipped.Airplay.RtspPort); // SPEC-receiver.md R13
+        Assert.Equal(319, shipped.Airplay.PtpEventPort);
+        Assert.Equal(320, shipped.Airplay.PtpGeneralPort);
+        Assert.Equal(defaults.Airplay.AnchorLeadMs, shipped.Airplay.AnchorLeadMs);
+        Assert.Equal(defaults.Airplay.SessionTimeoutSeconds, shipped.Airplay.SessionTimeoutSeconds);
+        Assert.Null(shipped.Airplay.FfmpegPath);
         Assert.True(string.IsNullOrEmpty(configuration["DataDirectory"]));
     }
 

@@ -93,9 +93,9 @@ public class StoreTests
 
         using var connection = db.OpenRaw();
         var tables = (await connection.QueryAsync<string>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;")).ToList();
-        Assert.Equal(["group_members", "groups", "pairings", "receivers", "settings", "spotify_credentials"], tables);
+        Assert.Equal(["airplay_controllers", "group_members", "groups", "pairings", "receivers", "settings", "spotify_credentials"], tables);
         Assert.Equal((long)db.Store.TargetVersion, await connection.ExecuteScalarAsync<long>("PRAGMA user_version;"));
-        Assert.Equal(1, db.Store.TargetVersion);
+        Assert.Equal(2, db.Store.TargetVersion); // SPEC-receiver.md 8.4: migration 2 adds airplay_controllers
         Assert.Equal("wal", await connection.ExecuteScalarAsync<string>("PRAGMA journal_mode;"));
     }
 
@@ -111,7 +111,7 @@ public class StoreTests
 
         Assert.NotNull(await second.GetReceiverAsync("A", Ct));
         using var connection = db.OpenRaw();
-        Assert.Equal(1L, await connection.ExecuteScalarAsync<long>("PRAGMA user_version;"));
+        Assert.Equal((long)db.Store.TargetVersion, await connection.ExecuteScalarAsync<long>("PRAGMA user_version;"));
     }
 
     [Fact]
@@ -126,8 +126,11 @@ public class StoreTests
 
     // ------------------------------------------------------------------ migrations
 
-    private static readonly StoreMigration AddColumn = new(2, "receivers.room", "ALTER TABLE receivers ADD COLUMN room TEXT;");
-    private static readonly StoreMigration AddIndex = new(3, "group_members(receiver_id) index", "CREATE INDEX IF NOT EXISTS ix_group_members_receiver ON group_members(receiver_id);");
+    // Synthetic migrations that go two versions past the real list (version 2 is airplay_controllers, SPEC-receiver.md 8.4).
+    private static readonly int Current = StoreMigrations.LatestVersion(StoreMigrations.All);
+    private static readonly StoreMigration AddColumn = new(Current + 1, "receivers.room", "ALTER TABLE receivers ADD COLUMN room TEXT;");
+    private static readonly StoreMigration AddIndex = new(Current + 2, "group_members(receiver_id) index", "CREATE INDEX IF NOT EXISTS ix_group_members_receiver ON group_members(receiver_id);");
+    private static readonly IReadOnlyList<StoreMigration> Extended = [.. StoreMigrations.All, AddColumn, AddIndex];
 
     [Fact]
     public async Task Migration_from_version_1_to_current_keeps_data()
@@ -150,13 +153,13 @@ public class StoreTests
         await db.Store.InitializeAsync(Ct);
         Assert.Equal(33, (await db.Store.GetReceiverAsync("R1", Ct))!.Level);
 
-        var upgraded = db.OpenStore([AddColumn, AddIndex]);
+        var upgraded = db.OpenStore(Extended);
         await upgraded.InitializeAsync(Ct);
         await upgraded.InitializeAsync(Ct);
 
         using (var connection = db.OpenRaw())
         {
-            Assert.Equal(3L, await connection.ExecuteScalarAsync<long>("PRAGMA user_version;"));
+            Assert.Equal(Current + 2L, await connection.ExecuteScalarAsync<long>("PRAGMA user_version;"));
             var columns = (await connection.QueryAsync<string>("SELECT name FROM pragma_table_info('receivers');")).ToList();
             Assert.Contains("room", columns);
             Assert.Equal(1L, await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM sqlite_master WHERE name = 'ix_group_members_receiver';"));
@@ -178,23 +181,24 @@ public class StoreTests
     public async Task Fresh_database_runs_all_migrations()
     {
         await using var db = await TempDatabase.CreateAsync(initialize: false);
-        var store = db.OpenStore([AddColumn, AddIndex]);
+        var store = db.OpenStore(Extended);
         await store.InitializeAsync(Ct);
-        Assert.Equal(3, store.TargetVersion);
+        Assert.Equal(Current + 2, store.TargetVersion);
         using var connection = db.OpenRaw();
-        Assert.Equal(3L, await connection.ExecuteScalarAsync<long>("PRAGMA user_version;"));
+        Assert.Equal(Current + 2L, await connection.ExecuteScalarAsync<long>("PRAGMA user_version;"));
+        Assert.Equal(1L, await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM sqlite_master WHERE name = 'airplay_controllers';"));
     }
 
     [Fact]
     public async Task Failing_migration_rolls_back_and_keeps_the_previous_version()
     {
         await using var db = await TempDatabase.CreateAsync();
-        var broken = new StoreMigration(3, "broken", "CREATE TABLE half_done (x INTEGER); INSERT INTO no_such_table VALUES (1);");
-        var store = db.OpenStore([AddColumn, broken]);
+        var broken = new StoreMigration(Current + 2, "broken", "CREATE TABLE half_done (x INTEGER); INSERT INTO no_such_table VALUES (1);");
+        var store = db.OpenStore([.. StoreMigrations.All, AddColumn, broken]);
         await Assert.ThrowsAsync<SqliteException>(() => store.InitializeAsync(Ct));
 
         using var connection = db.OpenRaw();
-        Assert.Equal(2L, await connection.ExecuteScalarAsync<long>("PRAGMA user_version;"));
+        Assert.Equal(Current + 1L, await connection.ExecuteScalarAsync<long>("PRAGMA user_version;"));
         Assert.Equal(0L, await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM sqlite_master WHERE name = 'half_done';"));
     }
 

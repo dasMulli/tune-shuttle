@@ -5,6 +5,8 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Channels;
+using Airplay2.Receiver.Pairing;
+using Airplay2.Receiver.Session;
 using Airplay2.Sender.Alac;
 using Airplay2.Sender.Pairing;
 using Airplay2.Sender.Plist;
@@ -224,7 +226,7 @@ public abstract record FakeReceiverEvent
 
 /// <summary>
 /// An in-process AirPlay 2 receiver on loopback: the receiver side of transient and regular HomeKit pairing (a thin
-/// adapter over <c>Airplay2.Sender.Pairing.HapAccessoryPairing</c>, the internal accessory-side implementation owned by the
+/// adapter over <c>Airplay2.Receiver.Pairing.ReceiverPairing</c> and the internal <c>HapAccessoryPairing</c> owned by the
 /// pairing package; the fake never re-implements SRP/Ed25519/X25519), the HAP-encrypted control channel, the event channel (sends <c>updateInfo</c> and
 /// <c>sendMediaRemoteCommand</c>), SETUP/RECORD/SETPEERS/SET_PARAMETER/GET_PARAMETER/FLUSH/TEARDOWN/feedback, and
 /// UDP control/timing/data ports that decrypt and ALAC-decode the realtime stream. It records everything it sees in
@@ -250,7 +252,7 @@ public sealed partial class FakeReceiver : IAsyncDisposable
 
     private readonly Channel<FakeReceiverEvent> _events = Channel.CreateUnbounded<FakeReceiverEvent>();
     private readonly ILogger _logger;
-    private readonly HapAccessoryPairing _pairing;
+    private readonly ReceiverPairing _pairing;
     private readonly MasterClock _clock = new();
     private readonly CancellationTokenSource _stopping = new();
     private readonly Lock _lock = new();
@@ -260,7 +262,8 @@ public sealed partial class FakeReceiver : IAsyncDisposable
     private Socket? _listener;
     private int _nextConnectionId;
     private double _volumeDb;
-    private FakeEventChannel? _latestEventChannel;
+    private readonly EventChannelHost _eventChannelHost;
+    private EventChannelServer? _latestEventChannel;
     private string _groupId;
     private bool _groupContainsGroupLeader;
     private int _started;
@@ -278,12 +281,21 @@ public sealed partial class FakeReceiver : IAsyncDisposable
         DeviceId = options.DeviceId ?? RandomDeviceId();
         _groupId = DeviceId;
         _volumeDb = options.InitialVolume ?? 0.0;
+        _eventChannelHost = new EventChannelHost(this);
+        _realtime = CreateRealtimeReceiver(options);
         var identity = new ControllerIdentity(DeviceId, RandomNumberGenerator.GetBytes(32));
         PublicKey = identity.KeyPair.PublicKey;
-        _pairing = new HapAccessoryPairing(new HapAccessoryOptions(identity, options.Pin, options.AllowTransientPairing)
+        var accessory = new HapAccessoryOptions(identity, options.Pin, options.AllowTransientPairing)
         {
             AllowPairSetupWithAuth = options.AllowPairSetupWithAuth,
-        });
+        };
+        var pairingOptions = new ReceiverPairingOptions
+        {
+            RequireHkpHeader = options.RequireHkpHeader,
+            EncryptAfterPairVerify = options.EncryptAfterPairVerify,
+            Name = options.Name,
+        };
+        _pairing = new ReceiverPairing(accessory, new InMemoryControllerStore(), pairingOptions, _logger);
     }
 
     /// <summary>The options.</summary>
@@ -299,7 +311,7 @@ public sealed partial class FakeReceiver : IAsyncDisposable
     public byte[] PublicKey { get; }
 
     /// <summary>The ALAC decoder used for the data port (not thread-safe: the receiver uses it under its audio lock; do not decode with it while a stream runs).</summary>
-    public AlacDecoder Decoder { get; } = new(AlacMagicCookie.AirPlay);
+    public AlacDecoder Decoder => _realtime.Decoder;
 
     /// <summary>The device id (<c>deviceid</c>, <c>pi</c>, and the accessory pairing identifier).</summary>
     public string DeviceId { get; }
@@ -317,13 +329,13 @@ public sealed partial class FakeReceiver : IAsyncDisposable
     }
 
     /// <summary>The number of controllers that completed regular pair-setup with this receiver.</summary>
-    public int PairedControllerCount => _pairing.KnownControllers.Count;
+    public int PairedControllerCount => _pairing.ControllerCount;
 
     /// <summary>The UDP data port announced in stream SETUP responses (0 before <see cref="StartAsync"/>).</summary>
-    public int DataPort => _dataLoop?.Port ?? 0;
+    public int DataPort => _realtime.DataPort;
 
     /// <summary>The UDP control port announced in stream SETUP responses (0 before <see cref="StartAsync"/>).</summary>
-    public int ControlPort => _controlLoop?.Port ?? 0;
+    public int ControlPort => _realtime.ControlPort;
 
     /// <summary>The number of open control connections.</summary>
     public int OpenConnections
@@ -338,7 +350,7 @@ public sealed partial class FakeReceiver : IAsyncDisposable
     }
 
     /// <summary>Forgets a paired controller (as after a factory reset), so its next pair-verify fails; false when it was not paired.</summary>
-    public bool RemovePairing(string controllerId) => _pairing.KnownControllers.Remove(controllerId);
+    public bool RemovePairing(string controllerId) => _pairing.RemoveController(controllerId);
 
     /// <summary>Binds the control TCP port and the UDP ports on loopback.</summary>
     public Task StartAsync(CancellationToken cancellationToken)
@@ -579,7 +591,7 @@ public sealed partial class FakeReceiver : IAsyncDisposable
     }
 
     /// <summary>The event channel of the most recent session whose channel is connected, or null.</summary>
-    internal FakeEventChannel? CurrentEventChannel()
+    internal EventChannelServer? CurrentEventChannel()
     {
         lock (_lock)
         {
@@ -588,13 +600,25 @@ public sealed partial class FakeReceiver : IAsyncDisposable
     }
 
     /// <summary>Remembers the event channel that connected last (the target of the public event methods).</summary>
-    internal void SetLatestEventChannel(FakeEventChannel channel)
+    internal void SetLatestEventChannel(EventChannelServer channel)
     {
         lock (_lock)
         {
             _latestEventChannel = channel;
         }
     }
+
+    /// <summary>The library event channel's options from <see cref="Options"/> (SPEC-receiver.md 4.4).</summary>
+    internal EventChannelServerOptions EventChannelOptions() => new()
+    {
+        BindAddress = IPAddress.Loopback,
+        ServerHeader = Options.ServerHeader,
+        Name = Options.Name,
+        AnswerTimeout = Options.EventAnswerTimeout,
+        SendCSeqOnRequests = Options.EventRequestsCarryCSeq,
+        UpdateInfoOnConnect = Options.UpdateInfoOnConnect,
+        LargeUpdateInfoFrames = Options.LargeEventFrames,
+    };
 
     /// <summary>Stores the volume of a <c>SET_PARAMETER volume</c>.</summary>
     internal void SetVolume(double db)
@@ -713,6 +737,26 @@ public sealed partial class FakeReceiver : IAsyncDisposable
         var mac = RandomNumberGenerator.GetBytes(6);
         mac[0] = (byte)((mac[0] & 0xFC) | 0x02); // locally administered, unicast
         return string.Join(':', mac.Select(b => b.ToString("X2", CultureInfo.InvariantCulture)));
+    }
+
+    /// <summary>Connects the library's <see cref="EventChannelServer"/> to this receiver's info, background tracking and <see cref="Events"/>.</summary>
+    private sealed class EventChannelHost(FakeReceiver owner) : IEventChannelHost
+    {
+        public PlistDictionary BuildUpdateInfo(bool forceVolume) =>
+            owner.BuildInfo(includeTxt: true, includeVolume: forceVolume || owner.Options.InitialVolume is not null);
+
+        public void Track(Task task, string what) => owner.Track(task, what);
+
+        public void OnConnected(EventChannelServer channel, IPEndPoint remote)
+        {
+            owner.SetLatestEventChannel(channel);
+            owner.Write(new FakeReceiverEvent.EventChannelConnected(remote));
+        }
+
+        public void OnClosed(EventChannelServer channel, string reason) => owner.Write(new FakeReceiverEvent.EventChannelClosed(reason));
+
+        public void OnCommandAnswered(EventChannelServer channel, string type, int statusCode, bool largeFrame) =>
+            owner.Write(new FakeReceiverEvent.EventCommandAnswered(type, statusCode, largeFrame));
     }
 
     private static byte[] LoadSpeakerAInfo()

@@ -39,6 +39,7 @@ public static class Endpoints
         api.MapPut("/output", (OutputRequest body, BridgeController c, CancellationToken ct) => c.SetOutputAsync(body, ct));
         api.MapGet("/playback", (BridgeController c, CancellationToken ct) => c.GetPlaybackAsync(ct));
         api.MapPost("/playback", (PlaybackCommandRequest body, BridgeController c, CancellationToken ct) => c.PlaybackCommandAsync(body, ct));
+        api.MapGet("/playback/artwork", (BridgeController c, CancellationToken ct) => c.GetPlaybackArtworkAsync(ct));
         api.MapGet("/settings", (BridgeController c, CancellationToken ct) => c.GetSettingsAsync(ct));
         api.MapPut("/settings", (SettingsDto body, BridgeController c, CancellationToken ct) => c.SetSettingsAsync(body, ct));
         api.MapGet("/status", (BridgeController c, CancellationToken ct) => c.GetStatusAsync(ct));

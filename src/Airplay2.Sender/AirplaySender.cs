@@ -58,6 +58,13 @@ public sealed record AirplaySenderOptions
     /// <summary>Options of the PTP grandmaster, which is started on first use by a PTP-timed group.</summary>
     public PtpMasterOptions Ptp { get; init; } = new();
 
+    /// <summary>
+    /// The shared PTP port the grandmaster is built on (SPEC-receiver.md R5, 6.1): the bridge passes its one instance so the
+    /// sender and the receiver's slave share UDP 319/320; null (CLI, probes, tests) lets the sender bind a private port as
+    /// today. Read by <see cref="AirplaySender.EnsurePtpMasterAsync"/> once the wave 1 <c>ptp-port</c> package refactors <see cref="PtpMaster"/> onto it.
+    /// </summary>
+    public IPtpPort? PtpPort { get; init; }
+
     /// <summary>Local address for the timing responder and the control port; null binds the wildcard.</summary>
     public IPAddress? LocalAddress { get; init; }
 

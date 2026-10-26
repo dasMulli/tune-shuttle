@@ -1,10 +1,13 @@
 using Airplay2.Sender.Discovery;
+using Airplay2.Sender.Streams;
+using Bridge.Service.Airplay;
 using Bridge.Service.Api;
 using Bridge.Service.Diagnostics;
 using Bridge.Service.Output;
 using Bridge.Service.Spotify;
 using Bridge.Service.Store;
 using Librespot.Playback;
+using Microsoft.Extensions.Options;
 
 namespace Bridge.Service;
 
@@ -99,13 +102,27 @@ public static class Program
         services.AddSingleton<SpotifyHost>();
         services.AddSingleton<BridgeController>();
 
+        // The AirPlay receiver (SPEC-receiver.md 8.1-8.3): one PtpPort per process for both roles (6.1), the source switch
+        // in front of the output (8.2) and the hosted receiver (8.3).
+        services.AddSingleton<IPtpPort>(sp =>
+        {
+            var o = sp.GetRequiredService<IOptions<BridgeOptions>>().Value;
+            return new PtpPort(
+                new PtpPortOptions { BindAddress = o.LocalIPAddress, EventPort = o.Airplay.PtpEventPort, GeneralPort = o.Airplay.PtpGeneralPort },
+                sp.GetRequiredService<ILogger<PtpPort>>());
+        });
+        services.AddSingleton<SourceSwitch>();
+        services.AddSingleton<AirplaySource>();
+
         AddFakeReceivers(services, configuration);
 
         // Start order: receivers are browsed first, then the output is restored, then Spotify comes up (it reads the
-        // output's level); the host stops them in reverse, so Spotify pauses before the receivers are torn down.
+        // output's level), then the AirPlay receiver; the host stops them in reverse, so the AirPlay session ends and
+        // Spotify pauses before the receivers are torn down.
         services.AddHostedService(sp => sp.GetRequiredService<ReceiverInventory>());
         services.AddHostedService(sp => sp.GetRequiredService<OutputManager>());
         services.AddHostedService(sp => sp.GetRequiredService<SpotifyHost>());
+        services.AddHostedService(sp => sp.GetRequiredService<AirplaySource>());
         services.AddHostedService<ReceiverPruner>();
     }
 

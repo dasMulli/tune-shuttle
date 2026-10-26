@@ -231,6 +231,13 @@ public sealed class BridgeController(
     /// <summary><c>GET /playback</c>.</summary>
     public Task<IResult> GetPlaybackAsync(CancellationToken ct) => Task.FromResult(Results.Ok(runtime.Playback));
 
+    /// <summary>
+    /// <c>GET /playback/artwork</c> (SPEC-receiver.md 9.1): the AirPlay sender's artwork with its content type and an
+    /// <c>ETag</c> of the <c>rtptime</c>; 404 while the source is not AirPlay or no artwork arrived, which is always the case
+    /// until the wave 3 <c>api</c> package wires the receiver in.
+    /// </summary>
+    public Task<IResult> GetPlaybackArtworkAsync(CancellationToken ct) => Task.FromResult(Results.NotFound());
+
     /// <summary><c>POST /playback</c>: forwarded to Spirc.</summary>
     public Task<IResult> PlaybackCommandAsync(PlaybackCommandRequest body, CancellationToken ct) => RunAsync(() =>
     {

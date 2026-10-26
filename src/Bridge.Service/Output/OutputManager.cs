@@ -47,6 +47,9 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
     /// <summary>Source tag of level changes a receiver reported itself.</summary>
     public const string SourceReceiver = "receiver";
 
+    /// <summary>Source tag of level changes from an AirPlay sender's <c>SET_PARAMETER volume</c> (SPEC-receiver.md R9, 8.6).</summary>
+    public const string SourceAirplay = "airplay";
+
     /// <summary>Largest per-receiver offset accepted (2 s either way, SPEC-audio.md 3.3).</summary>
     public const int MaxOffsetFrames = 88200;
 
@@ -493,20 +496,25 @@ public sealed class OutputManager : IHostedService, IPlaybackOutput, IAsyncDispo
     }
 
     /// <inheritdoc />
-    public async Task SetSpotifyVolumeAsync(int level, CancellationToken cancellationToken)
+    public async Task SetSourceLevelAsync(int level, string source, CancellationToken cancellationToken)
     {
+        if (source is not (SourceSpotify or SourceAirplay))
+        {
+            throw new ArgumentException($"The source is '{SourceSpotify}' or '{SourceAirplay}'.", nameof(source));
+        }
+
         level = Math.Clamp(level, 0, 100);
         var selection = _runtime.Selection;
         if (selection.GroupId is not null)
         {
-            await SetGroupLevelAsync(selection.GroupId, level, SourceSpotify, cancellationToken).ConfigureAwait(false);
+            await SetGroupLevelAsync(selection.GroupId, level, source, cancellationToken).ConfigureAwait(false);
         }
         else if (selection.ReceiverId is not null)
         {
             var row = await _store.GetReceiverAsync(selection.ReceiverId, cancellationToken).ConfigureAwait(false);
             if (row is not null && row.Level != level)
             {
-                await SetReceiverLevelAsync(selection.ReceiverId, level, SourceSpotify, cancellationToken).ConfigureAwait(false);
+                await SetReceiverLevelAsync(selection.ReceiverId, level, source, cancellationToken).ConfigureAwait(false);
             }
         }
     }

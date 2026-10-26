@@ -311,8 +311,9 @@ public sealed class PlayerEventMapperTests
             return Task.CompletedTask;
         }
 
-        public Task SetSpotifyVolumeAsync(int level, CancellationToken cancellationToken)
+        public Task SetSourceLevelAsync(int level, string source, CancellationToken cancellationToken)
         {
+            Assert.Equal(OutputManager.SourceSpotify, source);
             _calls.Enqueue(new Call("volume", null, level));
             return Task.CompletedTask;
         }

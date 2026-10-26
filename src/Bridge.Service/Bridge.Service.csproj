@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Airplay2.Sender\Airplay2.Sender.csproj" />
+    <ProjectReference Include="..\Airplay2.Receiver\Airplay2.Receiver.csproj" />
     <ProjectReference Include="..\Bridge.Contracts\Bridge.Contracts.csproj" />
     <ProjectReference Include="..\Bridge.Web\Bridge.Web.csproj" />
     <ProjectReference Include="..\..\librespot-dotnet\src\Librespot.Core\Librespot.Core.csproj" />

@@ -15,6 +15,8 @@ build.ps1                       CI script: build, offline tests, publish, contai
 src/
   Airplay2.Sender/              the AirPlay 2 protocol library (Crypto, Tlv8, Plist, Alac, Discovery, Rtsp, Pairing,
                                 Session, Rtp, Streams, Playback, AirplaySender.cs)
+  Airplay2.Receiver/            the AirPlay 2 receiver library (Discovery, Rtsp, Pairing, Session, Streams, Playout,
+                                Codecs, Timing, AirplayReceiver.cs; docs/airplay2/SPEC-receiver.md)
   Airplay2.Sender.Cli/          the `airplay2` CLI (discover, info, pair, play, volume, probe)
   Bridge.Contracts/             DTOs, routes and WebSocket messages shared by service and web app
   Bridge.Service/               the `bridge` host: Api/, Store/ (schema.sql), Output/, Spotify/, Diagnostics/
@@ -22,6 +24,7 @@ src/
                                 Resources/i18n/, wwwroot/)
 tests/
   Airplay2.FakeReceiver/        the in-process AirPlay 2 receiver every test project uses
+  Airplay2.Receiver.Tests/      unit and loopback tests of the receiver library (our sender drives the product receiver)
   Airplay2.Sender.Tests/        unit, fake-receiver, loopback and live tests of the sender and the CLI
   Bridge.Tests/                 store, API, sink, deployment and release tests; Web/ holds the web app tests (bUnit)
 tools/

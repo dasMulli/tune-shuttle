@@ -69,6 +69,13 @@ internal sealed class BridgeFactory : WebApplicationFactory<BridgeController>
         builder.UseSetting("Bridge:ConnectTimeout", "00:00:20");
         builder.UseSetting("Bridge:ReconnectDelay", "00:00:00.500");
         builder.UseSetting("Bridge:PollReceiverVolumeSeconds", "0");
+
+        // The AirPlay receiver stays off in the API tests (SPEC-receiver.md R13: never 7000, 319 or 320 in tests); the
+        // receiver tests of 11.1 start it on loopback with port 0 themselves.
+        builder.UseSetting("Bridge:Airplay:Enabled", "false");
+        builder.UseSetting("Bridge:Airplay:RtspPort", "0");
+        builder.UseSetting("Bridge:Airplay:PtpEventPort", "0");
+        builder.UseSetting("Bridge:Airplay:PtpGeneralPort", "0");
         if (ExtraLogging is not null)
         {
             builder.UseSetting("Logging:LogLevel:Airplay2", "Debug");

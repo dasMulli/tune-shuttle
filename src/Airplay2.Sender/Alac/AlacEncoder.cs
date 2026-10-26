@@ -30,6 +30,13 @@ public readonly record struct AlacMagicCookie(uint FrameLength, byte CompatibleV
     /// <summary>The AirPlay realtime stream cookie: 352 / 16 / 2 / 44100 with the default tuning constants.</summary>
     public static AlacMagicCookie AirPlay { get; } = new(352, 0, 16, (byte)AdaptiveGolomb.Pb0, (byte)AdaptiveGolomb.Mb0, (byte)AdaptiveGolomb.Kb0, 2, (ushort)AdaptiveGolomb.MaxRunDefault, 0, 0, 44100);
 
+    /// <summary>
+    /// The receiver's decoder cookie (SPEC-receiver.md 7.1): frame length 352, bit depth 16, 2 channels, 44 100 Hz, the
+    /// fmtp defaults of SPEC-audio.md 5.2. Used for realtime packets and buffered ALAC blocks (<c>0x0000FACE</c>) alike;
+    /// the same values as <see cref="AirPlay"/>, named for the receiver role.
+    /// </summary>
+    public static AlacMagicCookie Default44100Stereo16 => AirPlay;
+
     /// <summary>Serialises big-endian.</summary>
     public byte[] ToBytes()
     {

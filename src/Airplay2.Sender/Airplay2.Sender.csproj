@@ -17,6 +17,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Airplay2.Sender.Tests" />
     <InternalsVisibleTo Include="Airplay2.FakeReceiver" />
+    <InternalsVisibleTo Include="Airplay2.Receiver" />
+    <InternalsVisibleTo Include="Airplay2.Receiver.Tests" />
   </ItemGroup>
 
 </Project>

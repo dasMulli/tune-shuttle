@@ -25,8 +25,11 @@ public interface IPlaybackOutput
     /// <summary>Sends text, artwork and progress for the track whose sample at <see cref="NowPlaying.Elapsed"/> is written next.</summary>
     Task SetNowPlayingAsync(NowPlaying nowPlaying, CancellationToken cancellationToken);
 
-    /// <summary>The Spotify volume moved: applies it as G of the output (a single receiver's r_i).</summary>
-    Task SetSpotifyVolumeAsync(int level, CancellationToken cancellationToken);
+    /// <summary>
+    /// A source's volume moved: applies it as G of the output (a single receiver's r_i) with the level's source tag,
+    /// <see cref="Output.OutputManager.SourceSpotify"/> or <see cref="Output.OutputManager.SourceAirplay"/> (SPEC-receiver.md R9, 8.6).
+    /// </summary>
+    Task SetSourceLevelAsync(int level, string source, CancellationToken cancellationToken);
 
     /// <summary>G of the current output (a single receiver's r_i), or null without an output.</summary>
     Task<int?> CurrentLevelAsync(CancellationToken cancellationToken);

@@ -4,127 +4,16 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using Airplay2.Sender.Crypto;
-using Airplay2.Sender.Plist;
 using Airplay2.Sender.Rtsp;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Airplay2.FakeReceiver;
-
-/// <summary>Handles one request received by an <see cref="RtspServerConnection"/>.</summary>
-/// <param name="connection">The connection the request arrived on (to record state or switch keys).</param>
-/// <param name="request">The parsed, decrypted request.</param>
-/// <param name="cancellationToken">Cancelled when the connection closes.</param>
-/// <returns>
-/// The response to send. Must not await <see cref="RtspServerConnection.SendRequestAsync"/> on the same connection (the
-/// read loop is busy running the handler). To close the connection from a handler, set
-/// <see cref="RtspServerResponse.CloseAfter"/>; <see cref="RtspServerConnection.CloseAsync"/> called from a handler only
-/// starts the close and returns without waiting for the read loop.
-/// </returns>
-public delegate ValueTask<RtspServerResponse> RtspRequestHandler(RtspServerConnection connection, RtspIncomingRequest request, CancellationToken cancellationToken);
+namespace Airplay2.Receiver.Rtsp;
 
 /// <summary>
-/// A response written by <see cref="RtspServerConnection"/>: status line with the request's protocol token echoed (the
-/// srcvers-366 speaker echoes it, SPEC-control.md 1.8), <c>Content-Length</c> (always), <c>Content-Type</c> when set,
-/// <c>Server</c>, <c>CSeq</c> echoed when the request had one [sps:rtsp.c:4210-4217], then <see cref="Headers"/>.
-/// </summary>
-/// <param name="StatusCode">The status code.</param>
-/// <param name="ReasonPhrase">Reason phrase; the standard one for the code when null.</param>
-public sealed record RtspServerResponse(int StatusCode, string? ReasonPhrase = null)
-{
-    private static readonly IReadOnlyDictionary<string, string> NoHeaders = new Dictionary<string, string>();
-
-    /// <summary>Extra headers (e.g. <c>Audio-Latency</c>, <c>Connection: close</c>).</summary>
-    public IReadOnlyDictionary<string, string> Headers { get; init; } = NoHeaders;
-
-    /// <summary>Body content type, or null.</summary>
-    public string? ContentType { get; init; }
-
-    /// <summary>Body bytes.</summary>
-    public ReadOnlyMemory<byte> Body { get; init; }
-
-    /// <summary>
-    /// Keys (server view: <see cref="HapChannelKeys.WriteKey"/> encrypts what the server sends) to switch to after this
-    /// response has been written in plaintext: "prepare encryption, but don't activate yet, the response to this
-    /// request is still plaintext" [sps:rtsp.c:1811-1817].
-    /// </summary>
-    public HapChannelKeys? EnableEncryptionAfter { get; init; }
-
-    /// <summary>Close the connection after writing this response.</summary>
-    public bool CloseAfter { get; init; }
-
-    /// <summary>Test switch: write this CSeq instead of echoing the request's.</summary>
-    public int? CSeqOverride { get; init; }
-
-    /// <summary>Test switch: do not write a CSeq header.</summary>
-    public bool OmitCSeq { get; init; }
-
-    /// <summary>
-    /// Test switch: write nothing (the handler answered itself through <see cref="RtspServerConnection.WriteRawAsync"/>,
-    /// or the request is meant to go unanswered). <see cref="CloseAfter"/> still applies.
-    /// </summary>
-    public bool Suppress { get; init; }
-
-    /// <summary>A response that writes nothing (see <see cref="Suppress"/>).</summary>
-    public static RtspServerResponse None() => new(RtspStatus.Ok) { Suppress = true };
-
-    /// <summary>200 OK without body.</summary>
-    public static RtspServerResponse Ok() => new(RtspStatus.Ok);
-
-    /// <summary>A status without body.</summary>
-    public static RtspServerResponse Status(int statusCode) => new(statusCode);
-
-    /// <summary>200 OK with a binary plist body.</summary>
-    public static RtspServerResponse Plist(object body) =>
-        new(RtspStatus.Ok) { ContentType = RtspContentTypes.BinaryPlist, Body = BinaryPlist.Encode(body) };
-
-    /// <summary>200 OK with an arbitrary body.</summary>
-    public static RtspServerResponse Bytes(string contentType, ReadOnlyMemory<byte> body) =>
-        new(RtspStatus.Ok) { ContentType = contentType, Body = body };
-
-    /// <summary>The standard reason phrase for a status code (RTSP/HTTP plus the AirPlay codes of SPEC-control.md 2.4).</summary>
-    public static string DefaultReason(int statusCode) => statusCode switch
-    {
-        200 => "OK",
-        400 => "Bad Request",
-        401 => "Unauthorized",
-        403 => "Forbidden",
-        404 => "Not Found",
-        451 => "Unavailable",
-        453 => "Not Enough Bandwidth",
-        470 => "Connection Authorization Required",
-        500 => "Internal Server Error",
-        501 => "Not Implemented",
-        _ => "Status",
-    };
-}
-
-/// <summary>Options of an <see cref="RtspServerConnection"/>.</summary>
-public sealed record RtspServerConnectionOptions
-{
-    /// <summary>The <c>Server</c> header written on every response (the srcvers-366 speaker's value by default).</summary>
-    public string ServerHeader { get; init; } = "AirTunes/366.0";
-
-    /// <summary>
-    /// Largest plaintext per HAP frame this side sends, 1..65 535. Default 1024 like every reference receiver; larger
-    /// values emulate an Apple-SDK receiver sending big frames, which the sender must accept (SPEC-control.md 2.5, D9).
-    /// </summary>
-    public int MaxSendFramePlaintext { get; init; } = HapFrameCipher.MaxSendFramePlaintext;
-
-    /// <summary>How long <see cref="RtspServerConnection.SendRequestAsync"/> waits for the peer's answer (the receiver-side event timeout is ~30 s, SPEC-control.md 4.3).</summary>
-    public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(30);
-
-    /// <summary>Write <c>CSeq</c> on requests this side sends (Apple TV: <c>CSeq: 0</c>; shairport-sync: none, SPEC-control.md 4.3).</summary>
-    public bool SendCSeqOnRequests { get; init; }
-
-    /// <summary>Label used in log messages.</summary>
-    public string Name { get; init; } = "fake";
-}
-
-/// <summary>
-/// The receiver side of one RTSP-over-TCP connection, for the fake receiver's control port and event channel and for
-/// tests: reads requests (plaintext, then HAP-encrypted after <see cref="RtspServerResponse.EnableEncryptionAfter"/> or
-/// <see cref="EnableEncryption"/>), runs the handler for each in order and writes its response; can also send requests
+/// The receiver side of one RTSP-over-TCP connection (SPEC-receiver.md 4.1, 4.4): the product receiver's control
+/// connections and event channel, the fake receiver's, and tests' ad-hoc peers. It reads requests (plaintext, then
+/// HAP-encrypted after <see cref="RtspServerResponse.EnableEncryptionAfter"/> or <see cref="EnableEncryption"/>), runs the handler for each in order and writes its response; can also send requests
 /// to the peer and read their answers (the event channel's <c>POST /command</c>, SPEC-control.md 4.3). Receive frames
 /// up to 65 535 bytes are accepted; sent frames are split at <see cref="RtspServerConnectionOptions.MaxSendFramePlaintext"/>.
 /// </summary>

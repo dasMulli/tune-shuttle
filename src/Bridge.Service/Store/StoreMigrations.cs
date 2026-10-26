@@ -18,11 +18,21 @@ public static class StoreMigrations
     public const int BaseVersion = 1;
 
     /// <summary>
-    /// Migrations after <see cref="BaseVersion"/>, ascending and contiguous. Empty today: the scaffold schema (version 1)
-    /// covers every column (docs/ARCHITECTURE.md, "Persistence"). The next change that needs a column appends
-    /// <c>new StoreMigration(2, "...", "ALTER TABLE receivers ADD COLUMN ...;")</c> here.
+    /// Migrations after <see cref="BaseVersion"/>, ascending and contiguous (docs/ARCHITECTURE.md, "Persistence"). Version 2
+    /// adds the AirPlay receiver's <c>airplay_controllers</c> table (SPEC-receiver.md 8.4); its <c>settings</c> keys need no
+    /// schema change. The next change appends <c>new StoreMigration(3, "...", "...")</c> here.
     /// </summary>
-    public static IReadOnlyList<StoreMigration> All { get; } = [];
+    public static IReadOnlyList<StoreMigration> All { get; } =
+    [
+        new StoreMigration(
+            2,
+            "airplay_controllers table (SPEC-receiver.md 8.4)",
+            "CREATE TABLE IF NOT EXISTS airplay_controllers (\n" +
+            "    controller_id TEXT PRIMARY KEY,   -- the sender's HAP pairing identifier\n" +
+            "    public_key    BLOB NOT NULL,      -- its Ed25519 LTPK, 32 bytes\n" +
+            "    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))\n" +
+            ");"),
+    ];
 
     /// <summary>The highest version <paramref name="migrations"/> lead to.</summary>
     public static int LatestVersion(IReadOnlyList<StoreMigration> migrations) =>

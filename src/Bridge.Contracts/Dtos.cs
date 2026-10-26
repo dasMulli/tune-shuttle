@@ -23,6 +23,9 @@ public static class ApiRoutes
     public const string GroupActivate = Base + "/groups/{id}/activate";
     public const string Output = Base + "/output";
     public const string Playback = Base + "/playback";
+
+    /// <summary>The AirPlay sender's artwork with its content type and an <c>ETag</c> of the <c>rtptime</c>; 404 unless the source is AirPlay and artwork arrived (SPEC-receiver.md 9.1).</summary>
+    public const string PlaybackArtwork = Base + "/playback/artwork";
     public const string Settings = Base + "/settings";
     public const string Status = Base + "/status";
     public const string Diagnostics = Base + "/diagnostics";
@@ -114,8 +117,18 @@ public sealed record OutputDto(string? GroupId, string? ReceiverId, int MasterLe
 /// <summary>Request to select the output.</summary>
 public sealed record OutputRequest(string? GroupId, string? ReceiverId);
 
-/// <summary>Playback status mirrored from the Spotify side.</summary>
-public sealed record PlaybackDto(bool Playing, string? TrackId, string? Title, string? Artist, string? Album, long PositionMs, long DurationMs, string? ArtworkUrl, int SpotifyVolume);
+/// <summary>Playback status: the owner's view (SPEC-receiver.md 8.2), mirrored from librespot for Spotify and from the sender for AirPlay.</summary>
+/// <param name="Playing">Playing (not paused or stopped).</param>
+/// <param name="TrackId">The Spotify URI, or null for AirPlay.</param>
+/// <param name="Title">Title.</param>
+/// <param name="Artist">Artist.</param>
+/// <param name="Album">Album.</param>
+/// <param name="PositionMs">Position in the track.</param>
+/// <param name="DurationMs">Track length.</param>
+/// <param name="ArtworkUrl">The artwork URL; for AirPlay <c>/api/playback/artwork?v=&lt;rtptime&gt;</c> (SPEC-receiver.md 9.1).</param>
+/// <param name="SpotifyVolume">The Spotify volume (0..100).</param>
+/// <param name="Source"><c>"spotify"</c>, <c>"airplay"</c> or null: the owner of the output (SPEC-receiver.md 8.2, 9.1); optional, null from clients that predate the field.</param>
+public sealed record PlaybackDto(bool Playing, string? TrackId, string? Title, string? Artist, string? Album, long PositionMs, long DurationMs, string? ArtworkUrl, int SpotifyVolume, string? Source = null);
 
 /// <summary>Playback control request.</summary>
 public sealed record PlaybackCommandRequest(string Command);
@@ -129,16 +142,101 @@ public sealed record PlaybackCommandRequest(string Command);
 /// Offline receivers without user state are forgotten after this many days (0 = never). Always set in answers; null in a
 /// <c>PUT</c> keeps the current value (clients that predate the field).
 /// </param>
-public sealed record SettingsDto(string DeviceName, int LatencyFrames, bool PollReceiverVolume, string PreferredStream, double? ForgetOfflineAfterDays = null);
+/// <param name="AirplayEnabled">Offer the AirPlay receiver (SPEC-receiver.md 9.1); null in a <c>PUT</c> keeps the value.</param>
+/// <param name="AirplayName">The receiver's advertised name (SPEC-receiver.md 9.1); null in a <c>PUT</c> keeps the value.</param>
+/// <param name="AirplayPassword">
+/// In a <c>PUT</c>: null keeps the password, <c>""</c> clears it, any other string sets it (SPEC-receiver.md 9.1). Never
+/// carried in answers (always null there).
+/// </param>
+/// <param name="AirplayPasswordSet">In answers: a password is configured (SPEC-receiver.md 9.1); ignored in a <c>PUT</c>.</param>
+public sealed record SettingsDto(
+    string DeviceName,
+    int LatencyFrames,
+    bool PollReceiverVolume,
+    string PreferredStream,
+    double? ForgetOfflineAfterDays = null,
+    bool? AirplayEnabled = null,
+    string? AirplayName = null,
+    string? AirplayPassword = null,
+    bool? AirplayPasswordSet = null);
 
 /// <summary>Answer of <c>DELETE /receivers?offline=true</c>: the ids of the receivers that were forgotten.</summary>
 public sealed record ForgottenReceiversDto(IReadOnlyList<string> Removed);
 
 /// <summary>Service status.</summary>
-public sealed record StatusDto(string Version, bool SpotifyConnected, string? SpotifyUser, string DeviceName, bool OutputConnected, int Receivers, DateTimeOffset StartedAt);
+/// <param name="Version">The service version.</param>
+/// <param name="SpotifyConnected">A Spotify session is up.</param>
+/// <param name="SpotifyUser">The Spotify account.</param>
+/// <param name="DeviceName">The Spotify Connect device name.</param>
+/// <param name="OutputConnected">At least one receiver of the selected output is connected.</param>
+/// <param name="Receivers">Receivers currently discovered.</param>
+/// <param name="StartedAt">Process start time.</param>
+/// <param name="ActiveSource"><c>"spotify"</c>, <c>"airplay"</c> or null: who owns the output (SPEC-receiver.md 8.2, 9.1).</param>
+/// <param name="Airplay">The AirPlay receiver's state (SPEC-receiver.md 9.1), or null when the service predates it.</param>
+public sealed record StatusDto(
+    string Version,
+    bool SpotifyConnected,
+    string? SpotifyUser,
+    string DeviceName,
+    bool OutputConnected,
+    int Receivers,
+    DateTimeOffset StartedAt,
+    string? ActiveSource = null,
+    AirplayReceiverDto? Airplay = null);
+
+/// <summary>The AirPlay receiver as the status reports it (SPEC-receiver.md 9.1).</summary>
+/// <param name="State">One of <c>off</c>, <c>starting</c>, <c>advertising</c>, <c>connected</c>, <c>streaming</c>, <c>error</c>.</param>
+/// <param name="Name">The advertised name.</param>
+/// <param name="SenderName">The connected sender's name, or null.</param>
+/// <param name="SenderModel">The connected sender's model, or null.</param>
+/// <param name="AacAvailable">An AAC decoder loaded (SPEC-receiver.md R4); false means ALAC-only (R3).</param>
+public sealed record AirplayReceiverDto(string State, string Name, string? SenderName, string? SenderModel, bool AacAvailable);
 
 /// <summary>Diagnostics page data.</summary>
-public sealed record DiagnosticsDto(IReadOnlyList<string> RecentLog, IReadOnlyList<string> LocalAddresses, int TimingPort, int ControlPort, long PacketsSent, long RetransmitRequests, long LateWakeups, IReadOnlyList<string> OpenQuestionsPending);
+/// <param name="RecentLog">The last log lines.</param>
+/// <param name="LocalAddresses">The host's addresses.</param>
+/// <param name="TimingPort">The sender's NTP timing port.</param>
+/// <param name="ControlPort">The sender's control port.</param>
+/// <param name="PacketsSent">Pacer packets sent.</param>
+/// <param name="RetransmitRequests">Retransmit requests received.</param>
+/// <param name="LateWakeups">Pacer late wakeups.</param>
+/// <param name="OpenQuestionsPending">Probes of SPEC.md section 4 that still need the user.</param>
+/// <param name="Airplay">The AirPlay receiver's diagnostics (SPEC-receiver.md 9.1), or null when the service predates it.</param>
+public sealed record DiagnosticsDto(
+    IReadOnlyList<string> RecentLog,
+    IReadOnlyList<string> LocalAddresses,
+    int TimingPort,
+    int ControlPort,
+    long PacketsSent,
+    long RetransmitRequests,
+    long LateWakeups,
+    IReadOnlyList<string> OpenQuestionsPending,
+    AirplayDiagnosticsDto? Airplay = null);
+
+/// <summary>The AirPlay receiver's diagnostics (SPEC-receiver.md 9.1, from the playout and PTP statistics of 5.3 and 6.2).</summary>
+/// <param name="RtspPort">The bound RTSP port.</param>
+/// <param name="PtpBound">The shared PTP port is bound (false: anchor-only timing, R5).</param>
+/// <param name="PtpOffsetNs">The slave's offset estimate in nanoseconds, or null.</param>
+/// <param name="StreamType"><c>realtime</c> or <c>buffered</c>, or null without a stream.</param>
+/// <param name="Format">The decoder in use, or null.</param>
+/// <param name="BufferedMs">Decoded audio waiting in the playout buffer.</param>
+/// <param name="StreamOffsetMs">The learnt per-stream offset <c>D</c> of R6.</param>
+/// <param name="LateFrames">Frames dropped as late.</param>
+/// <param name="MissingFrames">Frames of silence inserted for gaps.</param>
+/// <param name="DriftCorrections">Frames dropped or repeated for drift.</param>
+/// <param name="DecoderStatus">Why the AAC decoder is unavailable, or the loaded library.</param>
+public sealed record AirplayDiagnosticsDto(
+    int RtspPort,
+    bool PtpBound,
+    long? PtpOffsetNs,
+    string? StreamType,
+    string? Format,
+    int BufferedMs,
+    int StreamOffsetMs,
+    long LateFrames,
+    long MissingFrames,
+    long DriftCorrections,
+    string? DecoderStatus);
 
 /// <summary>WebSocket messages from the service to the web app, discriminated by <c>type</c>.</summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]

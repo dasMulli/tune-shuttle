@@ -2,6 +2,9 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Airplay2.Receiver.Pairing;
+using Airplay2.Receiver.Rtsp;
+using Airplay2.Receiver.Session;
 using Airplay2.Sender.Pairing;
 using Airplay2.Sender.Plist;
 using Airplay2.Sender.Rtsp;
@@ -23,18 +26,17 @@ public sealed partial class FakeReceiver
     private uint NextStreamId() => unchecked((uint)Interlocked.Increment(ref _nextStreamId));
 
     /// <summary>The session-level state of one control connection (after an accepted session SETUP).</summary>
-    private sealed record SessionState(string TimingProtocol, int SenderTimingPort, FakeEventChannel EventChannel);
+    private sealed record SessionState(string TimingProtocol, int SenderTimingPort, EventChannelServer EventChannel);
 
     /// <summary>
-    /// One control connection: its pairing view (<see cref="HapAccessoryPairing.ForConnection"/>), pairing result, session
-    /// and event channel. Requests run one at a time on the connection's read loop, so the fields need no lock except
-    /// against <see cref="CleanupAsync"/>, which runs after the read loop has ended.
+    /// One control connection: its pairing view (<see cref="ReceiverPairing.ForConnection"/>, which holds the pairing
+    /// result), session and event channel. Requests run one at a time on the connection's read loop, so the fields need
+    /// no lock except against <see cref="CleanupAsync"/>, which runs after the read loop has ended.
     /// </summary>
-    private sealed class ControlConnection(FakeReceiver owner, HapAccessoryPairing pairing, int id)
+    private sealed class ControlConnection(FakeReceiver owner, ConnectionPairing pairing, int id)
     {
         private readonly TaskCompletionSource<string> _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private RtspServerConnection? _connection;
-        private PairingSession? _pairingSession;
         private SessionState? _session;
         private int _cleanedUp;
 
@@ -104,7 +106,7 @@ public sealed partial class FakeReceiver
                 case "GET" when request.Uri == "/info":
                     return Info(request);
                 case "POST":
-                    return Post(connection, request);
+                    return await PostAsync(connection, request).ConfigureAwait(false);
                 case "OPTIONS":
                     return RtspServerResponse.Ok() with { Headers = new Dictionary<string, string> { [RtspHeaders.Public] = PublicMethods } };
             }
@@ -147,7 +149,7 @@ public sealed partial class FakeReceiver
         /// <summary>470 for a session method on a connection that has not paired (<see cref="FakeReceiverOptions.RequirePairing"/>).</summary>
         private RtspServerResponse? NotPaired(string what)
         {
-            if (_pairingSession is not null || !owner.Options.RequirePairing)
+            if (pairing.Session is not null || !owner.Options.RequirePairing)
             {
                 return null;
             }
@@ -186,12 +188,12 @@ public sealed partial class FakeReceiver
             return RtspServerResponse.Plist(owner.BuildInfo(withTxt, owner.Options.InitialVolume is not null));
         }
 
-        private RtspServerResponse Post(RtspServerConnection connection, RtspIncomingRequest request)
+        private async ValueTask<RtspServerResponse> PostAsync(RtspServerConnection connection, RtspIncomingRequest request)
         {
             switch (request.Uri)
             {
                 case HapPairingEndpoints.PinStart or HapPairingEndpoints.PairSetup or HapPairingEndpoints.PairVerify:
-                    return Pairing(connection, request);
+                    return await PairingAsync(connection, request).ConfigureAwait(false);
                 case "/auth-setup":
                     // SPEC-control.md 3.10: airplay2-receiver answers with a canned blob [ap2r:ap2-receiver.py:940-985].
                     return owner.Options.AnswerAuthSetup
@@ -210,46 +212,21 @@ public sealed partial class FakeReceiver
         }
 
         /// <summary>
-        /// The pairing POSTs, a thin adapter over <see cref="HapAccessoryPairing"/>: its status and TLV8 body go back as is;
-        /// a completed procedure switches the channel to encryption after this (plaintext) response
-        /// [sps:rtsp.c:1810-1833].
+        /// The pairing POSTs, answered by the library's <see cref="ConnectionPairing"/> (SPEC-receiver.md 4.2), which applies
+        /// <see cref="FakeReceiverOptions.RequireHkpHeader"/> and <see cref="FakeReceiverOptions.EncryptAfterPairVerify"/>
+        /// and switches the channel to encryption after a completed procedure [sps:rtsp.c:1810-1833]; the completion is
+        /// recorded as <see cref="FakeReceiverEvent.Paired"/>.
         /// </summary>
-        private RtspServerResponse Pairing(RtspServerConnection connection, RtspIncomingRequest request)
+        private async ValueTask<RtspServerResponse> PairingAsync(RtspServerConnection connection, RtspIncomingRequest request)
         {
-            if (owner.Options.RequireHkpHeader && request.Header(RtspHeaders.XAppleHkp) is null)
+            var outcome = await pairing.HandleAsync(connection, request).ConfigureAwait(false);
+            if (outcome.Completed is { } session)
             {
-                // Open question C-7.11: owntone marks the header "Required!!" [owntone:airplay.c:2886-2890]; shairport ignores it.
-                owner.Logger.LogWarning("Fake receiver {Name}: POST {Uri} without X-Apple-HKP; answering 470", owner.Options.Name, request.Uri);
-                return RtspServerResponse.Status(RtspStatus.ConnectionAuthorizationRequired);
+                owner.Write(new FakeReceiverEvent.Paired(session.Kind.ToString(), session.SharedSecret.ToArray()));
+                owner.Logger.LogDebug("Fake receiver {Name}: control connection #{Id} paired ({Kind})", owner.Options.Name, Id, session.Kind);
             }
 
-            var result = pairing.HandleRequest(request.Uri, request.Body.Span);
-            var response = new RtspServerResponse(result.Status)
-            {
-                ContentType = result.Body.Length > 0 ? RtspContentTypes.OctetStream : null,
-                Body = result.Body,
-            };
-            if (result.Session is not { } session)
-            {
-                return response;
-            }
-
-            _pairingSession = session;
-            owner.Write(new FakeReceiverEvent.Paired(session.Kind.ToString(), session.SharedSecret.ToArray()));
-            owner.Logger.LogDebug("Fake receiver {Name}: control connection #{Id} paired ({Kind})", owner.Options.Name, Id, session.Kind);
-            if (connection.IsEncrypted)
-            {
-                owner.Logger.LogWarning("Fake receiver {Name}: pairing completed inside an encrypted channel; keeping the current keys", owner.Options.Name);
-                return response;
-            }
-
-            if (session.Kind == PairingKind.Verified && !owner.Options.EncryptAfterPairVerify)
-            {
-                // shairport-sync 5.5.2 behaviour (SPEC-control.md 3.7 note).
-                return response;
-            }
-
-            return response with { EnableEncryptionAfter = HapAccessoryPairing.ControlKeysFor(session) };
+            return outcome.Response;
         }
 
         /// <summary>
@@ -313,8 +290,8 @@ public sealed partial class FakeReceiver
             // A second session SETUP on the same connection replaces the first.
             await EndSessionAsync().ConfigureAwait(false);
 
-            var keys = _pairingSession is { } paired ? HapAccessoryPairing.EventKeysFor(paired) : null;
-            var channel = new FakeEventChannel(owner, keys, Id);
+            var keys = pairing.Session is { } paired ? ReceiverPairing.EventKeysFor(paired) : null;
+            var channel = new EventChannelServer(owner._eventChannelHost, owner.EventChannelOptions(), keys, Id, owner.Logger);
             channel.Start();
             var senderTimingPort = (int)(body.GetInt64("timingPort") ?? 0);
             _session = new SessionState(timingProtocol, senderTimingPort, channel);
@@ -433,22 +410,22 @@ public sealed partial class FakeReceiver
         private RtspServerResponse SetParameter(RtspIncomingRequest request)
         {
             var contentType = request.ContentType ?? string.Empty;
-            var rtpTime = FakeParsing.ParseRtpInfo(request.Header(RtspHeaders.RtpInfo)).RtpTime;
+            var rtpTime = RequestParsing.ParseRtpInfo(request.Header(RtspHeaders.RtpInfo)).RtpTime;
             if (contentType.StartsWith(RtspContentTypes.Parameters, StringComparison.OrdinalIgnoreCase))
             {
                 var text = Encoding.UTF8.GetString(request.Body.Span);
-                foreach (var parameter in FakeParsing.ParseTextParameters(text))
+                foreach (var parameter in RequestParsing.ParseTextParameters(text))
                 {
                     switch (parameter)
                     {
-                        case FakeParsing.TextParameter.VolumeValue volume:
+                        case RequestParsing.TextParameter.VolumeValue volume:
                             owner.SetVolume(volume.Db);
                             owner.Write(new FakeReceiverEvent.Volume(volume.Db));
                             break;
-                        case FakeParsing.TextParameter.ProgressValue progress:
+                        case RequestParsing.TextParameter.ProgressValue progress:
                             owner.Write(new FakeReceiverEvent.Progress(progress.Start, progress.Current, progress.End));
                             break;
-                        case FakeParsing.TextParameter.Other other:
+                        case RequestParsing.TextParameter.Other other:
                             owner.Logger.LogWarning("Fake receiver {Name}: unknown text parameter {Line}", owner.Options.Name, other.Line);
                             break;
                     }
@@ -456,7 +433,7 @@ public sealed partial class FakeReceiver
             }
             else if (contentType.StartsWith(RtspContentTypes.DmapTagged, StringComparison.OrdinalIgnoreCase))
             {
-                owner.Write(new FakeReceiverEvent.Metadata(FakeParsing.ParseDmapListingItem(request.Body.Span), rtpTime));
+                owner.Write(new FakeReceiverEvent.Metadata(RequestParsing.ParseDmapListingItem(request.Body.Span), rtpTime));
                 if (owner.Options.DmapStatus != RtspStatus.Ok)
                 {
                     return RtspServerResponse.Status(owner.Options.DmapStatus);
@@ -490,14 +467,14 @@ public sealed partial class FakeReceiver
             var db = owner.VolumeDb;
             var text = owner.Options.GetParameterShape == GetParameterShape.Shairport
                 ? "\r\nvolume: " + db.ToString("0.000000", CultureInfo.InvariantCulture) + "\r\n"
-                : "volume: " + FakeParsing.PythonFloat(db) + "\r\n";
+                : "volume: " + RequestParsing.PythonFloat(db) + "\r\n";
             return RtspServerResponse.Bytes(RtspContentTypes.Parameters, Encoding.ASCII.GetBytes(text));
         }
 
         /// <summary>FLUSH (SPEC-control.md 4.8): <c>RTP-Info: seq=;rtptime=</c>; the next packet is expected at <c>seq</c>.</summary>
         private RtspServerResponse Flush(RtspIncomingRequest request)
         {
-            var (seq, rtpTime) = FakeParsing.ParseRtpInfo(request.Header(RtspHeaders.RtpInfo));
+            var (seq, rtpTime) = RequestParsing.ParseRtpInfo(request.Header(RtspHeaders.RtpInfo));
             owner.FlushStream(this, seq);
             owner.Write(new FakeReceiverEvent.Flush(seq ?? 0, rtpTime ?? 0));
             return RtspServerResponse.Ok();

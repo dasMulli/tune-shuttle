@@ -155,6 +155,12 @@ public interface IGroupPlayer : IAsyncDisposable
 
     /// <summary>Sends text, artwork and progress for a track starting at the next timestamp.</summary>
     Task SetNowPlayingAsync(TrackMetadata metadata, ReadOnlyMemory<byte>? artwork, string? artworkContentType, TimeSpan elapsed, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Frames queued in the ring ahead of the pacer (SPEC-receiver.md 5.4, 8.6): the AirPlay receiver's release thread keeps
+    /// the ring shallow by never writing more than <c>PrefillFrames + 352</c> frames ahead of this count.
+    /// </summary>
+    int QueuedFrames { get; }
 }
 
 /// <summary>
@@ -335,7 +341,7 @@ public sealed partial class GroupPlayer : IGroupPlayer
         }
     }
 
-    /// <summary>Frames queued in the ring.</summary>
+    /// <inheritdoc />
     public int QueuedFrames
     {
         get

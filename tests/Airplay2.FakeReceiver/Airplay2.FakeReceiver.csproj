@@ -8,6 +8,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Airplay2.Sender\Airplay2.Sender.csproj" />
+    <!-- The receiver-side protocol code (SPEC-receiver.md R2); the fake adds its quirk switches and recording on top. -->
+    <ProjectReference Include="..\..\src\Airplay2.Receiver\Airplay2.Receiver.csproj" />
   </ItemGroup>
 
   <ItemGroup>

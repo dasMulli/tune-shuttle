@@ -76,9 +76,14 @@ internal sealed class HapAccessoryPairing
     {
     }
 
-    private HapAccessoryPairing(HapAccessoryOptions options, HapControllerRegistry knownControllers)
+    /// <summary>
+    /// Creates an accessory whose paired controllers live in <paramref name="knownControllers"/>: the receiver seeds it
+    /// from its controller store and persists changes through the registry's change callback (SPEC-receiver.md 4.2).
+    /// </summary>
+    public HapAccessoryPairing(HapAccessoryOptions options, HapControllerRegistry knownControllers)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(knownControllers);
         ArgumentNullException.ThrowIfNull(options.Identity);
         ArgumentException.ThrowIfNullOrEmpty(options.Pin);
         Options = options;
@@ -478,6 +483,17 @@ internal sealed class HapControllerRegistry
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<string, byte[]> _controllers = new(StringComparer.Ordinal);
+    private readonly Action<string, byte[]?>? _onChanged;
+
+    /// <summary>Creates an empty registry.</summary>
+    /// <param name="onChanged">
+    /// Called after a controller was added or replaced (with its new key) or removed (with null), outside the registry's
+    /// lock; the receiver writes the change through to its controller store (SPEC-receiver.md 4.2).
+    /// </param>
+    public HapControllerRegistry(Action<string, byte[]?>? onChanged = null)
+    {
+        _onChanged = onChanged;
+    }
 
     /// <summary>The number of paired controllers.</summary>
     public int Count
@@ -523,8 +539,10 @@ internal sealed class HapControllerRegistry
             }
 
             _controllers[controllerId] = publicKey.ToArray();
-            return true;
         }
+
+        _onChanged?.Invoke(controllerId, publicKey.ToArray());
+        return true;
     }
 
     /// <summary>Adds or replaces a controller regardless of the limit (seeding a receiver in tests).</summary>
@@ -534,9 +552,17 @@ internal sealed class HapControllerRegistry
     public bool Remove(string controllerId)
     {
         ArgumentNullException.ThrowIfNull(controllerId);
+        bool removed;
         lock (_lock)
         {
-            return _controllers.Remove(controllerId);
+            removed = _controllers.Remove(controllerId);
         }
+
+        if (removed)
+        {
+            _onChanged?.Invoke(controllerId, null);
+        }
+
+        return removed;
     }
 }

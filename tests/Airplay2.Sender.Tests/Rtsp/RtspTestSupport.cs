@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Airplay2.FakeReceiver;
+using Airplay2.Receiver.Rtsp;
 using Airplay2.Sender.Rtsp;
 using Microsoft.Extensions.Logging;
 using Xunit;

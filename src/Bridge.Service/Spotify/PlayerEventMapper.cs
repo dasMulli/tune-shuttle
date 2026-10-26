@@ -30,7 +30,7 @@ namespace Bridge.Service.Spotify;
 /// around a load, so the flush is the bridge's job. A skip is flushed on <c>Loading</c> when there is one; a load of a
 /// track librespot already has (preloaded, which Spirc arranges 30 s before every track end, or the same track again)
 /// sends no <c>Loading</c> and goes straight to <c>TrackChanged</c>, so that event flushes when no <c>Loading</c> did.</item>
-/// <item><c>VolumeChanged</c>: G of the output (<see cref="IPlaybackOutput.SetSpotifyVolumeAsync"/>), coalesced so a
+/// <item><c>VolumeChanged</c>: G of the output (<see cref="IPlaybackOutput.SetSourceLevelAsync"/>), coalesced so a
 /// dragged slider sends only the latest value.</item>
 /// <item><c>Stopped</c>: state only; sessions stay up while "connected but idle" (8.4: TEARDOWN only on user disconnect).</item>
 /// </list>
@@ -370,7 +370,7 @@ public sealed class PlayerEventMapper
             {
                 try
                 {
-                    await _output.SetSpotifyVolumeAsync(level, cancellationToken).ConfigureAwait(false);
+                    await _output.SetSourceLevelAsync(level, Output.OutputManager.SourceSpotify, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (IsOutputFailure(ex) || ex is ArgumentException or KeyNotFoundException)
                 {

@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Channels;
 using Airplay2.FakeReceiver;
+using Airplay2.Receiver.Rtsp;
 using Airplay2.Sender.Crypto;
 using Airplay2.Sender.Pairing;
 using Airplay2.Sender.Plist;
