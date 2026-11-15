@@ -7,9 +7,6 @@ iPhone, iPad or Mac can pick "TuneShuttle" in its AirPlay menu, and what it play
 TuneShuttle serves itself. It is written in C# (.NET 10) and runs
 as a Windows Service, under systemd on Linux, or in a container on Kubernetes.
 
-Before 2026-10-10 the product was called "AirPlay Bridge" (Windows service `AirplayBridge`, container image
-`airplay2-bridge`); older logs and installs still show that name.
-
 The repository ([github.com/dasMulli/tune-shuttle](https://github.com/dasMulli/tune-shuttle)) also holds the parts it
 is built from, usable on their own:
 
