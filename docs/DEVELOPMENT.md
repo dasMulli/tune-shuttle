@@ -324,6 +324,9 @@ How dark mode is captured: `light` and `dark` load the page with the one-shot `?
 bootstrap in `index.html` applies before the first paint. `system-dark` loads `?theme=system` in an Edge started with
 `--force-dark-mode`, which flips `prefers-color-scheme`, to prove that "system" follows the OS.
 
+The scripts start the bridge with `-p:_HotReloadBrowserToolsEnabled=false`: with the .NET 11 SDK a Debug build otherwise lists a
+hot-reload module in the WebAssembly boot config that the host does not serve, and the app stays on its loading splash.
+
 Headless Edge never lays a page out narrower than 504 CSS px, whatever `--window-size` says, so both scripts drive
 Edge over the DevTools protocol and set the exact viewport with `Emulation.setDeviceMetricsOverride`.
 
@@ -342,6 +345,7 @@ directory, so a script creates everything it needs. `web-screenshots.ps1` passes
 | `i18n-fill.ps1` | the state with the most text: a long group name active with both fakes |
 | `mobile-polish.ps1` | a 63-character group name active with both fakes; `-HeroShots <dir>` also captures the Player with a demo track injected in the browser |
 | `forget-receivers.ps1` | Fake Receiver 2 offline, "last seen 3 days ago" (through the development-only route) |
+| `readme-shots.ps1` | the group "Downstairs" active; captures `docs/images/*.png` (light and dark) itself, with the fakes shown as "Kitchen" and "Living room" and a made-up track; run it as `-Setup` of `web-screenshots.ps1` |
 
 ### Layout audit
 

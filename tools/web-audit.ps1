@@ -320,7 +320,7 @@ try {
 
         $dataDir = Join-Path $work 'data'
         $serviceArgs = @(
-            'run', '--project', (Join-Path $repo 'src/Bridge.Service'), '--',
+            'run', '--project', (Join-Path $repo 'src/Bridge.Service'), '-p:_HotReloadBrowserToolsEnabled=false', '--',
             '--Bridge:FakeReceivers=2', '--Bridge:EnableSpotify=false', '--Bridge:Airplay:Enabled=false', '--Bridge:FileLogging=false',
             "--DataDirectory=$dataDir", "--Kestrel:Endpoints:Http:Url=$baseUrl"
         )
