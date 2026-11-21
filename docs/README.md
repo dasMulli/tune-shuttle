@@ -2,7 +2,8 @@
 
 | Document | For | What it holds |
 |---|---|---|
-| [`../README.md`](../README.md) | Users | What TuneShuttle is, installing and running it, the web app, the CLI, configuration, the API summary, network notes, receiver quirks, troubleshooting |
+| [`../README.md`](../README.md) | Everyone | What TuneShuttle is, its features and a quick start |
+| [`INSTALL.md`](INSTALL.md), [`USER-GUIDE.md`](USER-GUIDE.md), [`CONFIGURATION.md`](CONFIGURATION.md), [`NETWORK.md`](NETWORK.md), [`CLI.md`](CLI.md), [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | Users | Installing, using the web app and the AirPlay receiver, settings and the API, ports and firewall, the `airplay2` CLI, receiver quirks and common problems |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Everyone | Components and data flow, the group volume model, persistence, the receiver inventory and pruning, the full API, deployment shapes, design decisions |
 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | Contributors | Repository layout, build and test, live tests and the live-device rules, code conventions, test receivers, web app development, themes, translations, the container image |
 | [`REFERENCE-SOURCES.md`](REFERENCE-SOURCES.md) | Contributors | The upstream projects the code was written against, their commits and licences, and how to clone them into `reference/` |
