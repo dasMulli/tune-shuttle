@@ -274,7 +274,10 @@ $shots = @(
     @{ Name = 'player';       Route = '/';                Size = '1280x600'; Wait = $track },
     @{ Name = 'receivers';    Route = '/receivers';       Size = '1280x500'; Wait = "document.body.textContent.indexOf('Kitchen') >= 0" },
     @{ Name = 'group';        Route = "/groups/$groupId"; Size = '1280x900'; Wait = "document.body.textContent.indexOf('Downstairs') >= 0" },
-    @{ Name = 'player-phone'; Route = '/';                Size = '390x844';  Wait = $track }
+    @{ Name = 'player-phone'; Route = '/';                Size = '390x844';  Wait = $track },
+    @{ Name = 'receivers-phone'; Route = '/receivers';    Size = '390x844';  Wait = "document.body.textContent.indexOf('Kitchen') >= 0" },
+    @{ Name = 'groups-phone'; Route = '/groups';          Size = '390x844';  Wait = "document.body.textContent.indexOf('Downstairs') >= 0" },
+    @{ Name = 'player-tablet'; Route = '/';               Size = '768x1024'; Wait = $track }
 )
 foreach ($shot in $shots) {
     $w, $h = $shot.Size -split 'x'
