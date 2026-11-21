@@ -348,7 +348,8 @@ The logs: the Diagnostics page (live), `<DataDirectory>/logs` on Windows, `journ
 
 ## Licences
 
-There is no licence file at the repository root yet. [`librespot-dotnet/`](librespot-dotnet) is a port of librespot
+The original code in this repository is released under the MIT licence ([`LICENSE`](LICENSE)). Parts that are ports of
+other code retain the licence of the original source: [`librespot-dotnet/`](librespot-dotnet) is a port of librespot
 and carries its MIT licence ([`librespot-dotnet/LICENSE`](librespot-dotnet/LICENSE)). The ALAC codec in
 `src/Airplay2.Sender/Alac` is a port of Apple's ALAC (Apache-2.0), and the ported files keep that notice.
 owntone-server (GPL-2.0) was read only to understand how it synchronizes receivers; none of its code was copied.
