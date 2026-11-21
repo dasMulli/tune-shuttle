@@ -9,14 +9,52 @@ the other way around: your iPhone, iPad or Mac sees "TuneShuttle" in its AirPlay
 
 Either way, the sound comes out of the speakers you chose, in one room or in several rooms at once, all in step.
 
-## What it's like to use
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/player-dark.png">
+  <img src="docs/images/player-light.png" alt="The TuneShuttle web app playing a track to a group of two speakers" width="860">
+</picture>
 
-You open a small web app in your browser, on your phone or at your desk. It finds the AirPlay speakers on your
-network, helps you pair them, and lets you build groups: "Kitchen and living room", "Whole house", "Just the bedroom".
-You choose where the music goes, set a volume for each room, and from then on you mostly forget it is there.
+## What it's like to use
 
 In Spotify, you choose TuneShuttle from the device list and press play. From an Apple device, you choose TuneShuttle in
 the AirPlay menu. Whoever started last gets the speakers.
+
+<img src="docs/images/spotify-connect-playing.png" alt="Spotify's device list with TuneShuttle selected and music playing on it" width="860">
+
+Everything else happens in a small web app in your browser, on your phone or at your desk. It finds the AirPlay
+speakers on your network, helps you pair them, and lets you build groups: "Kitchen and living room", "Whole house",
+"Just the bedroom". You choose where the music goes, set a volume for each room, and from then on you mostly forget it
+is there.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/receivers-dark.png">
+  <img src="docs/images/receivers-light.png" alt="The Receivers page with two connected speakers, Kitchen and Living room" width="860">
+</picture>
+
+It works just as well on a phone:
+
+<table>
+  <tr>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/player-phone-dark.png">
+        <img src="docs/images/player-phone-light.png" alt="The player on a phone" width="250">
+      </picture>
+    </td>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/receivers-phone-dark.png">
+        <img src="docs/images/receivers-phone-light.png" alt="The receivers on a phone" width="250">
+      </picture>
+    </td>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/groups-phone-dark.png">
+        <img src="docs/images/groups-phone-light.png" alt="The groups on a phone" width="250">
+      </picture>
+    </td>
+  </tr>
+</table>
 
 ## Getting it running
 
