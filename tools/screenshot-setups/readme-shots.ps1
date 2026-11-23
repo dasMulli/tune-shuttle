@@ -13,7 +13,7 @@
     (installed before any page script runs) renames the fakes to "Kitchen" and "Living room", says that Spotify is
     connected for a made-up user and plays a made-up track. Nothing of this is sent to the service.
 
-    Files: <Out>/<name>-<theme>.png with the names player, receivers, group (the group editor) and player-phone.
+    Files: <Out>/<name>-<theme>.png with the names player, receivers, player-phone, receivers-phone and groups-phone.
 #>
 [CmdletBinding()]
 param(
@@ -273,11 +273,9 @@ $track = "!!document.querySelector('.hero__title') && document.querySelector('.h
 $shots = @(
     @{ Name = 'player';       Route = '/';                Size = '1280x600'; Wait = $track },
     @{ Name = 'receivers';    Route = '/receivers';       Size = '1280x500'; Wait = "document.body.textContent.indexOf('Kitchen') >= 0" },
-    @{ Name = 'group';        Route = "/groups/$groupId"; Size = '1280x900'; Wait = "document.body.textContent.indexOf('Downstairs') >= 0" },
     @{ Name = 'player-phone'; Route = '/';                Size = '390x844';  Wait = $track },
     @{ Name = 'receivers-phone'; Route = '/receivers';    Size = '390x844';  Wait = "document.body.textContent.indexOf('Kitchen') >= 0" },
-    @{ Name = 'groups-phone'; Route = '/groups';          Size = '390x844';  Wait = "document.body.textContent.indexOf('Downstairs') >= 0" },
-    @{ Name = 'player-tablet'; Route = '/';               Size = '768x1024'; Wait = $track }
+    @{ Name = 'groups-phone'; Route = '/groups';          Size = '390x844';  Wait = "document.body.textContent.indexOf('Downstairs') >= 0" }
 )
 foreach ($shot in $shots) {
     $w, $h = $shot.Size -split 'x'
